@@ -1,15 +1,15 @@
-defmodule LlmProxy.Application do
+defmodule LLMProxy.Application do
   use Application
 
   @impl true
   def start(_type, _args) do
     children = [
-      LlmProxy.Repo,
-      LlmProxy.TokenPool.Server,
-      {Plug.Cowboy, scheme: :http, plug: LlmProxy.Router, options: [port: port()]}
+      LLMProxy.Repo,
+      LLMProxy.TokenPool.Server,
+      {Plug.Cowboy, scheme: :http, plug: LLMProxy.Router, options: [port: port()]}
     ]
 
-    opts = [strategy: :one_for_one, name: LlmProxy.Supervisor]
+    opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]
     Supervisor.start_link(children, opts)
   end
 

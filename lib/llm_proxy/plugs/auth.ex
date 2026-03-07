@@ -1,4 +1,4 @@
-defmodule LlmProxy.Plugs.Auth do
+defmodule LLMProxy.Plugs.Auth do
   @moduledoc """
   Extracts and validates API key from Authorization header or x-api-key.
   Assigns `:api_key` to the conn.
@@ -6,8 +6,8 @@ defmodule LlmProxy.Plugs.Auth do
 
   import Plug.Conn
 
-  alias LlmProxy.Config
-  alias LlmProxy.Storage
+  alias LLMProxy.Config
+  alias LLMProxy.Storage
 
   def init(opts), do: opts
 

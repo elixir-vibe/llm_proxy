@@ -1,4 +1,4 @@
-defmodule LlmProxy.Routes.Exa do
+defmodule LLMProxy.Routes.Exa do
   use Plug.Router
 
   plug :match

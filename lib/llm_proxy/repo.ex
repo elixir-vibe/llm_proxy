@@ -1,4 +1,4 @@
-defmodule LlmProxy.Repo do
+defmodule LLMProxy.Repo do
   use Ecto.Repo,
     otp_app: :llm_proxy,
     adapter: Ecto.Adapters.SQLite3

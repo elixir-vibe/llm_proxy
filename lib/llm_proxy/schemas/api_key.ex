@@ -1,4 +1,4 @@
-defmodule LlmProxy.Schemas.ApiKey do
+defmodule LLMProxy.Schemas.ApiKey do
   use Ecto.Schema
   import Ecto.Changeset
 

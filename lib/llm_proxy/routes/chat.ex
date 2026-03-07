@@ -1,12 +1,12 @@
-defmodule LlmProxy.Routes.Chat do
+defmodule LLMProxy.Routes.Chat do
   use Plug.Router
 
   require Logger
 
-  alias LlmProxy.Plugs.{Auth, QuotaCheck}
-  alias LlmProxy.Providers.Registry
-  alias LlmProxy.Storage
-  alias LlmProxy.Stream.SSEWriter
+  alias LLMProxy.Plugs.{Auth, QuotaCheck}
+  alias LLMProxy.Providers.Registry
+  alias LLMProxy.Storage
+  alias LLMProxy.Stream.SSEWriter
 
   plug Auth
   plug QuotaCheck

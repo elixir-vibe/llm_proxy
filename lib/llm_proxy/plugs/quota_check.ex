@@ -1,12 +1,12 @@
-defmodule LlmProxy.Plugs.QuotaCheck do
+defmodule LLMProxy.Plugs.QuotaCheck do
   @moduledoc """
   Checks token/message/cache quotas for the authenticated API key.
-  Must run after LlmProxy.Plugs.Auth.
+  Must run after LLMProxy.Plugs.Auth.
   """
 
   import Plug.Conn
 
-  alias LlmProxy.Storage
+  alias LLMProxy.Storage
 
   def init(opts), do: opts
 

@@ -1,11 +1,11 @@
-defmodule LlmProxy.Plugs.MasterKey do
+defmodule LLMProxy.Plugs.MasterKey do
   @moduledoc """
   Requires master key for admin endpoints.
   """
 
   import Plug.Conn
 
-  alias LlmProxy.Config
+  alias LLMProxy.Config
 
   def init(opts), do: opts
 

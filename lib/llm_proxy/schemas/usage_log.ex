@@ -1,4 +1,4 @@
-defmodule LlmProxy.Schemas.UsageLog do
+defmodule LLMProxy.Schemas.UsageLog do
   use Ecto.Schema
   import Ecto.Changeset
 

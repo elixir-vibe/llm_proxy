@@ -1,4 +1,4 @@
-defmodule LlmProxy.MixProject do
+defmodule LLMProxy.MixProject do
   use Mix.Project
 
   def project do
@@ -15,7 +15,7 @@ defmodule LlmProxy.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {LlmProxy.Application, []}
+      mod: {LLMProxy.Application, []}
     ]
   end
 

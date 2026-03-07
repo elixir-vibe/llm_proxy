@@ -1,10 +1,10 @@
-defmodule LlmProxy.Storage do
+defmodule LLMProxy.Storage do
   @moduledoc """
   Context functions for all database operations: keys, usage, quotas, tokens.
   """
 
-  alias LlmProxy.Repo
-  alias LlmProxy.Schemas.{ApiKey, UsageLog, ServiceUsage, ProviderToken, MessageLog}
+  alias LLMProxy.Repo
+  alias LLMProxy.Schemas.{ApiKey, UsageLog, ServiceUsage, ProviderToken, MessageLog}
 
   import Ecto.Query
 

@@ -1,4 +1,4 @@
-defmodule LlmProxy.Routes.Context7 do
+defmodule LLMProxy.Routes.Context7 do
   use Plug.Router
 
   plug :match

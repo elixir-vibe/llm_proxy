@@ -1,4 +1,4 @@
-defmodule LlmProxy.Providers.Registry do
+defmodule LLMProxy.Providers.Registry do
   @moduledoc """
   Provider discovery via :persistent_term.
 

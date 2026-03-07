@@ -1,4 +1,4 @@
-defmodule LlmProxy.Router do
+defmodule LLMProxy.Router do
   use Plug.Router
 
   plug Plug.Logger
@@ -8,7 +8,7 @@ defmodule LlmProxy.Router do
     parsers: [:json],
     pass: ["application/json"],
     json_decoder: Jason,
-    body_reader: {LlmProxy.CacheBodyReader, :read_body, []}
+    body_reader: {LLMProxy.CacheBodyReader, :read_body, []}
 
   plug :dispatch
 
@@ -19,26 +19,26 @@ defmodule LlmProxy.Router do
 
   # Models — no auth
   get "/v1/models" do
-    models = LlmProxy.Providers.Registry.all_models()
+    models = LLMProxy.Providers.Registry.all_models()
     send_json(conn, 200, %{object: "list", data: models})
   end
 
   get "/models" do
-    models = LlmProxy.Providers.Registry.all_models()
+    models = LLMProxy.Providers.Registry.all_models()
     send_json(conn, 200, %{object: "list", data: models})
   end
 
   # Forward to sub-routers
-  forward "/keys", to: LlmProxy.Routes.Keys
-  forward "/tokens", to: LlmProxy.Routes.Tokens
-  forward "/stats", to: LlmProxy.Routes.Stats
-  forward "/admin", to: LlmProxy.Routes.Stats
-  forward "/setup", to: LlmProxy.Routes.Setup
-  forward "/v1/chat", to: LlmProxy.Routes.Chat
-  forward "/chat", to: LlmProxy.Routes.Chat
-  forward "/v1/exa", to: LlmProxy.Routes.Exa
-  forward "/v1/context7", to: LlmProxy.Routes.Context7
-  forward "/providers", to: LlmProxy.Routes.ProviderUsage
+  forward "/keys", to: LLMProxy.Routes.Keys
+  forward "/tokens", to: LLMProxy.Routes.Tokens
+  forward "/stats", to: LLMProxy.Routes.Stats
+  forward "/admin", to: LLMProxy.Routes.Stats
+  forward "/setup", to: LLMProxy.Routes.Setup
+  forward "/v1/chat", to: LLMProxy.Routes.Chat
+  forward "/chat", to: LLMProxy.Routes.Chat
+  forward "/v1/exa", to: LLMProxy.Routes.Exa
+  forward "/v1/context7", to: LLMProxy.Routes.Context7
+  forward "/providers", to: LLMProxy.Routes.ProviderUsage
 
   match _ do
     send_json(conn, 404, %{error: "Not found"})

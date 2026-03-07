@@ -1,4 +1,4 @@
-defmodule LlmProxy.Schemas.ProviderToken do
+defmodule LLMProxy.Schemas.ProviderToken do
   use Ecto.Schema
   import Ecto.Changeset
 

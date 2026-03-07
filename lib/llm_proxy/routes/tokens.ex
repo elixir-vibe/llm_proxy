@@ -1,4 +1,4 @@
-defmodule LlmProxy.Routes.Tokens do
+defmodule LLMProxy.Routes.Tokens do
   use Plug.Router
 
   plug :match

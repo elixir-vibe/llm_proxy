@@ -1,4 +1,4 @@
-defmodule LlmProxy.TokenPool.Server do
+defmodule LLMProxy.TokenPool.Server do
   @moduledoc """
   Manages provider tokens with rate-limit cooldowns.
 
@@ -8,9 +8,9 @@ defmodule LlmProxy.TokenPool.Server do
 
   use GenServer
 
-  alias LlmProxy.Repo
-  alias LlmProxy.Schemas.ProviderToken
-  alias LlmProxy.TokenPool.Picker
+  alias LLMProxy.Repo
+  alias LLMProxy.Schemas.ProviderToken
+  alias LLMProxy.TokenPool.Picker
 
   import Ecto.Query
 

@@ -1,4 +1,4 @@
-defmodule LlmProxy.TokenPool.Picker do
+defmodule LLMProxy.TokenPool.Picker do
   @moduledoc """
   Deterministic user→token pinning via FNV-1a hash for cache affinity.
   """

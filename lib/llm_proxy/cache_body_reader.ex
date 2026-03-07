@@ -1,4 +1,4 @@
-defmodule LlmProxy.CacheBodyReader do
+defmodule LLMProxy.CacheBodyReader do
   @moduledoc """
   Caches raw request body so it can be forwarded upstream as-is.
   """

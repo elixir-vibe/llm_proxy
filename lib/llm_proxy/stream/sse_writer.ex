@@ -1,4 +1,4 @@
-defmodule LlmProxy.Stream.SSEWriter do
+defmodule LLMProxy.Stream.SSEWriter do
   @moduledoc """
   Helpers for writing SSE events to a Plug.Conn chunked response.
   """

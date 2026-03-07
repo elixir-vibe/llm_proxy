@@ -1,7 +1,7 @@
 import Config
 
 if config_env() == :prod do
-  config :llm_proxy, LlmProxy.Repo,
+  config :llm_proxy, LLMProxy.Repo,
     database: System.get_env("DATABASE_PATH", "./llm_proxy.db")
 
   config :llm_proxy,

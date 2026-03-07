@@ -1,2 +1,2 @@
-Ecto.Adapters.SQL.Sandbox.mode(LlmProxy.Repo, :manual)
+Ecto.Adapters.SQL.Sandbox.mode(LLMProxy.Repo, :manual)
 ExUnit.start()

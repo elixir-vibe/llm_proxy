@@ -1,4 +1,4 @@
-defmodule LlmProxy.Routes.Stats do
+defmodule LLMProxy.Routes.Stats do
   use Plug.Router
 
   plug :match

@@ -1,8 +1,8 @@
-defmodule LlmProxy.StorageTest do
+defmodule LLMProxy.StorageTest do
   use ExUnit.Case
 
-  alias LlmProxy.Storage
-  alias LlmProxy.Repo
+  alias LLMProxy.Storage
+  alias LLMProxy.Repo
 
   setup do
     :ok = Ecto.Adapters.SQL.Sandbox.checkout(Repo)

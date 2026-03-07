@@ -1,4 +1,4 @@
-defmodule LlmProxy.Providers.Behaviour do
+defmodule LLMProxy.Providers.Behaviour do
   @moduledoc """
   Behaviour for LLM provider implementations.
 

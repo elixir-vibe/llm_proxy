@@ -1,4 +1,4 @@
-defmodule LlmProxy.Repo.Migrations.CreateTables do
+defmodule LLMProxy.Repo.Migrations.CreateTables do
   use Ecto.Migration
 
   def change do
