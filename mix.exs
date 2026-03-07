@@ -9,6 +9,7 @@ defmodule LLMProxy.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      preferred_cli_env: [ci: :test],
       dialyzer: [plt_add_apps: [:mix]]
     ]
   end
@@ -41,7 +42,14 @@ defmodule LLMProxy.MixProject do
       setup: ["deps.get", "ecto.setup"],
       "ecto.setup": ["ecto.create", "ecto.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"]
+      test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      ci: [
+        "compile --warnings-as-errors",
+        "test",
+        "credo --strict",
+        "dialyzer",
+        "ex_dna"
+      ]
     ]
   end
 end

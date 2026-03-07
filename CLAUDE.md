@@ -8,6 +8,7 @@ OpenAI-compatible proxy for LLM APIs with usage tracking and per-user quotas.
 mix setup       # Install deps + create DB + migrate
 mix run --no-halt  # Start server
 mix test        # Run tests
+mix ci          # Full CI: compile, test, credo, dialyzer, ex_dna
 mix format      # Format code
 ```
 
