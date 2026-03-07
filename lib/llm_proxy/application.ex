@@ -13,6 +13,13 @@ defmodule LLMProxy.Application do
     Registry.init()
     Dynamic.init()
     Registry.register(LLMProxy.Providers.OpenRouter)
+    Registry.register(LLMProxy.Providers.Anthropic)
+    Registry.register(LLMProxy.Providers.OpenAI)
+
+    Dynamic.register("/v1/messages", LLMProxy.Routes.Messages)
+    Dynamic.register("/messages", LLMProxy.Routes.Messages)
+    Dynamic.register("/v1/responses", LLMProxy.Routes.Responses)
+    Dynamic.register("/responses", LLMProxy.Routes.Responses)
 
     children = [
       LLMProxy.Repo,
@@ -37,7 +44,8 @@ defmodule LLMProxy.Application do
     entries =
       [
         {"openrouter", "api-key", :openrouter_api_keys},
-        {"openai", "api-key", :openai_api_keys}
+        {"openai", "api-key", :openai_api_keys},
+        {"anthropic", "api-key", :anthropic_api_keys}
       ]
       |> Enum.map(fn {provider, kind, config_key} ->
         tokens =

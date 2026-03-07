@@ -1,29 +1,25 @@
-defmodule LLMProxy.Providers.OpenRouter do
+defmodule LLMProxy.Providers.OpenAI do
   @moduledoc false
 
   @behaviour LLMProxy.Providers.Behaviour
 
   alias LLMProxy.Providers.Helpers
 
-  @default_base_url "https://openrouter.ai/api/v1"
+  @default_base_url "https://api.openai.com/v1"
+
+  @models ~w(gpt-4o gpt-4o-mini gpt-4-turbo gpt-4 o1 o1-mini o3 o3-mini o4-mini)
 
   @impl true
-  def name, do: "openrouter"
+  def name, do: "openai"
 
   @impl true
-  def models do
-    :llm_proxy
-    |> :code.priv_dir()
-    |> Path.join("openrouter_models.json")
-    |> File.read!()
-    |> Jason.decode!()
-  end
+  def models, do: @models
 
   @impl true
-  def call(body, user_id), do: Helpers.openai_call("openrouter", body, user_id, opts())
+  def call(body, user_id), do: Helpers.openai_call("openai", body, user_id, opts())
 
   @impl true
-  def stream(body, user_id), do: Helpers.openai_stream("openrouter", body, user_id, opts())
+  def stream(body, user_id), do: Helpers.openai_stream("openai", body, user_id, opts())
 
   @impl true
   def extract_usage(response), do: Helpers.extract_openai_usage(response)
@@ -38,8 +34,6 @@ defmodule LLMProxy.Providers.OpenRouter do
   defp headers(token) do
     [
       {"authorization", "Bearer #{token.token}"},
-      {"http-referer", "https://ai-proxy.dannote.net"},
-      {"x-title", "LLM Proxy"},
       {"content-type", "application/json"}
     ]
   end

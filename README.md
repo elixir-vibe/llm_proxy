@@ -5,8 +5,8 @@ Multi-format LLM proxy with usage tracking, per-user quotas, and token pool mana
 ## Features
 
 - **OpenAI Chat Completions** (`/v1/chat/completions`) with streaming support
-- **Anthropic Messages** (`/v1/messages`) — native passthrough via provider plugins
-- **OpenAI Responses** (`/v1/responses`) — native passthrough via provider plugins
+- **Anthropic Messages** (`/v1/messages`) with streaming support
+- **OpenAI Responses** (`/v1/responses`) with streaming support
 - **Provider system** — pluggable providers with model-based routing
 - **Token pool** — multiple API keys per provider with FNV-1a hash pinning and 4h rate-limit cooldowns
 - **Usage tracking** — per-user input/output/cache token accounting
@@ -15,8 +15,10 @@ Multi-format LLM proxy with usage tracking, per-user quotas, and token pool mana
 - **Service proxies** — Exa search and Context7 docs with shared quota tracking
 - **Dynamic route registry** — extend with additional providers and routes
 
-## Bundled Provider
+## Bundled Providers
 
+- **Anthropic** — Claude models via standard API key
+- **OpenAI** — GPT/o-series models via standard API key
 - **OpenRouter** — 343+ models via OpenAI-compatible API
 
 Additional providers can be registered at runtime via `LLMProxy.Providers.Registry` and `LLMProxy.Routes.Dynamic`.
@@ -39,8 +41,9 @@ Environment variables (or `.env` file):
 | `PORT` | Server port (default: `4000`) |
 | `MASTER_KEY` | Admin key for setup/management endpoints |
 | `DATABASE_PATH` | SQLite database path (default: `./llm_proxy.db`) |
-| `OPENROUTER_API_KEYS` | Comma-separated OpenRouter API keys |
+| `ANTHROPIC_API_KEYS` | Comma-separated Anthropic API keys |
 | `OPENAI_API_KEYS` | Comma-separated OpenAI API keys |
+| `OPENROUTER_API_KEYS` | Comma-separated OpenRouter API keys |
 | `EXA_API_KEY` | Exa search API key |
 | `CONTEXT7_API_KEY` | Context7 API key |
 | `PUBLIC_URL` | Public URL for key display |
@@ -50,8 +53,8 @@ Environment variables (or `.env` file):
 ### Proxy
 
 - `POST /v1/chat/completions` — OpenAI Chat Completions (streaming + non-streaming)
-- `POST /v1/messages` — Anthropic Messages (requires provider plugin)
-- `POST /v1/responses` — OpenAI Responses (requires provider plugin)
+- `POST /v1/messages` — Anthropic Messages (streaming + non-streaming)
+- `POST /v1/responses` — OpenAI Responses (streaming + non-streaming)
 - `GET /v1/models`, `GET /models` — list available models
 - `GET /health` — health check
 

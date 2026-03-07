@@ -11,5 +11,6 @@ if config_env() == :prod do
     exa_api_key: System.get_env("EXA_API_KEY", ""),
     context7_api_key: System.get_env("CONTEXT7_API_KEY", ""),
     openrouter_api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
-    openai_api_keys: System.get_env("OPENAI_API_KEYS", "")
+    openai_api_keys: System.get_env("OPENAI_API_KEYS", ""),
+    anthropic_api_keys: System.get_env("ANTHROPIC_API_KEYS", "")
 end

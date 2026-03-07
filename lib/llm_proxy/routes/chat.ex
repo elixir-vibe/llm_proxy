@@ -6,7 +6,7 @@ defmodule LLMProxy.Routes.Chat do
 
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Providers.Registry
-  alias LLMProxy.Storage
+  alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.SSEWriter
 
   plug Auth
@@ -19,7 +19,7 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   match _ do
-    send_json(conn, 404, %{error: "Not found"})
+    Helpers.send_json(conn, 404, %{error: "Not found"})
   end
 
   defp handle_chat(conn) do
@@ -27,10 +27,10 @@ defmodule LLMProxy.Routes.Chat do
     body = conn.body_params
     model = body["model"]
 
-    with :ok <- check_model_access(api_key, model),
+    with :ok <- Helpers.check_model_access(api_key, model),
          provider when not is_nil(provider) <- Registry.get_provider(model) do
       Logger.debug("Request from #{api_key.name} model=#{model} provider=#{provider.name()}")
-      log_user_message(api_key, model, body)
+      Helpers.log_user_message(api_key, model, "chat", fn -> extract_user_message(body) end)
 
       if body["stream"] do
         handle_stream(conn, provider, api_key, body, model)
@@ -38,24 +38,20 @@ defmodule LLMProxy.Routes.Chat do
         handle_non_stream(conn, provider, api_key, body, model)
       end
     else
-      nil ->
-        send_json(conn, 404, %{error: "Model '#{model}' not found"})
-
-      {:error, reason} ->
-        send_json(conn, 403, %{error: reason})
+      nil -> Helpers.send_json(conn, 404, %{error: "Model '#{model}' not found"})
+      {:error, reason} -> Helpers.send_json(conn, 403, %{error: reason})
     end
   end
 
   defp handle_non_stream(conn, provider, api_key, body, model) do
     case provider.call(body, api_key.id) do
       {:ok, %{response: response}} ->
-        track_usage(api_key, model, provider.extract_usage(response))
-        openai_response = provider.to_openai_response(response, model)
-        send_json(conn, 200, openai_response)
+        Helpers.track_usage(api_key, model, provider.extract_usage(response))
+        Helpers.send_json(conn, 200, provider.to_openai_response(response, model))
 
       {:error, %{error: error, status: status}} ->
         Logger.error("#{provider.name()} error (#{status}): #{error}")
-        send_json(conn, status, %{error: error})
+        Helpers.send_json(conn, status, %{error: error})
     end
   end
 
@@ -63,17 +59,17 @@ defmodule LLMProxy.Routes.Chat do
     case provider.stream(body, api_key.id) do
       {:ok, %{stream: stream}} ->
         conn = SSEWriter.start_sse(conn)
-        {conn, usage} = pipe_stream(conn, stream, model, provider)
-        track_usage(api_key, model, usage)
+        {conn, usage} = pipe_stream(conn, stream)
+        Helpers.track_usage(api_key, model, usage)
         conn
 
       {:error, %{error: error, status: status}} ->
         Logger.error("#{provider.name()} stream error (#{status}): #{error}")
-        send_json(conn, status, %{error: error})
+        Helpers.send_json(conn, status, %{error: error})
     end
   end
 
-  defp pipe_stream(conn, stream, _model, _provider) do
+  defp pipe_stream(conn, stream) do
     usage = %{input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0}
 
     Enum.reduce_while(stream, {conn, usage}, fn event, {conn, usage} ->
@@ -96,61 +92,13 @@ defmodule LLMProxy.Routes.Chat do
 
   defp merge_stream_usage(usage, _), do: usage
 
-  defp track_usage(%{id: "master"}, _model, _usage), do: :ok
-
-  defp track_usage(api_key, model, usage) do
-    Storage.update_key_usage(api_key, %{
-      input: usage.input_tokens,
-      output: usage.output_tokens,
-      cache_read: usage.cache_read_tokens,
-      cache_write: usage.cache_write_tokens
-    })
-
-    Storage.record_usage(%{
-      key_id: api_key.id,
-      model: model,
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
-      cache_read_tokens: usage.cache_read_tokens,
-      cache_write_tokens: usage.cache_write_tokens,
-      timestamp: DateTime.utc_now()
-    })
-
-    Logger.info("Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens}")
-  end
-
-  defp check_model_access(%{id: "master"}, _model), do: :ok
-  defp check_model_access(api_key, model), do: Storage.check_model_access(api_key, model)
-
-  defp log_user_message(api_key, model, body) do
-    case extract_user_message(body) do
-      "" -> :ok
-      msg ->
-        Storage.log_message(%{key_id: api_key.id, model: model, route: "chat", user_message: msg})
-    end
-  end
-
   defp extract_user_message(%{"messages" => messages}) when is_list(messages) do
     case List.last(messages) do
       %{"role" => "user", "content" => content} when is_binary(content) -> content
-      %{"role" => "user", "content" => parts} when is_list(parts) ->
-        parts
-        |> Enum.map(fn
-          %{"type" => "text", "text" => text} -> text
-          text when is_binary(text) -> text
-          _ -> ""
-        end)
-        |> Enum.reject(&(&1 == ""))
-        |> Enum.join("\n")
+      %{"role" => "user", "content" => parts} when is_list(parts) -> Helpers.extract_text_parts(parts)
       _ -> ""
     end
   end
 
   defp extract_user_message(_), do: ""
-
-  defp send_json(conn, status, body) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(body))
-  end
 end
