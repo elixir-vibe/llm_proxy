@@ -7,19 +7,30 @@ defmodule LLMProxyWeb.KeysLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, keys: Storage.list_keys(), new_key: nil, page_title: "API Keys")}
+    {:ok, assign(socket, new_key: nil, page_title: "API Keys")}
   end
 
   @impl true
-  def handle_params(_params, uri, socket) do
-    {:noreply, assign(socket, current_path: URI.parse(uri).path)}
+  def handle_params(params, uri, socket) do
+    sort = params["sort"] || "name"
+    dir = params["dir"] || "asc"
+    keys = Storage.list_keys(%{sort: sort, dir: dir})
+
+    {:noreply,
+     assign(socket,
+       keys: keys,
+       sort: sort,
+       dir: dir,
+       current_path: URI.parse(uri).path
+     )}
   end
 
   @impl true
   def handle_event("create_key", %{"name" => name}, socket) do
     case Storage.create_key(name) do
       {:ok, _key, raw_key} ->
-        {:noreply, assign(socket, keys: Storage.list_keys(), new_key: raw_key)}
+        keys = Storage.list_keys(%{sort: socket.assigns.sort, dir: socket.assigns.dir})
+        {:noreply, assign(socket, keys: keys, new_key: raw_key)}
 
       {:error, _} ->
         {:noreply, put_flash(socket, :error, "Failed to create key")}
@@ -28,7 +39,8 @@ defmodule LLMProxyWeb.KeysLive do
 
   def handle_event("delete_key", %{"id" => id}, socket) do
     Storage.delete_key(id)
-    {:noreply, assign(socket, keys: Storage.list_keys())}
+    keys = Storage.list_keys(%{sort: socket.assigns.sort, dir: socket.assigns.dir})
+    {:noreply, assign(socket, keys: keys)}
   end
 
   def handle_event("dismiss_key", _, socket) do
@@ -47,7 +59,9 @@ defmodule LLMProxyWeb.KeysLive do
         class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center justify-between"
       >
         <div>
-          <p class="text-sm text-green-800 font-medium">Key created — copy it now, it won't be shown again:</p>
+          <p class="text-sm text-green-800 font-medium">
+            Key created — copy it now, it won't be shown again:
+          </p>
           <code class="text-sm font-mono text-green-900 select-all">{@new_key}</code>
         </div>
         <button phx-click="dismiss_key" class="text-green-600 hover:text-green-800 text-sm">
@@ -74,29 +88,53 @@ defmodule LLMProxyWeb.KeysLive do
       <div class="bg-white rounded-lg shadow overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-gray-500 border-b">
-              <th class="px-4 py-3">Name</th>
-              <th class="px-4 py-3">Input</th>
-              <th class="px-4 py-3">Output</th>
-              <th class="px-4 py-3">Cache Read</th>
-              <th class="px-4 py-3">4h Input Quota</th>
-              <th class="px-4 py-3">Models</th>
+            <tr class="text-left border-b">
+              <.sort_header key={:name} label="Name" sort_key={@sort} sort_dir={@dir} />
+              <.sort_header
+                key={:input_tokens}
+                label="Input"
+                sort_key={@sort}
+                sort_dir={@dir}
+                class="text-right"
+              />
+              <.sort_header
+                key={:output_tokens}
+                label="Output"
+                sort_key={@sort}
+                sort_dir={@dir}
+                class="text-right"
+              />
+              <.sort_header
+                key={:cache_read_tokens}
+                label="Cache Read"
+                sort_key={@sort}
+                sort_dir={@dir}
+                class="text-right"
+              />
+              <th class="px-4 py-3 text-gray-500">4h Input Quota</th>
+              <th class="px-4 py-3 text-gray-500">Models</th>
               <th class="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             <tr :for={key <- @keys} class="border-b border-gray-100 hover:bg-gray-50">
               <td class="px-4 py-3 font-medium">{key.name}</td>
-              <td class="px-4 py-3 text-right font-mono text-xs">{format_tokens(key.input_tokens)}</td>
-              <td class="px-4 py-3 text-right font-mono text-xs">{format_tokens(key.output_tokens)}</td>
-              <td class="px-4 py-3 text-right font-mono text-xs">{format_tokens(key.cache_read_tokens)}</td>
+              <td class="px-4 py-3 text-right font-mono text-xs">
+                {format_tokens(key.input_tokens)}
+              </td>
+              <td class="px-4 py-3 text-right font-mono text-xs">
+                {format_tokens(key.output_tokens)}
+              </td>
+              <td class="px-4 py-3 text-right font-mono text-xs">
+                {format_tokens(key.cache_read_tokens)}
+              </td>
               <td class="px-4 py-3 text-right text-xs">{key.quota_4h_input || "∞"}</td>
               <td class="px-4 py-3 text-xs text-gray-500">{format_models(key.allowed_models)}</td>
               <td class="px-4 py-3 text-right">
                 <button
                   phx-click="delete_key"
                   phx-value-id={key.id}
-                  data-confirm="Delete key '#{key.name}'?"
+                  data-confirm={"Delete key '#{key.name}'?"}
                   class="text-red-600 hover:text-red-800 text-xs"
                 >
                   Delete
@@ -111,8 +149,12 @@ defmodule LLMProxyWeb.KeysLive do
     """
   end
 
-  defp format_tokens(n) when is_integer(n) and n >= 1_000_000, do: "#{Float.round(n / 1_000_000, 1)}M"
-  defp format_tokens(n) when is_integer(n) and n >= 1_000, do: "#{Float.round(n / 1_000, 1)}K"
+  defp format_tokens(n) when is_integer(n) and n >= 1_000_000,
+    do: "#{Float.round(n / 1_000_000, 1)}M"
+
+  defp format_tokens(n) when is_integer(n) and n >= 1_000,
+    do: "#{Float.round(n / 1_000, 1)}K"
+
   defp format_tokens(0), do: "0"
   defp format_tokens(n), do: to_string(n)
 

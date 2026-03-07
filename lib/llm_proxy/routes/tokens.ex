@@ -12,7 +12,7 @@ defmodule LLMProxy.Routes.Tokens do
 
   get "/" do
     provider = conn.query_params["provider"]
-    tokens = Storage.list_tokens(provider)
+    tokens = Storage.list_tokens(if provider, do: %{provider: provider}, else: %{})
 
     send_json(conn, 200, Enum.map(tokens, &serialize_token/1))
   end

@@ -8,12 +8,22 @@ defmodule LLMProxyWeb.TokensLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, tokens: Storage.list_tokens(), page_title: "Token Pool")}
+    {:ok, assign(socket, page_title: "Token Pool")}
   end
 
   @impl true
-  def handle_params(_params, uri, socket) do
-    {:noreply, assign(socket, current_path: URI.parse(uri).path)}
+  def handle_params(params, uri, socket) do
+    sort = params["sort"] || "provider"
+    dir = params["dir"] || "asc"
+    tokens = Storage.list_tokens(%{sort: sort, dir: dir})
+
+    {:noreply,
+     assign(socket,
+       tokens: tokens,
+       sort: sort,
+       dir: dir,
+       current_path: URI.parse(uri).path
+     )}
   end
 
   @impl true
@@ -22,24 +32,29 @@ defmodule LLMProxyWeb.TokensLive do
     opts = if proxy && proxy != "", do: %{proxy: proxy}, else: %{}
 
     case Storage.add_token(provider, kind, token, opts) do
-      {:ok, _} -> {:noreply, assign(socket, tokens: Storage.list_tokens())}
+      {:ok, _} -> {:noreply, reload(socket)}
       {:error, _} -> {:noreply, put_flash(socket, :error, "Failed to add token")}
     end
   end
 
   def handle_event("toggle_enabled", %{"id" => id, "enabled" => enabled}, socket) do
     Storage.set_token_enabled(id, enabled == "true")
-    {:noreply, assign(socket, tokens: Storage.list_tokens())}
+    {:noreply, reload(socket)}
   end
 
   def handle_event("delete_token", %{"id" => id}, socket) do
     Storage.remove_token(id)
-    {:noreply, assign(socket, tokens: Storage.list_tokens())}
+    {:noreply, reload(socket)}
   end
 
   def handle_event("clear_rate_limits", _, socket) do
     TokenPool.clear_rate_limits()
     {:noreply, put_flash(socket, :info, "Rate limits cleared")}
+  end
+
+  defp reload(socket) do
+    tokens = Storage.list_tokens(%{sort: socket.assigns.sort, dir: socket.assigns.dir})
+    assign(socket, tokens: tokens)
   end
 
   @impl true
@@ -96,13 +111,13 @@ defmodule LLMProxyWeb.TokensLive do
       <div class="bg-white rounded-lg shadow overflow-x-auto">
         <table class="w-full text-sm">
           <thead>
-            <tr class="text-left text-gray-500 border-b">
-              <th class="px-4 py-3">Provider</th>
-              <th class="px-4 py-3">Kind</th>
-              <th class="px-4 py-3">Token</th>
-              <th class="px-4 py-3">Label</th>
-              <th class="px-4 py-3">Enabled</th>
-              <th class="px-4 py-3">Proxy</th>
+            <tr class="text-left border-b">
+              <.sort_header key={:provider} label="Provider" sort_key={@sort} sort_dir={@dir} />
+              <.sort_header key={:kind} label="Kind" sort_key={@sort} sort_dir={@dir} />
+              <th class="px-4 py-3 text-gray-500">Token</th>
+              <th class="px-4 py-3 text-gray-500">Label</th>
+              <.sort_header key={:enabled} label="Enabled" sort_key={@sort} sort_dir={@dir} />
+              <th class="px-4 py-3 text-gray-500">Proxy</th>
               <th class="px-4 py-3"></th>
             </tr>
           </thead>
@@ -119,7 +134,10 @@ defmodule LLMProxyWeb.TokensLive do
                   phx-value-enabled={to_string(!token.enabled)}
                   class={[
                     "px-2 py-0.5 rounded text-xs font-medium",
-                    if(token.enabled, do: "bg-green-100 text-green-800", else: "bg-red-100 text-red-800")
+                    if(token.enabled,
+                      do: "bg-green-100 text-green-800",
+                      else: "bg-red-100 text-red-800"
+                    )
                   ]}
                 >
                   {if token.enabled, do: "ON", else: "OFF"}

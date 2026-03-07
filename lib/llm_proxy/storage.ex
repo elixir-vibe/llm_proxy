@@ -33,8 +33,11 @@ defmodule LLMProxy.Storage do
     Repo.get_by(ApiKey, hash: hash)
   end
 
-  def list_keys do
-    ApiKey |> order_by(desc: :inserted_at) |> Repo.all()
+  def list_keys(opts \\ %{}) do
+    query = from(k in ApiKey)
+    query = apply_sort(query, opts[:sort], opts[:dir], [:name, :input_tokens, :output_tokens, :cache_read_tokens])
+    query = if query_has_order?(query), do: query, else: order_by(query, desc: :inserted_at)
+    Repo.all(query)
   end
 
   def delete_key(id) do
@@ -287,9 +290,11 @@ defmodule LLMProxy.Storage do
     |> Repo.all()
   end
 
-  def list_tokens(provider \\ nil) do
-    query = ProviderToken |> order_by([:provider, :id])
-    query = if provider, do: where(query, [t], t.provider == ^provider), else: query
+  def list_tokens(opts \\ %{}) do
+    query = from(t in ProviderToken)
+    query = if opts[:provider], do: where(query, [t], t.provider == ^opts.provider), else: query
+    query = apply_sort(query, opts[:sort], opts[:dir], [:provider, :kind, :enabled])
+    query = if query_has_order?(query), do: query, else: order_by(query, [:provider, :id])
     Repo.all(query)
   end
 
@@ -346,28 +351,64 @@ defmodule LLMProxy.Storage do
   end
 
   def get_messages(opts \\ %{}) do
-    query =
-      from(m in MessageLog,
-        join: k in ApiKey,
-        on: k.id == m.key_id,
-        order_by: [desc: m.timestamp],
-        select: %{
-          id: m.id,
-          key_id: m.key_id,
-          key_name: k.name,
-          model: m.model,
-          route: m.route,
-          user_message: m.user_message,
-          timestamp: m.timestamp
-        }
-      )
+    per_page = Map.get(opts, :per_page, Map.get(opts, :limit, 25))
 
-    query = if opts[:key_id], do: where(query, [m], m.key_id == ^opts.key_id), else: query
-    query = query |> limit(^Map.get(opts, :limit, 50))
-    query = if opts[:offset], do: offset(query, ^opts.offset), else: query
-
-    Repo.all(query)
+    from(m in MessageLog,
+      join: k in ApiKey,
+      on: k.id == m.key_id,
+      select: %{
+        id: m.id,
+        key_id: m.key_id,
+        key_name: k.name,
+        model: m.model,
+        route: m.route,
+        user_message: m.user_message,
+        timestamp: m.timestamp
+      }
+    )
+    |> messages_filter_key(opts[:key_id])
+    |> messages_search(opts[:search])
+    |> messages_sort(opts[:sort], opts[:dir])
+    |> limit(^(per_page + 1))
+    |> messages_offset(opts[:offset])
+    |> Repo.all()
   end
+
+  defp messages_filter_key(query, nil), do: query
+  defp messages_filter_key(query, key_id), do: where(query, [m], m.key_id == ^key_id)
+
+  defp messages_search(query, nil), do: query
+  defp messages_search(query, ""), do: query
+
+  defp messages_search(query, term) do
+    pattern = "%#{term}%"
+
+    where(
+      query,
+      [m, k],
+      fragment("lower(?) LIKE lower(?)", m.model, ^pattern) or
+        fragment("lower(?) LIKE lower(?)", k.name, ^pattern) or
+        fragment("lower(?) LIKE lower(?)", m.user_message, ^pattern)
+    )
+  end
+
+  defp messages_sort(query, "model", dir),
+    do: order_by(query, [m], [{^sort_dir(dir), m.model}])
+
+  defp messages_sort(query, "key_name", dir),
+    do: order_by(query, [m, k], [{^sort_dir(dir), k.name}])
+
+  defp messages_sort(query, "route", dir),
+    do: order_by(query, [m], [{^sort_dir(dir), m.route}])
+
+  defp messages_sort(query, "timestamp", dir),
+    do: order_by(query, [m], [{^sort_dir(dir), m.timestamp}])
+
+  defp messages_sort(query, _, _),
+    do: order_by(query, [m], desc: m.timestamp)
+
+  defp messages_offset(query, nil), do: query
+  defp messages_offset(query, offset), do: offset(query, ^offset)
 
   # --- Stats ---
 
@@ -412,6 +453,24 @@ defmodule LLMProxy.Storage do
   end
 
   # --- Helpers ---
+
+  defp apply_sort(query, sort, dir, allowed_fields) do
+    field = if sort, do: String.to_existing_atom(sort), else: nil
+
+    if field && field in allowed_fields do
+      order_by(query, [{^sort_dir(dir), ^field}])
+    else
+      query
+    end
+  rescue
+    ArgumentError -> query
+  end
+
+  defp sort_dir("desc"), do: :desc
+  defp sort_dir(_), do: :asc
+
+  defp query_has_order?(%Ecto.Query{order_bys: [_ | _]}), do: true
+  defp query_has_order?(_), do: false
 
   defp hash_key(raw_key) do
     :crypto.hash(:sha256, raw_key) |> Base.encode16(case: :lower)
