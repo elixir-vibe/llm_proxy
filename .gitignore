@@ -21,3 +21,6 @@ llm_proxy-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+*.db
+*.db-shm
+*.db-wal
