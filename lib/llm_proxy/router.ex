@@ -36,6 +36,8 @@ defmodule LLMProxy.Router do
   forward "/setup", to: LLMProxy.Routes.Setup
   forward "/v1/chat", to: LLMProxy.Routes.Chat
   forward "/chat", to: LLMProxy.Routes.Chat
+  forward "/v1/moderations", to: LLMProxy.Routes.Moderations
+  forward "/moderations", to: LLMProxy.Routes.Moderations
   forward "/v1/exa", to: LLMProxy.Routes.Exa
   forward "/v1/context7", to: LLMProxy.Routes.Context7
   forward "/providers", to: LLMProxy.Routes.ProviderUsage

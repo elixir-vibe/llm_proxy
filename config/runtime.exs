@@ -9,5 +9,7 @@ if config_env() == :prod do
     master_key: System.get_env("MASTER_KEY"),
     public_url: System.get_env("PUBLIC_URL", ""),
     exa_api_key: System.get_env("EXA_API_KEY", ""),
-    context7_api_key: System.get_env("CONTEXT7_API_KEY", "")
+    context7_api_key: System.get_env("CONTEXT7_API_KEY", ""),
+    openrouter_api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
+    openai_api_keys: System.get_env("OPENAI_API_KEYS", "")
 end
