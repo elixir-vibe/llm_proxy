@@ -42,8 +42,12 @@ defmodule LLMProxy.Router do
   forward "/v1/context7", to: LLMProxy.Routes.Context7
   forward "/providers", to: LLMProxy.Routes.ProviderUsage
 
+  # Dynamic routes registered by optional packages (e.g., llm_proxy_private)
   match _ do
-    send_json(conn, 404, %{error: "Not found"})
+    case LLMProxy.Routes.Dynamic.dispatch(conn) do
+      nil -> send_json(conn, 404, %{error: "Not found"})
+      conn -> conn
+    end
   end
 
   defp send_json(conn, status, body) do
