@@ -3,15 +3,7 @@ defmodule LLMProxy.Router do
 
   alias LLMProxy.Routes.Dynamic
 
-  plug Plug.Logger
   plug :match
-
-  plug Plug.Parsers,
-    parsers: [:json],
-    pass: ["application/json"],
-    json_decoder: Jason,
-    body_reader: {LLMProxy.CacheBodyReader, :read_body, []}
-
   plug :dispatch
 
   # Health check — no auth

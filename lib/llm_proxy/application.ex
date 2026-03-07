@@ -26,14 +26,15 @@ defmodule LLMProxy.Application do
     children = [
       LLMProxy.Repo,
       LLMProxy.TokenPool.Server,
-      {Plug.Cowboy, scheme: :http, plug: LLMProxy.Router, options: [port: port()]}
+      {Phoenix.PubSub, name: LLMProxy.PubSub},
+      LLMProxyWeb.Endpoint
     ]
 
     opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]
     {:ok, pid} = Supervisor.start_link(children, opts)
 
     seed_tokens_from_env()
-    Logger.info("LLM Proxy started on port #{port()}")
+    Logger.info("LLM Proxy started")
 
     {:ok, pid}
   end
@@ -41,10 +42,6 @@ defmodule LLMProxy.Application do
   defp setup_opentelemetry do
     :opentelemetry_cowboy.setup()
     OpentelemetryEcto.setup([:llm_proxy, :repo])
-  end
-
-  defp port do
-    Application.get_env(:llm_proxy, :port, 4000)
   end
 
   defp seed_tokens_from_env do

@@ -23,6 +23,11 @@ config :llm_proxy,
   exa_api_key: System.get_env("EXA_API_KEY", ""),
   context7_api_key: System.get_env("CONTEXT7_API_KEY", "")
 
+config :llm_proxy, LLMProxyWeb.Endpoint,
+  http: [port: 4002],
+  secret_key_base: "test-only-secret-key-base-that-is-at-least-64-bytes-long-for-test-only!!!",
+  server: false
+
 config :opentelemetry, traces_exporter: :none
 
 config :logger, level: :warning

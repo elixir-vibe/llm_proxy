@@ -23,6 +23,9 @@ defmodule LLMProxy.MixProject do
 
   defp deps do
     [
+      {:phoenix, "~> 1.8"},
+      {:phoenix_html, "~> 4.3"},
+      {:phoenix_live_view, "~> 1.1"},
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sqlite3, "~> 0.17"},
       {:req_llm, "~> 1.6"},
