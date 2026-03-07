@@ -7,7 +7,9 @@ defmodule LLMProxy.Providers.OpenAI do
 
   @default_base_url "https://api.openai.com/v1"
 
-  @models ~w(gpt-4o gpt-4o-mini gpt-4-turbo gpt-4 o1 o1-mini o3 o3-mini o4-mini)
+  @models_path Path.join(:code.priv_dir(:llm_proxy), "models/openai.json")
+  @external_resource @models_path
+  @models @models_path |> File.read!() |> Jason.decode!()
 
   @impl true
   def name, do: "openai"

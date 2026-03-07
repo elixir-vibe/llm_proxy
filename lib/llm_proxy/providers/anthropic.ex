@@ -9,17 +9,9 @@ defmodule LLMProxy.Providers.Anthropic do
   @api_version "2023-06-01"
   @beta "fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
 
-  @models [
-    "claude-sonnet-4-6",
-    "claude-opus-4-6",
-    "claude-opus-4-5-20251101",
-    "claude-sonnet-4-5-20250929",
-    "claude-haiku-4-5-20251001",
-    "claude-sonnet-4-20250514",
-    "claude-opus-4-20250514",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022"
-  ]
+  @models_path Path.join(:code.priv_dir(:llm_proxy), "models/anthropic.json")
+  @external_resource @models_path
+  @models @models_path |> File.read!() |> Jason.decode!()
 
   @impl true
   def name, do: "anthropic"
