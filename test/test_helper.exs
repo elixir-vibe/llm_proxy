@@ -1,2 +1,2 @@
 Ecto.Adapters.SQL.Sandbox.mode(LLMProxy.Repo, :manual)
-ExUnit.start()
+ExUnit.start(exclude: [:integration])

@@ -131,10 +131,10 @@ defmodule LLMProxy.StorageTest do
     end
 
     test "disable token excludes from get_tokens" do
-      {:ok, token} = Storage.add_token("openrouter", "api-key", "key-abc")
+      {:ok, token} = Storage.add_token("test-provider", "api-key", "key-abc")
       {:ok, _} = Storage.set_token_enabled(token.id, false)
 
-      assert Storage.get_tokens("openrouter", "api-key") == []
+      assert Storage.get_tokens("test-provider", "api-key") == []
     end
   end
 end

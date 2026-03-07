@@ -24,3 +24,4 @@ llm_proxy-*.tar
 *.db
 *.db-shm
 *.db-wal
+.env
