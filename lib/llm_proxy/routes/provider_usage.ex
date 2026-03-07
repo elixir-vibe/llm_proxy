@@ -58,8 +58,12 @@ defmodule LLMProxy.Routes.ProviderUsage do
     ]
 
     opts = if token.proxy, do: [connect_options: [proxy: token.proxy]], else: []
-    resp = Req.get!(@codex_usage_url, [headers: headers] ++ opts)
-    resp.body
+
+    req =
+      Req.new([url: @codex_usage_url, headers: headers] ++ opts)
+      |> OpentelemetryReq.attach()
+
+    Req.get!(req).body
   end
 
   defp fetch_claude_usage(token) do
@@ -70,8 +74,12 @@ defmodule LLMProxy.Routes.ProviderUsage do
     ]
 
     opts = if token.proxy, do: [connect_options: [proxy: token.proxy]], else: []
-    resp = Req.get!(@claude_usage_url, [headers: headers] ++ opts)
-    resp.body
+
+    req =
+      Req.new([url: @claude_usage_url, headers: headers] ++ opts)
+      |> OpentelemetryReq.attach()
+
+    Req.get!(req).body
   end
 
   defp extract_account_id(token) do

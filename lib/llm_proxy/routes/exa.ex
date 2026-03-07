@@ -41,14 +41,11 @@ defmodule LLMProxy.Routes.Exa do
     Logger.debug("EXA request from #{api_key.name}: POST #{endpoint}")
     raw_body = conn.private[:raw_body] || Jason.encode!(conn.body_params)
 
-    response =
-      Req.post!("#{@exa_api_base}#{endpoint}",
-        body: raw_body,
-        headers: [
-          {"content-type", "application/json"},
-          {"x-api-key", exa_key}
-        ]
-      )
+    req =
+      Req.new(url: "#{@exa_api_base}#{endpoint}", headers: [{"content-type", "application/json"}, {"x-api-key", exa_key}])
+      |> OpentelemetryReq.attach()
+
+    response = Req.post!(req, body: raw_body)
 
     track_service_usage(api_key, endpoint, response.status)
 

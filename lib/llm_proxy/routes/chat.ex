@@ -8,6 +8,7 @@ defmodule LLMProxy.Routes.Chat do
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.SSEWriter
+  alias LLMProxy.Telemetry
 
   plug Auth
   plug QuotaCheck
@@ -44,7 +45,7 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   defp handle_non_stream(conn, provider, api_key, body, model) do
-    case provider.call(body, api_key.id) do
+    case Telemetry.with_provider_span(provider.name(), model, :call, fn -> provider.call(body, api_key.id) end) do
       {:ok, %{response: response}} ->
         Helpers.track_usage(api_key, model, provider.extract_usage(response))
         Helpers.send_json(conn, 200, provider.to_openai_response(response, model))
@@ -56,7 +57,7 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   defp handle_stream(conn, provider, api_key, body, model) do
-    case provider.stream(body, api_key.id) do
+    case Telemetry.with_provider_span(provider.name(), model, :stream, fn -> provider.stream(body, api_key.id) end) do
       {:ok, %{stream: stream}} ->
         conn = SSEWriter.start_sse(conn)
         {conn, usage} = pipe_stream(conn, stream)

@@ -84,7 +84,9 @@ defmodule LLMProxy.Providers.Anthropic do
   # HTTP calls
 
   defp do_call(token, body) do
-    case Req.post(url: "#{base_url(token)}/messages", headers: headers(token), json: body, receive_timeout: 600_000) do
+    req = Req.new(url: "#{base_url(token)}/messages", headers: headers(token), receive_timeout: 600_000) |> OpentelemetryReq.attach()
+
+    case Req.post(req, json: body) do
       {:ok, %{status: 200, body: response}} -> {:ok, %{response: response, token: token}}
       {:ok, %{status: status, body: resp_body}} -> Helpers.handle_error_response(token, status, resp_body)
       {:error, exception} -> Helpers.handle_exception(exception)
@@ -92,13 +94,11 @@ defmodule LLMProxy.Providers.Anthropic do
   end
 
   defp do_stream(body, token) do
-    case Req.post(
-           url: "#{base_url(token)}/messages",
-           headers: headers(token),
-           json: body,
-           into: :self,
-           receive_timeout: 600_000
-         ) do
+    req =
+      Req.new(url: "#{base_url(token)}/messages", headers: headers(token), into: :self, receive_timeout: 600_000)
+      |> OpentelemetryReq.attach()
+
+    case Req.post(req, json: body) do
       {:ok, %{status: 200} = resp} ->
         stream =
           resp.body

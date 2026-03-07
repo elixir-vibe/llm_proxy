@@ -44,10 +44,11 @@ defmodule LLMProxy.Routes.Context7 do
         qs -> "#{@context7_api_base}#{endpoint}?#{qs}"
       end
 
-    response =
-      Req.get!(url,
-        headers: [{"authorization", "Bearer #{api_key_value}"}]
-      )
+    req =
+      Req.new(url: url, headers: [{"authorization", "Bearer #{api_key_value}"}])
+      |> OpentelemetryReq.attach()
+
+    response = Req.get!(req)
 
     track_service_usage(api_key, endpoint, response.status)
 

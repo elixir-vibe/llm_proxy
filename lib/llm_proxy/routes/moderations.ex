@@ -21,11 +21,11 @@ defmodule LLMProxy.Routes.Moderations do
 
     case TokenPool.pick_token_by_kind("openai", "api-key", api_key.id) do
       {:ok, token} ->
-        case Req.post(
-               url: "https://api.openai.com/v1/moderations",
-               headers: [{"authorization", "Bearer #{token.token}"}],
-               json: %{input: body["input"], model: model}
-             ) do
+        req =
+          Req.new(url: "https://api.openai.com/v1/moderations", headers: [{"authorization", "Bearer #{token.token}"}])
+          |> OpentelemetryReq.attach()
+
+        case Req.post(req, json: %{input: body["input"], model: model}) do
           {:ok, %{status: status, body: response}} ->
             send_json(conn, status, response)
 

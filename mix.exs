@@ -29,6 +29,14 @@ defmodule LLMProxy.MixProject do
       {:dotenvy, "~> 1.1"},
       {:jason, "~> 1.4"},
 
+      # OpenTelemetry
+      {:opentelemetry_api, "~> 1.5"},
+      {:opentelemetry, "~> 1.7"},
+      {:opentelemetry_exporter, "~> 1.10"},
+      {:opentelemetry_cowboy, "~> 1.0"},
+      {:opentelemetry_ecto, "~> 1.2"},
+      {:opentelemetry_req, "~> 1.0"},
+
       # Dev/test
       {:mox, "~> 1.1", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

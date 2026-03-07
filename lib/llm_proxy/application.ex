@@ -10,6 +10,8 @@ defmodule LLMProxy.Application do
 
   @impl true
   def start(_type, _args) do
+    setup_opentelemetry()
+
     Registry.init()
     Dynamic.init()
     Registry.register(LLMProxy.Providers.OpenRouter)
@@ -34,6 +36,11 @@ defmodule LLMProxy.Application do
     Logger.info("LLM Proxy started on port #{port()}")
 
     {:ok, pid}
+  end
+
+  defp setup_opentelemetry do
+    :opentelemetry_cowboy.setup()
+    OpentelemetryEcto.setup([:llm_proxy, :repo])
   end
 
   defp port do

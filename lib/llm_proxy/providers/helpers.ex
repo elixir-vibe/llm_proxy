@@ -15,7 +15,9 @@ defmodule LLMProxy.Providers.Helpers do
       base_url = opts.base_url_fn.(token)
       headers = opts.headers_fn.(token)
 
-      case Req.post(url: "#{base_url}/chat/completions", headers: headers, json: body, receive_timeout: 600_000) do
+      req = Req.new(url: "#{base_url}/chat/completions", headers: headers, receive_timeout: 600_000) |> OpentelemetryReq.attach()
+
+      case Req.post(req, json: body) do
         {:ok, %{status: 200, body: response}} -> {:ok, %{response: response, token: token}}
         {:ok, %{status: status, body: resp_body}} -> handle_error_response(token, status, resp_body)
         {:error, exception} -> handle_exception(exception)
@@ -29,13 +31,11 @@ defmodule LLMProxy.Providers.Helpers do
       headers = opts.headers_fn.(token)
       stream_body = Map.put(body, "stream", true)
 
-      case Req.post(
-             url: "#{base_url}/chat/completions",
-             headers: headers,
-             json: stream_body,
-             into: :self,
-             receive_timeout: 600_000
-           ) do
+      req =
+        Req.new(url: "#{base_url}/chat/completions", headers: headers, into: :self, receive_timeout: 600_000)
+        |> OpentelemetryReq.attach()
+
+      case Req.post(req, json: stream_body) do
         {:ok, %{status: 200} = resp} ->
           stream =
             resp.body

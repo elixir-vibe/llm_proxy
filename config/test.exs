@@ -23,4 +23,6 @@ config :llm_proxy,
   exa_api_key: System.get_env("EXA_API_KEY", ""),
   context7_api_key: System.get_env("CONTEXT7_API_KEY", "")
 
+config :opentelemetry, traces_exporter: :none
+
 config :logger, level: :warning
