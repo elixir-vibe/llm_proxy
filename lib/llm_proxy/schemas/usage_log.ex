@@ -1,4 +1,5 @@
 defmodule LLMProxy.Schemas.UsageLog do
+  @moduledoc false
   use Ecto.Schema
   import Ecto.Changeset
 
@@ -14,7 +15,10 @@ defmodule LLMProxy.Schemas.UsageLog do
 
   def changeset(log, attrs) do
     log
-    |> cast(attrs, [:key_id, :model, :input_tokens, :output_tokens, :cache_read_tokens, :cache_write_tokens, :timestamp])
+    |> cast(attrs, [
+      :key_id, :model, :input_tokens, :output_tokens,
+      :cache_read_tokens, :cache_write_tokens, :timestamp
+    ])
     |> validate_required([:key_id, :model, :input_tokens, :output_tokens, :timestamp])
   end
 end

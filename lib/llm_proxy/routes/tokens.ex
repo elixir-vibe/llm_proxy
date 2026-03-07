@@ -1,4 +1,5 @@
 defmodule LLMProxy.Routes.Tokens do
+  @moduledoc false
   use Plug.Router
 
   alias LLMProxy.Plugs.MasterKey
@@ -62,7 +63,7 @@ defmodule LLMProxy.Routes.Tokens do
       with :ok <- maybe_set_enabled(id, enabled),
            :ok <- maybe_update_proxy(id, body) do
         result = %{id: id}
-        result = if not is_nil(enabled), do: Map.put(result, :enabled, enabled), else: result
+        result = if enabled != nil, do: Map.put(result, :enabled, enabled), else: result
         result = if Map.has_key?(body, "proxy"), do: Map.put(result, :proxy, proxy), else: result
         send_json(conn, 200, result)
       else

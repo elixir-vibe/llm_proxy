@@ -1,4 +1,5 @@
 defmodule LLMProxy.Routes.Chat do
+  @moduledoc false
   use Plug.Router
 
   require Logger

@@ -4,7 +4,7 @@ defmodule LLMProxy.Storage do
   """
 
   alias LLMProxy.Repo
-  alias LLMProxy.Schemas.{ApiKey, UsageLog, ServiceUsage, ProviderToken, MessageLog}
+  alias LLMProxy.Schemas.{ApiKey, MessageLog, ProviderToken, ServiceUsage, UsageLog}
 
   import Ecto.Query
 
@@ -144,9 +144,8 @@ defmodule LLMProxy.Storage do
     with :ok <- check_4h_token_quota(key),
          :ok <- check_week_token_quota(key),
          :ok <- check_4h_message_quota(key),
-         :ok <- check_week_message_quota(key),
-         :ok <- check_cache_ratio(key) do
-      :ok
+         :ok <- check_week_message_quota(key) do
+      check_cache_ratio(key)
     end
   end
 
@@ -250,9 +249,8 @@ defmodule LLMProxy.Storage do
   end
 
   defp do_check_service_quota(key_id, service, quotas) do
-    with :ok <- check_service_4h(key_id, service, quotas),
-         :ok <- check_service_week(key_id, service, quotas) do
-      :ok
+    with :ok <- check_service_4h(key_id, service, quotas) do
+      check_service_week(key_id, service, quotas)
     end
   end
 

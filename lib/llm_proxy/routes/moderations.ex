@@ -1,4 +1,5 @@
 defmodule LLMProxy.Routes.Moderations do
+  @moduledoc false
   use Plug.Router
 
   require Logger

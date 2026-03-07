@@ -1,4 +1,5 @@
 defmodule LLMProxy.Routes.ProviderUsage do
+  @moduledoc false
   use Plug.Router
 
   alias LLMProxy.Plugs.MasterKey

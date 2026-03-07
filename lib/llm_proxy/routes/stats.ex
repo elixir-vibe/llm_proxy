@@ -1,4 +1,5 @@
 defmodule LLMProxy.Routes.Stats do
+  @moduledoc false
   use Plug.Router
 
   alias LLMProxy.Storage

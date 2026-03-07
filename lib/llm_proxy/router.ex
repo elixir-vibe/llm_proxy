@@ -1,6 +1,8 @@
 defmodule LLMProxy.Router do
   use Plug.Router
 
+  alias LLMProxy.Routes.Dynamic
+
   plug Plug.Logger
   plug :match
 
@@ -44,7 +46,7 @@ defmodule LLMProxy.Router do
 
   # Dynamic routes registered by optional packages (e.g., llm_proxy_private)
   match _ do
-    case LLMProxy.Routes.Dynamic.dispatch(conn) do
+    case Dynamic.dispatch(conn) do
       nil -> send_json(conn, 404, %{error: "Not found"})
       conn -> conn
     end

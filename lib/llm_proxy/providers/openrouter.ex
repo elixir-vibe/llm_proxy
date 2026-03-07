@@ -1,7 +1,11 @@
 defmodule LLMProxy.Providers.OpenRouter do
+  @moduledoc false
+
   @behaviour LLMProxy.Providers.Behaviour
 
   require Logger
+
+  alias LLMProxy.TokenPool.Server, as: TokenPool
 
   @base_url "https://openrouter.ai/api/v1"
 
@@ -19,25 +23,24 @@ defmodule LLMProxy.Providers.OpenRouter do
 
   @impl true
   def call(body, user_id) do
-    with {:ok, token} <- LLMProxy.TokenPool.Server.pick_token("openrouter", user_id) do
-      case Req.post(
-             url: "#{base_url(token)}/chat/completions",
-             headers: headers(token),
-             json: body,
-             receive_timeout: 600_000
-           ) do
-        {:ok, %{status: 200, body: response}} ->
-          {:ok, %{response: response, token: token}}
+    case TokenPool.pick_token("openrouter", user_id) do
+      {:ok, token} ->
+        case Req.post(
+               url: "#{base_url(token)}/chat/completions",
+               headers: headers(token),
+               json: body,
+               receive_timeout: 600_000
+             ) do
+          {:ok, %{status: 200, body: response}} ->
+            {:ok, %{response: response, token: token}}
 
-        {:ok, %{status: status, body: body}} ->
-          error = extract_error(body)
-          maybe_mark_rate_limited(token, status)
-          {:error, %{error: error, status: status, token: token}}
+          {:ok, %{status: status, body: resp_body}} ->
+            handle_error_response(token, status, resp_body)
 
-        {:error, exception} ->
-          {:error, %{error: Exception.message(exception), status: 502, token: nil}}
-      end
-    else
+          {:error, exception} ->
+            handle_exception(exception)
+        end
+
       {:error, reason} ->
         {:error, %{error: "No available tokens: #{reason}", status: 503, token: nil}}
     end
@@ -45,34 +48,33 @@ defmodule LLMProxy.Providers.OpenRouter do
 
   @impl true
   def stream(body, user_id) do
-    with {:ok, token} <- LLMProxy.TokenPool.Server.pick_token("openrouter", user_id) do
-      stream_body = Map.put(body, "stream", true)
+    case TokenPool.pick_token("openrouter", user_id) do
+      {:ok, token} ->
+        stream_body = Map.put(body, "stream", true)
 
-      case Req.post(
-             url: "#{base_url(token)}/chat/completions",
-             headers: headers(token),
-             json: stream_body,
-             into: :self,
-             receive_timeout: 600_000
-           ) do
-        {:ok, %{status: 200} = resp} ->
-          stream =
-            resp.body
-            |> parse_sse_events()
-            |> Stream.map(&to_stream_event/1)
-            |> Stream.reject(&is_nil/1)
+        case Req.post(
+               url: "#{base_url(token)}/chat/completions",
+               headers: headers(token),
+               json: stream_body,
+               into: :self,
+               receive_timeout: 600_000
+             ) do
+          {:ok, %{status: 200} = resp} ->
+            stream =
+              resp.body
+              |> parse_sse_events()
+              |> Stream.map(&to_stream_event/1)
+              |> Stream.reject(&is_nil/1)
 
-          {:ok, %{stream: stream, token: token}}
+            {:ok, %{stream: stream, token: token}}
 
-        {:ok, %{status: status, body: body}} ->
-          error = extract_error(body)
-          maybe_mark_rate_limited(token, status)
-          {:error, %{error: error, status: status, token: token}}
+          {:ok, %{status: status, body: resp_body}} ->
+            handle_error_response(token, status, resp_body)
 
-        {:error, exception} ->
-          {:error, %{error: Exception.message(exception), status: 502, token: nil}}
-      end
-    else
+          {:error, exception} ->
+            handle_exception(exception)
+        end
+
       {:error, reason} ->
         {:error, %{error: "No available tokens: #{reason}", status: 503, token: nil}}
     end
@@ -99,6 +101,15 @@ defmodule LLMProxy.Providers.OpenRouter do
   end
 
   # Private
+
+  defp handle_error_response(token, status, body) do
+    maybe_mark_rate_limited(token, status)
+    {:error, %{error: extract_error(body), status: status, token: token}}
+  end
+
+  defp handle_exception(exception) do
+    {:error, %{error: Exception.message(exception), status: 502, token: nil}}
+  end
 
   defp headers(token) do
     [
@@ -160,8 +171,6 @@ defmodule LLMProxy.Providers.OpenRouter do
   defp extract_error(body) when is_binary(body), do: body
   defp extract_error(body), do: inspect(body)
 
-  defp maybe_mark_rate_limited(token, 429),
-    do: LLMProxy.TokenPool.Server.mark_rate_limited(token)
-
+  defp maybe_mark_rate_limited(token, 429), do: TokenPool.mark_rate_limited(token)
   defp maybe_mark_rate_limited(_token, _status), do: :ok
 end

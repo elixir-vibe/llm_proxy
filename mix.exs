@@ -8,7 +8,8 @@ defmodule LLMProxy.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
-      deps: deps()
+      deps: deps(),
+      dialyzer: [plt_add_apps: [:mix]]
     ]
   end
 
@@ -28,7 +29,10 @@ defmodule LLMProxy.MixProject do
       {:jason, "~> 1.4"},
 
       # Dev/test
-      {:mox, "~> 1.1", only: :test}
+      {:mox, "~> 1.1", only: :test},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:ex_dna, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
 

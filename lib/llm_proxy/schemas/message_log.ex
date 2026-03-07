@@ -1,4 +1,5 @@
 defmodule LLMProxy.Schemas.MessageLog do
+  @moduledoc false
   use Ecto.Schema
   import Ecto.Changeset
 

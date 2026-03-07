@@ -17,6 +17,7 @@ defmodule LLMProxy.TokenPool.Server do
   @cooldown_ms 4 * 60 * 60 * 1000
 
   defmodule State do
+    @moduledoc false
     defstruct cooldowns: %{}
   end
 
@@ -49,24 +50,8 @@ defmodule LLMProxy.TokenPool.Server do
 
   @impl true
   def handle_call({:pick_token, provider, user_id}, _from, state) do
-    case do_pick_oauth(provider, user_id, state) do
-      {:ok, token} ->
-        {:reply, {:ok, token}, state}
-
-      :none ->
-        case do_pick_by_kind(provider, "api-key", user_id, state) do
-          {:ok, token} -> {:reply, {:ok, token}, state}
-          :none -> {:reply, {:error, :no_tokens}, state}
-          :all_rate_limited -> {:reply, {:error, :all_rate_limited}, state}
-        end
-
-      :all_rate_limited ->
-        case do_pick_by_kind(provider, "api-key", user_id, state) do
-          {:ok, token} -> {:reply, {:ok, token}, state}
-          :none -> {:reply, {:error, :all_rate_limited}, state}
-          :all_rate_limited -> {:reply, {:error, :all_rate_limited}, state}
-        end
-    end
+    result = do_pick_with_fallback(provider, user_id, state)
+    {:reply, result, state}
   end
 
   @impl true
@@ -90,6 +75,21 @@ defmodule LLMProxy.TokenPool.Server do
   end
 
   # Private
+
+  defp do_pick_with_fallback(provider, user_id, state) do
+    case do_pick_oauth(provider, user_id, state) do
+      {:ok, token} ->
+        {:ok, token}
+
+      oauth_result ->
+        case do_pick_by_kind(provider, "api-key", user_id, state) do
+          {:ok, token} -> {:ok, token}
+          :none when oauth_result == :all_rate_limited -> {:error, :all_rate_limited}
+          :none -> {:error, :no_tokens}
+          :all_rate_limited -> {:error, :all_rate_limited}
+        end
+    end
+  end
 
   defp do_pick_oauth(provider, user_id, state) do
     do_pick_by_kind(provider, "oauth", user_id, state)

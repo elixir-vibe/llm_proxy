@@ -21,7 +21,7 @@ defmodule LLMProxy.Providers.Behaviour do
           {:ok, %{stream: Enumerable.t(), token: map() | nil}}
           | {:error, %{error: String.t(), status: integer(), token: map() | nil}}
 
-  @doc "Provider name (e.g. \"anthropic\", \"openrouter\")"
+  @doc ~s(Provider name, e.g. "anthropic", "openrouter")
   @callback name() :: String.t()
 
   @doc "List of model IDs this provider handles"

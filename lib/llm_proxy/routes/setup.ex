@@ -1,4 +1,5 @@
 defmodule LLMProxy.Routes.Setup do
+  @moduledoc false
   use Plug.Router
 
   alias LLMProxy.Config
