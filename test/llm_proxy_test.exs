@@ -21,7 +21,8 @@ defmodule LLMProxy.RouterTest do
       |> Router.call(@opts)
 
     assert conn.status == 200
-    assert %{"object" => "list", "data" => []} = Jason.decode!(conn.resp_body)
+    %{"object" => "list", "data" => data} = Jason.decode!(conn.resp_body)
+    assert is_list(data)
   end
 
   test "unknown route returns 404" do

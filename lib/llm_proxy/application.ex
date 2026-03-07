@@ -3,6 +3,9 @@ defmodule LLMProxy.Application do
 
   @impl true
   def start(_type, _args) do
+    LLMProxy.Providers.Registry.init()
+    LLMProxy.Providers.Registry.register(LLMProxy.Providers.OpenRouter)
+
     children = [
       LLMProxy.Repo,
       LLMProxy.TokenPool.Server,
