@@ -51,8 +51,10 @@ defmodule LLMProxy.Routes.Chat do
     case Telemetry.with_provider_span(provider.name(), model, :call, fn -> Caller.call(provider, body, api_key.id, model) end) do
       {:ok, %{response: response}} ->
         duration_ms = System.monotonic_time(:millisecond) - start
+        usage = provider.extract_usage(response)
         opts = Map.merge(meta, %{duration_ms: duration_ms, provider: provider.name()})
-        Helpers.track_usage(api_key, model, provider.extract_usage(response), opts)
+        Helpers.track_usage(api_key, model, usage, opts)
+        Helpers.maybe_record_trace(api_key, model, body, response, usage, opts)
         Helpers.send_json(conn, 200, provider.to_openai_response(response, model))
 
       {:error, %{error: error, status: status}} ->

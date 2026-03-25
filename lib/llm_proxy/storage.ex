@@ -4,7 +4,7 @@ defmodule LLMProxy.Storage do
   """
 
   alias LLMProxy.Repo
-  alias LLMProxy.Schemas.{ApiKey, MessageLog, ProviderToken, ServiceUsage, UsageLog}
+  alias LLMProxy.Schemas.{ApiKey, MessageLog, ProviderToken, ServiceUsage, Trace, UsageLog}
 
   import Ecto.Query
 
@@ -489,6 +489,69 @@ defmodule LLMProxy.Storage do
       service_stats: service_stats
     }
   end
+
+  # --- Traces ---
+
+  def record_trace(attrs) do
+    %Trace{}
+    |> Trace.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def get_traces(opts \\ %{}) do
+    per_page = Map.get(opts, :per_page, 25)
+
+    from(t in Trace,
+      join: k in ApiKey,
+      on: k.id == t.key_id,
+      select: %{
+        id: t.id,
+        key_id: t.key_id,
+        key_name: k.name,
+        model: t.model,
+        provider: t.provider,
+        input_tokens: t.input_tokens,
+        output_tokens: t.output_tokens,
+        cost_usd: t.cost_usd,
+        duration_ms: t.duration_ms,
+        ttft_ms: t.ttft_ms,
+        session_id: t.session_id,
+        timestamp: t.timestamp
+      }
+    )
+    |> traces_filter_key(opts[:key_id])
+    |> traces_filter_session(opts[:session_id])
+    |> traces_filter_model(opts[:model])
+    |> traces_search(opts[:search])
+    |> order_by([t], desc: t.timestamp)
+    |> limit(^(per_page + 1))
+    |> traces_offset(opts[:offset])
+    |> Repo.all()
+  end
+
+  def get_trace(id) do
+    Repo.get(Trace, id)
+  end
+
+  defp traces_filter_key(query, nil), do: query
+  defp traces_filter_key(query, key_id), do: where(query, [t], t.key_id == ^key_id)
+
+  defp traces_filter_session(query, nil), do: query
+  defp traces_filter_session(query, sid), do: where(query, [t], t.session_id == ^sid)
+
+  defp traces_filter_model(query, nil), do: query
+  defp traces_filter_model(query, model), do: where(query, [t], t.model == ^model)
+
+  defp traces_search(query, nil), do: query
+  defp traces_search(query, ""), do: query
+
+  defp traces_search(query, term) do
+    pattern = "%#{term}%"
+    where(query, [t, k], fragment("lower(?) LIKE lower(?)", k.name, ^pattern) or fragment("lower(?) LIKE lower(?)", t.model, ^pattern))
+  end
+
+  defp traces_offset(query, nil), do: query
+  defp traces_offset(query, offset), do: offset(query, ^offset)
 
   # --- Daily Stats ---
 

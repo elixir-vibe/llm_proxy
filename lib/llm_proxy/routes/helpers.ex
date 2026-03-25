@@ -43,6 +43,29 @@ defmodule LLMProxy.Routes.Helpers do
     Logger.info("Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens} cost=$#{Float.round(cost_usd, 6)}#{duration_str}")
   end
 
+  def maybe_record_trace(api_key, model, request_body, response_body, usage, opts) do
+    if api_key.trace_requests do
+      cost_usd = Pricing.calculate_cost(model, usage)
+
+      Storage.record_trace(%{
+        key_id: api_key.id,
+        model: model,
+        provider: opts[:provider],
+        request_body: Jason.encode!(request_body),
+        response_body: Jason.encode!(response_body),
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        cost_usd: cost_usd,
+        duration_ms: opts[:duration_ms],
+        ttft_ms: opts[:ttft_ms],
+        tags: opts[:tags],
+        metadata: opts[:metadata],
+        session_id: get_in(opts, [:metadata, "session_id"]),
+        timestamp: DateTime.utc_now()
+      })
+    end
+  end
+
   def extract_metadata(body) do
     case body["metadata"] do
       %{} = meta ->

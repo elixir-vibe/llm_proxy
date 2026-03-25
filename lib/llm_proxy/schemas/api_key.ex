@@ -20,6 +20,7 @@ defmodule LLMProxy.Schemas.ApiKey do
     field :total_spend_usd, :float, default: 0.0
     field :max_budget_usd, :float
     field :budget_period, :string
+    field :trace_requests, :boolean, default: false
     field :input_tokens, :integer, default: 0
     field :output_tokens, :integer, default: 0
     field :cache_read_tokens, :integer, default: 0
@@ -46,6 +47,7 @@ defmodule LLMProxy.Schemas.ApiKey do
       :total_spend_usd,
       :max_budget_usd,
       :budget_period,
+      :trace_requests,
       :input_tokens,
       :output_tokens,
       :cache_read_tokens,

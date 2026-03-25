@@ -22,6 +22,7 @@ defmodule LLMProxyWeb.Router do
       live "/keys", KeysLive
       live "/tokens", TokensLive
       live "/messages", MessagesLive
+      live "/traces", TracesLive
       live "/models", ModelsLive
     end
   end

@@ -18,6 +18,7 @@ defmodule LLMProxyWeb.AdminComponents do
             <.nav_link path="/admin/keys" current={@current_path} label="API Keys" />
             <.nav_link path="/admin/tokens" current={@current_path} label="Token Pool" />
             <.nav_link path="/admin/messages" current={@current_path} label="Messages" />
+            <.nav_link path="/admin/traces" current={@current_path} label="Traces" />
             <.nav_link path="/admin/models" current={@current_path} label="Models" />
           </div>
           <div class="flex items-center">
