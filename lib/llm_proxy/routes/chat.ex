@@ -45,9 +45,12 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   defp handle_non_stream(conn, provider, api_key, body, model) do
+    start = System.monotonic_time(:millisecond)
+
     case Telemetry.with_provider_span(provider.name(), model, :call, fn -> provider.call(body, api_key.id) end) do
       {:ok, %{response: response}} ->
-        Helpers.track_usage(api_key, model, provider.extract_usage(response))
+        duration_ms = System.monotonic_time(:millisecond) - start
+        Helpers.track_usage(api_key, model, provider.extract_usage(response), %{duration_ms: duration_ms, provider: provider.name()})
         Helpers.send_json(conn, 200, provider.to_openai_response(response, model))
 
       {:error, %{error: error, status: status}} ->
@@ -57,11 +60,14 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   defp handle_stream(conn, provider, api_key, body, model) do
+    start = System.monotonic_time(:millisecond)
+
     case Telemetry.with_provider_span(provider.name(), model, :stream, fn -> provider.stream(body, api_key.id) end) do
       {:ok, %{stream: stream}} ->
         conn = SSEWriter.start_sse(conn)
-        {conn, usage} = pipe_stream(conn, stream)
-        Helpers.track_usage(api_key, model, usage)
+        {conn, usage, ttft_ms} = pipe_stream(conn, stream, start)
+        duration_ms = System.monotonic_time(:millisecond) - start
+        Helpers.track_usage(api_key, model, usage, %{duration_ms: duration_ms, ttft_ms: ttft_ms, provider: provider.name()})
         conn
 
       {:error, %{error: error, status: status}} ->
@@ -70,20 +76,21 @@ defmodule LLMProxy.Routes.Chat do
     end
   end
 
-  defp pipe_stream(conn, stream) do
+  defp pipe_stream(conn, stream, start) do
     usage = %{input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0}
 
-    Enum.reduce_while(stream, {conn, usage}, fn event, {conn, usage} ->
+    Enum.reduce_while(stream, {conn, usage, nil}, fn event, {conn, usage, ttft} ->
       usage = merge_stream_usage(usage, event)
+      ttft = ttft || System.monotonic_time(:millisecond) - start
 
       case SSEWriter.write_event(conn, event.data) do
-        {:ok, conn} -> {:cont, {conn, usage}}
-        {:error, _reason} -> {:halt, {conn, usage}}
+        {:ok, conn} -> {:cont, {conn, usage, ttft}}
+        {:error, _reason} -> {:halt, {conn, usage, ttft}}
       end
     end)
-    |> then(fn {conn, usage} ->
+    |> then(fn {conn, usage, ttft} ->
       {:ok, conn} = SSEWriter.write_done(conn)
-      {conn, usage}
+      {conn, usage, ttft}
     end)
   end
 

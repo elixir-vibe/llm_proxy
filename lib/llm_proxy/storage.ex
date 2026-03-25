@@ -490,6 +490,46 @@ defmodule LLMProxy.Storage do
     }
   end
 
+  # --- Daily Stats ---
+
+  def get_daily_stats(opts \\ %{}) do
+    start_date = parse_date(opts[:start_date]) || Date.add(Date.utc_today(), -30)
+    end_date = parse_date(opts[:end_date]) || Date.utc_today()
+    start_dt = DateTime.new!(start_date, ~T[00:00:00], "Etc/UTC")
+    end_dt = DateTime.new!(Date.add(end_date, 1), ~T[00:00:00], "Etc/UTC")
+
+    query =
+      from(u in UsageLog,
+        where: u.timestamp >= ^start_dt and u.timestamp < ^end_dt,
+        group_by: fragment("date(timestamp)"),
+        select: %{
+          date: fragment("date(timestamp)"),
+          requests: count(u.id),
+          input_tokens: coalesce(sum(u.input_tokens), 0),
+          output_tokens: coalesce(sum(u.output_tokens), 0),
+          cost_usd: coalesce(sum(u.cost_usd), 0.0),
+          avg_duration_ms: avg(u.duration_ms)
+        },
+        order_by: fragment("date(timestamp)")
+      )
+
+    query = daily_filter_key(query, opts[:key_id])
+    Repo.all(query)
+  end
+
+  defp daily_filter_key(query, nil), do: query
+  defp daily_filter_key(query, key_id), do: where(query, [u], u.key_id == ^key_id)
+
+  defp parse_date(nil), do: nil
+  defp parse_date(""), do: nil
+
+  defp parse_date(str) when is_binary(str) do
+    case Date.from_iso8601(str) do
+      {:ok, date} -> date
+      {:error, _} -> nil
+    end
+  end
+
   # --- Helpers ---
 
   defp apply_sort(query, sort, dir, allowed_fields) do

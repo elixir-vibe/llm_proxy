@@ -13,6 +13,21 @@ defmodule LLMProxy.Routes.Stats do
     send_json(conn, 200, stats)
   end
 
+  get "/daily" do
+    conn = fetch_query_params(conn)
+    params = conn.query_params
+
+    opts =
+      %{}
+      |> maybe_put(:start_date, params["start_date"])
+      |> maybe_put(:end_date, params["end_date"])
+      |> maybe_put(:group_by, params["group_by"])
+      |> maybe_put(:key_id, params["key_id"])
+
+    daily = Storage.get_daily_stats(opts)
+    send_json(conn, 200, daily)
+  end
+
   get "/messages" do
     conn = fetch_query_params(conn)
     params = conn.query_params
