@@ -34,8 +34,6 @@ defmodule LLMProxy.Router do
   forward "/moderations", to: LLMProxy.Routes.Moderations
   forward "/v1/exa", to: LLMProxy.Routes.Exa
   forward "/v1/context7", to: LLMProxy.Routes.Context7
-  forward "/providers", to: LLMProxy.Routes.ProviderUsage
-
   # Dynamic routes registered by optional packages (e.g., llm_proxy_private)
   match _ do
     case Dynamic.dispatch(conn) do
