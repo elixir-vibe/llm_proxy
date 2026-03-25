@@ -33,6 +33,22 @@ defmodule LLMProxy.Providers.Registry do
     Map.get(model_index, model_id)
   end
 
+  @doc """
+  Returns fallback {provider_module, model_id} pairs for a model.
+
+  Configured via `config :llm_proxy, :fallbacks`.
+  Each fallback model must be registered with a provider.
+  """
+  def get_fallbacks(model_id) when is_binary(model_id) do
+    fallback_models = Map.get(LLMProxy.Config.fallbacks(), model_id, [])
+
+    for fb_model <- fallback_models,
+        provider = get_provider(fb_model),
+        not is_nil(provider) do
+      {provider, fb_model}
+    end
+  end
+
   def all_models do
     providers = :persistent_term.get(@registry_key, %{})
 

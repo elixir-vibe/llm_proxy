@@ -25,6 +25,12 @@ if config_env() == :prod do
 end
 
 if config_env() in [:dev, :prod] do
+  fallbacks =
+    case System.get_env("LLM_FALLBACKS") do
+      nil -> %{}
+      json -> Jason.decode!(json)
+    end
+
   config :llm_proxy,
     master_key: System.get_env("MASTER_KEY"),
     public_url: System.get_env("PUBLIC_URL", ""),
@@ -32,5 +38,7 @@ if config_env() in [:dev, :prod] do
     context7_api_key: System.get_env("CONTEXT7_API_KEY", ""),
     openrouter_api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
     openai_api_keys: System.get_env("OPENAI_API_KEYS", ""),
-    anthropic_api_keys: System.get_env("ANTHROPIC_API_KEYS", "")
+    anthropic_api_keys: System.get_env("ANTHROPIC_API_KEYS", ""),
+    fallbacks: fallbacks,
+    max_retries: String.to_integer(System.get_env("LLM_MAX_RETRIES", "1"))
 end

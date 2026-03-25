@@ -5,7 +5,7 @@ defmodule LLMProxy.Routes.Chat do
   require Logger
 
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
-  alias LLMProxy.Providers.Registry
+  alias LLMProxy.Providers.{Caller, Registry}
   alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.SSEWriter
   alias LLMProxy.Telemetry
@@ -47,7 +47,7 @@ defmodule LLMProxy.Routes.Chat do
   defp handle_non_stream(conn, provider, api_key, body, model) do
     start = System.monotonic_time(:millisecond)
 
-    case Telemetry.with_provider_span(provider.name(), model, :call, fn -> provider.call(body, api_key.id) end) do
+    case Telemetry.with_provider_span(provider.name(), model, :call, fn -> Caller.call(provider, body, api_key.id, model) end) do
       {:ok, %{response: response}} ->
         duration_ms = System.monotonic_time(:millisecond) - start
         Helpers.track_usage(api_key, model, provider.extract_usage(response), %{duration_ms: duration_ms, provider: provider.name()})
@@ -62,7 +62,7 @@ defmodule LLMProxy.Routes.Chat do
   defp handle_stream(conn, provider, api_key, body, model) do
     start = System.monotonic_time(:millisecond)
 
-    case Telemetry.with_provider_span(provider.name(), model, :stream, fn -> provider.stream(body, api_key.id) end) do
+    case Telemetry.with_provider_span(provider.name(), model, :stream, fn -> Caller.stream(provider, body, api_key.id, model) end) do
       {:ok, %{stream: stream}} ->
         conn = SSEWriter.start_sse(conn)
         {conn, usage, ttft_ms} = pipe_stream(conn, stream, start)
