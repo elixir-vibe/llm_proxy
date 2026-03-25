@@ -32,11 +32,12 @@ defmodule LLMProxy.Routes.Chat do
          provider when not is_nil(provider) <- Registry.get_provider(model) do
       Logger.debug("Request from #{api_key.name} model=#{model} provider=#{provider.name()}")
       Helpers.log_user_message(api_key, model, "chat", fn -> extract_user_message(body) end)
+      meta = Helpers.extract_metadata(body)
 
       if body["stream"] do
-        handle_stream(conn, provider, api_key, body, model)
+        handle_stream(conn, provider, api_key, body, model, meta)
       else
-        handle_non_stream(conn, provider, api_key, body, model)
+        handle_non_stream(conn, provider, api_key, body, model, meta)
       end
     else
       nil -> Helpers.send_json(conn, 404, %{error: "Model '#{model}' not found"})
@@ -44,13 +45,14 @@ defmodule LLMProxy.Routes.Chat do
     end
   end
 
-  defp handle_non_stream(conn, provider, api_key, body, model) do
+  defp handle_non_stream(conn, provider, api_key, body, model, meta) do
     start = System.monotonic_time(:millisecond)
 
     case Telemetry.with_provider_span(provider.name(), model, :call, fn -> Caller.call(provider, body, api_key.id, model) end) do
       {:ok, %{response: response}} ->
         duration_ms = System.monotonic_time(:millisecond) - start
-        Helpers.track_usage(api_key, model, provider.extract_usage(response), %{duration_ms: duration_ms, provider: provider.name()})
+        opts = Map.merge(meta, %{duration_ms: duration_ms, provider: provider.name()})
+        Helpers.track_usage(api_key, model, provider.extract_usage(response), opts)
         Helpers.send_json(conn, 200, provider.to_openai_response(response, model))
 
       {:error, %{error: error, status: status}} ->
@@ -59,7 +61,7 @@ defmodule LLMProxy.Routes.Chat do
     end
   end
 
-  defp handle_stream(conn, provider, api_key, body, model) do
+  defp handle_stream(conn, provider, api_key, body, model, meta) do
     start = System.monotonic_time(:millisecond)
 
     case Telemetry.with_provider_span(provider.name(), model, :stream, fn -> Caller.stream(provider, body, api_key.id, model) end) do
@@ -67,7 +69,8 @@ defmodule LLMProxy.Routes.Chat do
         conn = SSEWriter.start_sse(conn)
         {conn, usage, ttft_ms} = pipe_stream(conn, stream, start)
         duration_ms = System.monotonic_time(:millisecond) - start
-        Helpers.track_usage(api_key, model, usage, %{duration_ms: duration_ms, ttft_ms: ttft_ms, provider: provider.name()})
+        opts = Map.merge(meta, %{duration_ms: duration_ms, ttft_ms: ttft_ms, provider: provider.name()})
+        Helpers.track_usage(api_key, model, usage, opts)
         conn
 
       {:error, %{error: error, status: status}} ->

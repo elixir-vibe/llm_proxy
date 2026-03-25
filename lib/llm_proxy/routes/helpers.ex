@@ -34,11 +34,24 @@ defmodule LLMProxy.Routes.Helpers do
       duration_ms: opts[:duration_ms],
       ttft_ms: opts[:ttft_ms],
       provider: opts[:provider],
+      tags: opts[:tags],
+      metadata: opts[:metadata],
       timestamp: DateTime.utc_now()
     })
 
     duration_str = if opts[:duration_ms], do: " #{opts[:duration_ms]}ms", else: ""
     Logger.info("Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens} cost=$#{Float.round(cost_usd, 6)}#{duration_str}")
+  end
+
+  def extract_metadata(body) do
+    case body["metadata"] do
+      %{} = meta ->
+        tags = meta["tags"] || []
+        %{tags: tags, metadata: Map.delete(meta, "tags")}
+
+      _ ->
+        %{tags: nil, metadata: nil}
+    end
   end
 
   def extract_text_parts(parts) do

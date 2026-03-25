@@ -14,6 +14,8 @@ defmodule LLMProxy.Schemas.UsageLog do
     field :duration_ms, :integer
     field :ttft_ms, :integer
     field :provider, :string
+    field :tags, {:array, :string}
+    field :metadata, :map
     field :timestamp, :utc_datetime
   end
 
@@ -22,7 +24,7 @@ defmodule LLMProxy.Schemas.UsageLog do
     |> cast(attrs, [
       :key_id, :model, :input_tokens, :output_tokens,
       :cache_read_tokens, :cache_write_tokens, :cost_usd,
-      :duration_ms, :ttft_ms, :provider, :timestamp
+      :duration_ms, :ttft_ms, :provider, :tags, :metadata, :timestamp
     ])
     |> validate_required([:key_id, :model, :input_tokens, :output_tokens, :timestamp])
   end
