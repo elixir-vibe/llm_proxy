@@ -24,16 +24,19 @@ defmodule LLMProxy.Providers.Behaviour do
   @doc ~s(Provider name, e.g. "anthropic", "openrouter")
   @callback name() :: String.t()
 
+  @doc "The native API protocol this provider speaks (:openai or :anthropic)"
+  @callback native_protocol() :: :openai | :anthropic
+
   @doc "List of model IDs this provider handles"
   @callback models() :: [String.t()]
 
-  @doc "Non-streaming call with OpenAI-format body"
+  @doc "Non-streaming call. Body is in the provider's native protocol format."
   @callback call(body :: map(), user_id :: String.t()) :: call_result()
 
-  @doc "Streaming call with OpenAI-format body"
+  @doc "Streaming call. Body is in the provider's native protocol format."
   @callback stream(body :: map(), user_id :: String.t()) :: stream_result()
 
-  @doc "Non-streaming native passthrough (provider's own API format)"
+  @doc "Non-streaming native passthrough (provider's own API format, no conversion)"
   @callback call_native(body :: map(), user_id :: String.t()) :: call_result()
 
   @doc "Streaming native passthrough"

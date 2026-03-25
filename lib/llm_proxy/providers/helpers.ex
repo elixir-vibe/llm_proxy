@@ -55,15 +55,7 @@ defmodule LLMProxy.Providers.Helpers do
   end
 
   def extract_openai_usage(response) do
-    usage = response["usage"] || %{}
-    cache_read = get_in(response, ["usage", "prompt_tokens_details", "cached_tokens"]) || 0
-
-    %{
-      input_tokens: usage["prompt_tokens"] || 0,
-      output_tokens: usage["completion_tokens"] || 0,
-      cache_read_tokens: cache_read,
-      cache_write_tokens: 0
-    }
+    LLMProxy.Protocol.OpenAI.extract_usage(response)
   end
 
   def openai_stream_event_from_map(parsed) do

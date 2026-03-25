@@ -15,6 +15,9 @@ defmodule LLMProxy.Providers.OpenAI do
   def name, do: "openai"
 
   @impl true
+  def native_protocol, do: :openai
+
+  @impl true
   def models, do: @models
 
   @impl true
