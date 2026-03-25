@@ -10,6 +10,7 @@ defmodule LLMProxy.Schemas.UsageLog do
     field :output_tokens, :integer
     field :cache_read_tokens, :integer, default: 0
     field :cache_write_tokens, :integer, default: 0
+    field :cost_usd, :float
     field :timestamp, :utc_datetime
   end
 
@@ -17,7 +18,7 @@ defmodule LLMProxy.Schemas.UsageLog do
     log
     |> cast(attrs, [
       :key_id, :model, :input_tokens, :output_tokens,
-      :cache_read_tokens, :cache_write_tokens, :timestamp
+      :cache_read_tokens, :cache_write_tokens, :cost_usd, :timestamp
     ])
     |> validate_required([:key_id, :model, :input_tokens, :output_tokens, :timestamp])
   end

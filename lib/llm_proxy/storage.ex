@@ -52,6 +52,7 @@ defmodule LLMProxy.Storage do
   def update_key_usage(key, %{input: input, output: output} = usage) do
     cache_read = Map.get(usage, :cache_read, 0)
     cache_write = Map.get(usage, :cache_write, 0)
+    cost_usd = Map.get(usage, :cost_usd, 0.0)
 
     from(k in ApiKey, where: k.id == ^key.id)
     |> Repo.update_all(
@@ -59,7 +60,8 @@ defmodule LLMProxy.Storage do
         input_tokens: input,
         output_tokens: output,
         cache_read_tokens: cache_read,
-        cache_write_tokens: cache_write
+        cache_write_tokens: cache_write,
+        total_spend_usd: cost_usd
       ]
     )
   end
@@ -144,12 +146,46 @@ defmodule LLMProxy.Storage do
   # --- Quota Checking ---
 
   def check_quota(key) do
-    with :ok <- check_4h_token_quota(key),
+    with :ok <- check_budget(key),
+         :ok <- check_4h_token_quota(key),
          :ok <- check_week_token_quota(key),
          :ok <- check_4h_message_quota(key),
          :ok <- check_week_message_quota(key) do
       check_cache_ratio(key)
     end
+  end
+
+  defp check_budget(%{max_budget_usd: nil}), do: :ok
+
+  defp check_budget(key) do
+    spend = get_budget_spend(key)
+
+    if spend >= key.max_budget_usd do
+      {:error, "Budget exceeded ($#{Float.round(spend, 2)}/$#{Float.round(key.max_budget_usd, 2)})"}
+    else
+      :ok
+    end
+  end
+
+  defp get_budget_spend(%{budget_period: period} = key) when period in ["4h", "week"] do
+    window_ms =
+      case period do
+        "4h" -> @four_hours_ms
+        "week" -> @one_week_ms
+      end
+
+    result =
+      from(u in UsageLog,
+        where: u.key_id == ^key.id and u.timestamp >= ^DateTime.add(DateTime.utc_now(), -window_ms, :millisecond),
+        select: coalesce(sum(u.cost_usd), 0.0)
+      )
+      |> Repo.one()
+
+    result || 0.0
+  end
+
+  defp get_budget_spend(key) do
+    key.total_spend_usd || 0.0
   end
 
   defp check_4h_token_quota(%{quota_4h_input: nil, quota_4h_output: nil}), do: :ok
@@ -420,7 +456,8 @@ defmodule LLMProxy.Storage do
           input: coalesce(sum(k.input_tokens), 0),
           output: coalesce(sum(k.output_tokens), 0),
           cache_read: coalesce(sum(k.cache_read_tokens), 0),
-          cache_write: coalesce(sum(k.cache_write_tokens), 0)
+          cache_write: coalesce(sum(k.cache_write_tokens), 0),
+          spend: coalesce(sum(k.total_spend_usd), 0.0)
         }
       )
       |> Repo.one()
@@ -447,6 +484,7 @@ defmodule LLMProxy.Storage do
       total_output_tokens: key_stats.output,
       total_cache_read_tokens: key_stats.cache_read,
       total_cache_write_tokens: key_stats.cache_write,
+      total_spend_usd: key_stats.spend,
       recent_usage: recent,
       service_stats: service_stats
     }

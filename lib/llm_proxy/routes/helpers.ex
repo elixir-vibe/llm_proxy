@@ -5,17 +5,21 @@ defmodule LLMProxy.Routes.Helpers do
 
   require Logger
 
+  alias LLMProxy.Pricing
   alias LLMProxy.Storage
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
   def track_usage(%{id: "master"}, _model, _usage), do: :ok
 
   def track_usage(api_key, model, usage) do
+    cost_usd = Pricing.calculate_cost(model, usage)
+
     Storage.update_key_usage(api_key, %{
       input: usage.input_tokens,
       output: usage.output_tokens,
       cache_read: Map.get(usage, :cache_read_tokens, 0),
-      cache_write: Map.get(usage, :cache_write_tokens, 0)
+      cache_write: Map.get(usage, :cache_write_tokens, 0),
+      cost_usd: cost_usd
     })
 
     Storage.record_usage(%{
@@ -25,10 +29,11 @@ defmodule LLMProxy.Routes.Helpers do
       output_tokens: usage.output_tokens,
       cache_read_tokens: Map.get(usage, :cache_read_tokens, 0),
       cache_write_tokens: Map.get(usage, :cache_write_tokens, 0),
+      cost_usd: cost_usd,
       timestamp: DateTime.utc_now()
     })
 
-    Logger.info("Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens}")
+    Logger.info("Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens} cost=$#{Float.round(cost_usd, 6)}")
   end
 
   def extract_text_parts(parts) do

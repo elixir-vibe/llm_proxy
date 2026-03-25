@@ -111,6 +111,7 @@ defmodule LLMProxyWeb.KeysLive do
                 sort_dir={@dir}
                 class="text-right"
               />
+              <th class="px-4 py-3 text-gray-500 text-right">Spend</th>
               <th class="px-4 py-3 text-gray-500">4h Input Quota</th>
               <th class="px-4 py-3 text-gray-500">Models</th>
               <th class="px-4 py-3"></th>
@@ -127,6 +128,9 @@ defmodule LLMProxyWeb.KeysLive do
               </td>
               <td class="px-4 py-3 text-right font-mono text-xs">
                 {format_tokens(key.cache_read_tokens)}
+              </td>
+              <td class="px-4 py-3 text-right font-mono text-xs">
+                {format_usd(key.total_spend_usd)}
               </td>
               <td class="px-4 py-3 text-right text-xs">{key.quota_4h_input || "∞"}</td>
               <td class="px-4 py-3 text-xs text-gray-500">{format_models(key.allowed_models)}</td>
@@ -157,6 +161,12 @@ defmodule LLMProxyWeb.KeysLive do
 
   defp format_tokens(0), do: "0"
   defp format_tokens(n), do: to_string(n)
+
+  defp format_usd(nil), do: "—"
+  defp format_usd(n) when n == 0.0, do: "$0"
+  defp format_usd(n) when is_float(n) and n >= 1.0, do: "$#{:erlang.float_to_binary(n, decimals: 2)}"
+  defp format_usd(n) when is_float(n), do: "$#{:erlang.float_to_binary(n, decimals: 4)}"
+  defp format_usd(n) when is_number(n), do: format_usd(n / 1)
 
   defp format_models(nil), do: "all"
   defp format_models([]), do: "all"

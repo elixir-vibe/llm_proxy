@@ -24,9 +24,10 @@ defmodule LLMProxyWeb.DashboardLive do
     <div class="max-w-7xl mx-auto px-4">
       <h1 class="text-2xl font-bold text-gray-900 mb-6">Dashboard</h1>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <.stat_card label="API Keys" value={@stats.total_keys} />
         <.stat_card label="Requests" value={format_number(@stats.total_requests)} />
+        <.stat_card label="Total Spend" value={format_usd(@stats.total_spend_usd)} />
         <.stat_card label="Input Tokens" value={format_number(@stats.total_input_tokens)} />
         <.stat_card label="Output Tokens" value={format_number(@stats.total_output_tokens)} />
       </div>
@@ -42,6 +43,7 @@ defmodule LLMProxyWeb.DashboardLive do
                   <th class="pb-2">Model</th>
                   <th class="pb-2">In</th>
                   <th class="pb-2">Out</th>
+                  <th class="pb-2">Cost</th>
                 </tr>
               </thead>
               <tbody>
@@ -50,6 +52,7 @@ defmodule LLMProxyWeb.DashboardLive do
                   <td class="py-1.5 font-mono text-xs">{r.model}</td>
                   <td class="py-1.5 text-right">{format_number(r.input_tokens)}</td>
                   <td class="py-1.5 text-right">{format_number(r.output_tokens)}</td>
+                  <td class="py-1.5 text-right text-gray-600">{format_usd(r.cost_usd)}</td>
                 </tr>
               </tbody>
             </table>
@@ -81,6 +84,11 @@ defmodule LLMProxyWeb.DashboardLive do
   defp format_number(n) when is_integer(n) and n >= 1_000_000, do: "#{div(n, 1_000_000)}M"
   defp format_number(n) when is_integer(n) and n >= 1_000, do: "#{div(n, 1_000)}K"
   defp format_number(n), do: to_string(n)
+
+  defp format_usd(nil), do: "—"
+  defp format_usd(n) when is_float(n) and n >= 1.0, do: "$#{:erlang.float_to_binary(n, decimals: 2)}"
+  defp format_usd(n) when is_float(n), do: "$#{:erlang.float_to_binary(n, decimals: 4)}"
+  defp format_usd(n) when is_number(n), do: format_usd(n / 1)
 
   defp format_time(%DateTime{} = dt) do
     Calendar.strftime(dt, "%H:%M:%S")
