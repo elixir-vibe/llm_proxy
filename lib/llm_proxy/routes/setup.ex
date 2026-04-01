@@ -144,7 +144,7 @@ defmodule LLMProxy.Routes.Setup do
       _ ->
         case get_req_header(conn, "host") do
           [host | _] -> "https://#{host}"
-          _ -> "https://ai-proxy.dannote.net"
+          _ -> "http://localhost:4000"
         end
     end
   end

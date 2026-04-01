@@ -39,7 +39,7 @@ defmodule LLMProxy.Providers.OpenRouter do
   defp headers(token) do
     [
       {"authorization", "Bearer #{token.token}"},
-      {"http-referer", "https://ai-proxy.dannote.net"},
+      {"http-referer", LLMProxy.Config.public_url()},
       {"x-title", "LLM Proxy"},
       {"content-type", "application/json"}
     ]
