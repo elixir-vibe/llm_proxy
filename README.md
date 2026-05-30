@@ -16,6 +16,7 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 - **Provider system** with model-based dispatch, retries, fallback models, and catalog aliases
 - **Catalog routing** with ordered/shuffled deployments, per-deployment timeouts, and circuit breakers
 - **Guardrail hooks** for request/response/stream policy without bundling a policy engine
+- **Deterministic cache hooks** for pluggable non-stream response caching
 - **Token pool** with multiple upstream API keys, stable user pinning, and cooldowns
 - **Usage tracking** for input/output/cache tokens and estimated cost
 - **Quota enforcement** with per-key token/message/cache controls
@@ -158,6 +159,25 @@ Require the master key.
 ### Optional setup routes
 
 `/setup` is not mounted by default in embeddable router usage. It exists for local/onboarding helper flows such as install script, model listing, and client config snippets.
+
+## Cache hooks
+
+Host apps can configure an optional deterministic cache adapter for non-stream provider calls:
+
+```elixir
+config :llm_proxy, cache: MyApp.LLMCache
+```
+
+```elixir
+defmodule MyApp.LLMCache do
+  @behaviour LLMProxy.Cache
+
+  def get(key, context), do: :miss
+  def put(key, response, context), do: :ok
+end
+```
+
+Cache keys are derived from the normalized request and resolved deployment attempts. Adapters return `{:hit, %LLMProxy.Response{}}` or `:miss`.
 
 ## Guardrail hooks
 

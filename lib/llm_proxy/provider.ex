@@ -13,6 +13,7 @@ defmodule LLMProxy.Provider do
   require Logger
 
   alias LLMProxy.Actor
+  alias LLMProxy.Caches
   alias LLMProxy.Guardrails
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Caller, Registry, Result}
@@ -204,66 +205,106 @@ defmodule LLMProxy.Provider do
     start = System.monotonic_time(:millisecond)
 
     trace_id = Keyword.get(opts, :trace_id) || LLMProxy.Trace.new_id()
+    cache_key = Caches.key(request, attempts)
 
-    case Telemetry.with_provider_span(
-           provider.name(),
-           upstream_model,
-           :call,
-           fn -> Caller.call_attempts(attempts, request, api_key.id) end,
-           %{"llm_proxy.trace_id" => trace_id}
-         ) do
-      {:ok, %Result{response: provider_body, provider: used_provider, model: used_model}} ->
-        duration_ms = System.monotonic_time(:millisecond) - start
-        usage = used_provider.extract_usage(provider_body)
+    context =
+      guard_context(request, actor, api_key, route, %{
+        provider: provider,
+        model: upstream_model,
+        trace_id: trace_id,
+        cache_key: cache_key
+      })
 
-        response = %Response{
-          body: used_provider.to_openai_response(provider_body, used_model),
-          provider_body: provider_body,
-          provider: used_provider,
-          model: used_model,
-          request: request,
-          usage: usage,
-          trace_id: trace_id
-        }
-
-        context =
-          guard_context(request, actor, api_key, route, %{
-            provider: used_provider,
-            model: used_model,
-            trace_id: trace_id
-          })
-
-        case Guardrails.after_response(response, context) do
-          {:ok, response} ->
-            tracking_opts =
-              %{
-                duration_ms: duration_ms,
-                provider: used_provider.name(),
-                tags: request.tags,
-                metadata: Map.put(request.metadata || %{}, "trace_id", trace_id)
-              }
-              |> Map.merge(Map.new(Keyword.get(opts, :usage_metadata, [])))
-
-            Helpers.track_usage(api_key, used_model, response.usage, tracking_opts)
-
-            Helpers.maybe_record_trace(
-              api_key,
-              used_model,
-              request.body,
-              response.provider_body,
-              response.usage,
-              tracking_opts
-            )
-
-            {:ok, response}
-
-          {:error, reason} ->
-            {:error, {:guardrail, reason}}
-        end
-
-      {:error, %Result{} = result} ->
-        {:error, {:provider, result}}
+    with :miss <- cache_get(cache_key, request, context),
+         {:ok, result} <-
+           call_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
+      handle_provider_result(result, request, api_key, context, start, cache_key, opts)
+    else
+      {:hit, %Response{} = response} -> {:ok, response}
+      {:error, %Result{} = result} -> {:error, {:provider, result}}
+      {:error, {:guardrail, _reason}} = error -> error
     end
+  end
+
+  defp cache_get(cache_key, request, context) do
+    if Caches.enabled?(request) do
+      case Caches.get(cache_key, context) do
+        {:hit, %Response{} = response} ->
+          {:hit, %{response | request: request, trace_id: context.trace_id, cache_hit: true}}
+
+        :miss ->
+          :miss
+      end
+    else
+      :miss
+    end
+  end
+
+  defp call_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
+    Telemetry.with_provider_span(
+      provider.name(),
+      upstream_model,
+      :call,
+      fn -> Caller.call_attempts(attempts, request, api_key.id) end,
+      %{"llm_proxy.trace_id" => trace_id}
+    )
+  end
+
+  defp handle_provider_result(
+         %Result{response: provider_body, provider: used_provider, model: used_model},
+         request,
+         api_key,
+         context,
+         start,
+         cache_key,
+         opts
+       ) do
+    duration_ms = System.monotonic_time(:millisecond) - start
+    usage = used_provider.extract_usage(provider_body)
+
+    response = %Response{
+      body: used_provider.to_openai_response(provider_body, used_model),
+      provider_body: provider_body,
+      provider: used_provider,
+      model: used_model,
+      request: request,
+      usage: usage,
+      trace_id: context.trace_id
+    }
+
+    context = %{context | provider: used_provider, model: used_model}
+
+    case Guardrails.after_response(response, context) do
+      {:ok, response} ->
+        Caches.put(cache_key, response, context)
+        track_provider_response(api_key, used_model, request, response, duration_ms, opts)
+        {:ok, response}
+
+      {:error, reason} ->
+        {:error, {:guardrail, reason}}
+    end
+  end
+
+  defp track_provider_response(api_key, model, request, response, duration_ms, opts) do
+    tracking_opts =
+      %{
+        duration_ms: duration_ms,
+        provider: response.provider.name(),
+        tags: request.tags,
+        metadata: Map.put(request.metadata || %{}, "trace_id", response.trace_id)
+      }
+      |> Map.merge(Map.new(Keyword.get(opts, :usage_metadata, [])))
+
+    Helpers.track_usage(api_key, model, response.usage, tracking_opts)
+
+    Helpers.maybe_record_trace(
+      api_key,
+      model,
+      request.body,
+      response.provider_body,
+      response.usage,
+      tracking_opts
+    )
   end
 
   defp run_req_llm(req_request) do

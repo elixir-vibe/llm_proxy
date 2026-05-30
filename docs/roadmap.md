@@ -112,12 +112,17 @@ Future target:
 
 Start with deterministic cache before semantic cache.
 
-Targets:
+Implemented:
 
-- opt-in request cache
-- cache key from normalized request body + model/catalog target
+- opt-in request cache via `config :llm_proxy, cache: MyApp.Cache`
+- cache key from normalized request + resolved deployment attempts
+- strict cache adapter contract using `%LLMProxy.Response{}`
+- cache hit metadata on `LLMProxy.Response.cache_hit`
+
+Future targets:
+
 - per-key or per-model cache policy
-- usage/tracing metadata showing cache hits
+- usage/tracing metadata for cache hit analytics
 
 Semantic caching should remain optional and not be part of the initial core.
 
@@ -185,6 +190,6 @@ First version uses `:erpc.call/4`. Streaming can follow with a process-backed pr
 4. ✅ Replace quota fields with a limit evaluator while keeping migration-compatible schema fields.
 5. ✅ Add timeout and circuit breaker state.
 6. ✅ Add explicit routing strategy modules.
-7. Add cache hooks.
+7. ✅ Add cache hooks.
 8. ✅ Add guardrail behaviours.
 9. ✅ Add remote BEAM calls.
