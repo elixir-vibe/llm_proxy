@@ -50,6 +50,7 @@ defmodule LLMProxy.MixProject do
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sqlite3, "~> 0.17"},
       {:req_llm, "~> 1.6"},
+      {:llm_db, "~> 2026.3"},
       {:dotenvy, "~> 1.1"},
       {:jason, "~> 1.4"},
 

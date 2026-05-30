@@ -15,7 +15,7 @@ defmodule LLMProxy.Routes.Helpers do
   def track_usage(%{id: "master"}, _model, %Usage{}, _opts), do: :ok
 
   def track_usage(api_key, model, %Usage{} = usage, opts) do
-    cost_usd = Pricing.calculate_cost(model, usage)
+    cost_usd = Pricing.calculate_cost(model, usage, opts[:provider])
 
     Storage.update_key_usage(api_key, %{
       input: usage.input_tokens,
@@ -51,7 +51,7 @@ defmodule LLMProxy.Routes.Helpers do
   @spec maybe_record_trace(map(), String.t(), map(), map(), Usage.t(), map()) :: term()
   def maybe_record_trace(api_key, model, request_body, response_body, %Usage{} = usage, opts) do
     if api_key.trace_requests do
-      cost_usd = Pricing.calculate_cost(model, usage)
+      cost_usd = Pricing.calculate_cost(model, usage, opts[:provider])
 
       Storage.record_trace(%{
         key_id: api_key.id,

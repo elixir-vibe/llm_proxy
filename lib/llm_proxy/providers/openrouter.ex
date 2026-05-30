@@ -14,12 +14,8 @@ defmodule LLMProxy.Providers.OpenRouter do
   @impl true
   def native_protocol, do: :openai
 
-  @models_path Path.join(:code.priv_dir(:llm_proxy), "models/openrouter.json")
-  @external_resource @models_path
-  @models @models_path |> File.read!() |> Jason.decode!()
-
   @impl true
-  def models, do: @models
+  def models, do: LLMProxy.ModelDB.provider_model_ids(:openrouter)
 
   @impl true
   def call(body, user_id), do: Helpers.openai_call("openrouter", body, user_id, opts())

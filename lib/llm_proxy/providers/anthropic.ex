@@ -13,10 +13,6 @@ defmodule LLMProxy.Providers.Anthropic do
   @api_version "2023-06-01"
   @beta "fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
 
-  @models_path Path.join(:code.priv_dir(:llm_proxy), "models/anthropic.json")
-  @external_resource @models_path
-  @models @models_path |> File.read!() |> Jason.decode!()
-
   @impl true
   def name, do: "anthropic"
 
@@ -24,7 +20,7 @@ defmodule LLMProxy.Providers.Anthropic do
   def native_protocol, do: :anthropic
 
   @impl true
-  def models, do: @models
+  def models, do: LLMProxy.ModelDB.provider_model_ids(:anthropic)
 
   @impl true
   def call(body, user_id) do

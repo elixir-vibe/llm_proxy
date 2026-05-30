@@ -7,10 +7,6 @@ defmodule LLMProxy.Providers.OpenAI do
 
   @default_base_url "https://api.openai.com/v1"
 
-  @models_path Path.join(:code.priv_dir(:llm_proxy), "models/openai.json")
-  @external_resource @models_path
-  @models @models_path |> File.read!() |> Jason.decode!()
-
   @impl true
   def name, do: "openai"
 
@@ -18,7 +14,7 @@ defmodule LLMProxy.Providers.OpenAI do
   def native_protocol, do: :openai
 
   @impl true
-  def models, do: @models
+  def models, do: LLMProxy.ModelDB.provider_model_ids(:openai)
 
   @impl true
   def call(body, user_id), do: Helpers.openai_call("openai", body, user_id, opts())

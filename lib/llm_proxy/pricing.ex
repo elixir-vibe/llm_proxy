@@ -2,8 +2,7 @@ defmodule LLMProxy.Pricing do
   @moduledoc """
   Model pricing lookup and cost calculation.
 
-  Prices are stored as USD per million tokens.
-  Loaded from priv/models/pricing.json into :persistent_term at startup.
+  Pricing comes from LLMDB first, with priv/models/pricing.json as a local fallback.
   """
 
   alias LLMProxy.Usage
@@ -23,8 +22,8 @@ defmodule LLMProxy.Pricing do
     :persistent_term.put(@pricing_key, pricing)
   end
 
-  def calculate_cost(model, %Usage{} = usage) do
-    case get_pricing(model) do
+  def calculate_cost(model, %Usage{} = usage, provider \\ nil) do
+    case get_pricing(model, provider) do
       nil ->
         0.0
 
@@ -36,7 +35,11 @@ defmodule LLMProxy.Pricing do
     end
   end
 
-  def get_pricing(model) do
+  def get_pricing(model, provider \\ nil) do
+    LLMProxy.ModelDB.pricing(model, provider) || local_pricing(model)
+  end
+
+  defp local_pricing(model) do
     pricing = :persistent_term.get(@pricing_key, %{})
     Map.get(pricing, model)
   end
