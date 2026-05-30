@@ -3,8 +3,11 @@ defmodule LLMProxy.Providers.Anthropic do
 
   @behaviour LLMProxy.Providers.Behaviour
 
+  alias LLMProxy.HTTP
   alias LLMProxy.Protocol
   alias LLMProxy.Providers.Helpers
+  alias LLMProxy.Providers.Result
+  alias LLMProxy.Stream.Event
 
   @default_base_url "https://api.anthropic.com/v1"
   @api_version "2023-06-01"
@@ -26,14 +29,14 @@ defmodule LLMProxy.Providers.Anthropic do
   @impl true
   def call(body, user_id) do
     with {:ok, token} <- Helpers.pick_token("anthropic", user_id) do
-      body |> Protocol.Anthropic.from_openai() |> do_call(token)
+      do_call(body, token)
     end
   end
 
   @impl true
   def stream(body, user_id) do
     with {:ok, token} <- Helpers.pick_token("anthropic", user_id) do
-      body |> Protocol.Anthropic.from_openai() |> Map.put("stream", true) |> do_stream(token)
+      body |> Map.put("stream", true) |> do_stream(token)
     end
   end
 
@@ -62,19 +65,33 @@ defmodule LLMProxy.Providers.Anthropic do
   # HTTP calls
 
   defp do_call(body, token) do
-    req = Req.new(url: "#{base_url(token)}/messages", headers: headers(token), receive_timeout: 600_000) |> OpentelemetryReq.attach()
+    req =
+      HTTP.new(
+        url: "#{base_url(token)}/messages",
+        headers: headers(token),
+        receive_timeout: 600_000
+      )
 
     case Req.post(req, json: body) do
-      {:ok, %{status: 200, body: response}} -> {:ok, %{response: response, token: token}}
-      {:ok, %{status: status, body: resp_body}} -> Helpers.handle_error_response(token, status, resp_body)
-      {:error, exception} -> Helpers.handle_exception(exception)
+      {:ok, %{status: 200, body: response}} ->
+        {:ok, Result.response(response, token)}
+
+      {:ok, %{status: status, body: resp_body}} ->
+        Helpers.handle_error_response(token, status, resp_body)
+
+      {:error, exception} ->
+        Helpers.handle_exception(exception)
     end
   end
 
   defp do_stream(body, token) do
     req =
-      Req.new(url: "#{base_url(token)}/messages", headers: headers(token), into: :self, receive_timeout: 600_000)
-      |> OpentelemetryReq.attach()
+      HTTP.new(
+        url: "#{base_url(token)}/messages",
+        headers: headers(token),
+        into: :self,
+        receive_timeout: 600_000
+      )
 
     case Req.post(req, json: body) do
       {:ok, %{status: 200} = resp} ->
@@ -84,7 +101,7 @@ defmodule LLMProxy.Providers.Anthropic do
           |> Stream.map(&to_stream_event/1)
           |> Stream.reject(&is_nil/1)
 
-        {:ok, %{stream: stream, token: token}}
+        {:ok, Result.stream(stream, token)}
 
       {:ok, %{status: status, body: resp_body}} ->
         Helpers.handle_error_response(token, status, resp_body)
@@ -127,27 +144,22 @@ defmodule LLMProxy.Providers.Anthropic do
   defp to_stream_event(_), do: nil
 
   defp to_stream_event_from_map(%{"type" => "message_start", "message" => msg}) do
-    event = %{data: %{"type" => "message_start", "message" => msg}}
+    event = Event.new(%{"type" => "message_start", "message" => msg})
     maybe_attach_usage(event, msg["usage"])
   end
 
   defp to_stream_event_from_map(%{"type" => "message_delta"} = parsed) do
-    event = %{data: parsed}
+    event = Event.new(parsed)
     maybe_attach_usage(event, parsed["usage"])
   end
 
   defp to_stream_event_from_map(parsed) do
-    %{data: parsed}
+    Event.new(parsed)
   end
 
   defp maybe_attach_usage(event, nil), do: event
 
   defp maybe_attach_usage(event, usage) do
-    Map.put(event, :usage, %{
-      input_tokens: usage["input_tokens"] || 0,
-      output_tokens: usage["output_tokens"] || 0,
-      cache_read_tokens: usage["cache_read_input_tokens"] || 0,
-      cache_write_tokens: usage["cache_creation_input_tokens"] || 0
-    })
+    Event.attach_usage(event, Protocol.Anthropic.extract_usage(%{"usage" => usage}))
   end
 end

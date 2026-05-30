@@ -1,6 +1,8 @@
 defmodule LLMProxy.Providers.AnthropicTest do
   use ExUnit.Case, async: true
 
+  alias LLMProxy.Usage
+
   alias LLMProxy.Providers.Anthropic
 
   describe "to_openai_response/2" do
@@ -163,12 +165,8 @@ defmodule LLMProxy.Providers.AnthropicTest do
         }
       }
 
-      assert Anthropic.extract_usage(response) == %{
-               input_tokens: 100,
-               output_tokens: 200,
-               cache_read_tokens: 0,
-               cache_write_tokens: 0
-             }
+      assert Anthropic.extract_usage(response) ==
+               Usage.new(100, 200)
     end
 
     test "extracts usage with cache tokens" do
@@ -181,30 +179,18 @@ defmodule LLMProxy.Providers.AnthropicTest do
         }
       }
 
-      assert Anthropic.extract_usage(response) == %{
-               input_tokens: 100,
-               output_tokens: 200,
-               cache_read_tokens: 50,
-               cache_write_tokens: 30
-             }
+      assert Anthropic.extract_usage(response) ==
+               Usage.new(100, 200, 50, 30)
     end
 
     test "handles nil usage" do
-      assert Anthropic.extract_usage(%{}) == %{
-               input_tokens: 0,
-               output_tokens: 0,
-               cache_read_tokens: 0,
-               cache_write_tokens: 0
-             }
+      assert Anthropic.extract_usage(%{}) ==
+               Usage.new(0, 0)
     end
 
     test "handles empty usage map" do
-      assert Anthropic.extract_usage(%{"usage" => %{}}) == %{
-               input_tokens: 0,
-               output_tokens: 0,
-               cache_read_tokens: 0,
-               cache_write_tokens: 0
-             }
+      assert Anthropic.extract_usage(%{"usage" => %{}}) ==
+               Usage.new(0, 0)
     end
   end
 end

@@ -142,6 +142,7 @@ defmodule Mix.Tasks.FetchModels do
 
   defp parse_price(nil), do: 0.0
   defp parse_price(val) when is_number(val), do: val / 1
+
   defp parse_price(val) when is_binary(val) do
     case Float.parse(val) do
       {f, _} -> f

@@ -2,11 +2,12 @@ defmodule LLMProxy.Routes.Stats do
   @moduledoc false
   use Plug.Router
 
+  alias LLMProxy.Params
   alias LLMProxy.Storage
 
-  plug LLMProxy.Plugs.MasterKey
-  plug :match
-  plug :dispatch
+  plug(LLMProxy.Plugs.MasterKey)
+  plug(:match)
+  plug(:dispatch)
 
   get "/" do
     stats = Storage.get_stats()
@@ -19,10 +20,10 @@ defmodule LLMProxy.Routes.Stats do
 
     opts =
       %{}
-      |> maybe_put(:start_date, params["start_date"])
-      |> maybe_put(:end_date, params["end_date"])
-      |> maybe_put(:group_by, params["group_by"])
-      |> maybe_put(:key_id, params["key_id"])
+      |> Params.put_if_present(:start_date, params["start_date"])
+      |> Params.put_if_present(:end_date, params["end_date"])
+      |> Params.put_if_present(:group_by, params["group_by"])
+      |> Params.put_if_present(:key_id, params["key_id"])
 
     daily = Storage.get_daily_stats(opts)
     send_json(conn, 200, daily)
@@ -34,9 +35,9 @@ defmodule LLMProxy.Routes.Stats do
 
     opts =
       %{}
-      |> maybe_put(:key_id, params["keyId"])
-      |> maybe_put_int(:limit, params["limit"])
-      |> maybe_put_int(:offset, params["offset"])
+      |> Params.put_if_present(:key_id, params["keyId"])
+      |> Params.put_integer(:limit, params["limit"])
+      |> Params.put_integer(:offset, params["offset"])
 
     messages = Storage.get_messages(opts)
     send_json(conn, 200, messages)
@@ -50,19 +51,5 @@ defmodule LLMProxy.Routes.Stats do
     conn
     |> put_resp_content_type("application/json")
     |> send_resp(status, Jason.encode!(body))
-  end
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, _key, ""), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
-  defp maybe_put_int(map, _key, nil), do: map
-  defp maybe_put_int(map, _key, ""), do: map
-
-  defp maybe_put_int(map, key, value) do
-    case Integer.parse(value) do
-      {int, _} -> Map.put(map, key, int)
-      :error -> map
-    end
   end
 end

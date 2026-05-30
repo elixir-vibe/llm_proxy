@@ -7,12 +7,14 @@ defmodule LLMProxy.Protocol.Anthropic do
 
   @behaviour LLMProxy.Protocol
 
-  @impl true
-  def protocol, do: :anthropic
+  alias LLMProxy.Protocol.Request
+  alias LLMProxy.Usage
+  alias ReqLLM.Message
+  alias ReqLLM.Message.ContentPart
+  alias ReqLLM.ToolCall
 
   @impl true
-  def convert_request(body, :anthropic), do: body
-  def convert_request(body, :openai), do: from_anthropic(body)
+  def protocol, do: :anthropic
 
   @impl true
   def convert_response(response, :anthropic, _model), do: response
@@ -22,70 +24,95 @@ defmodule LLMProxy.Protocol.Anthropic do
   def extract_usage(response) do
     usage = response["usage"] || %{}
 
-    %{
-      input_tokens: usage["input_tokens"] || 0,
-      output_tokens: usage["output_tokens"] || 0,
-      cache_read_tokens: usage["cache_read_input_tokens"] || 0,
-      cache_write_tokens: usage["cache_creation_input_tokens"] || 0
-    }
+    Usage.from_anthropic(usage)
   end
 
   # --- OpenAI → Anthropic ---
 
-  @doc "Convert an OpenAI chat completion request body to Anthropic Messages format"
-  def from_openai(body) do
-    {system_msgs, other_msgs} = Enum.split_with(body["messages"] || [], &system?/1)
+  @spec request_body(Request.t()) :: map()
+  def request_body(%Request{} = request) do
+    {system_messages, messages} = Enum.split_with(request.messages, &(&1.role == :system))
 
     base = %{
-      "model" => body["model"],
-      "messages" => Enum.map(other_msgs, &convert_message_to_anthropic/1),
-      "max_tokens" => body["max_tokens"] || 4096
+      "model" => request.model,
+      "messages" => Enum.map(messages, &message_to_anthropic/1),
+      "max_tokens" => request.max_tokens || 4096
     }
 
     base
-    |> maybe_put_system(system_msgs)
-    |> maybe_put_tools(body["tools"])
-    |> maybe_put("temperature", body["temperature"])
+    |> maybe_put_system_messages(system_messages)
+    |> maybe_put_tools(request.tools)
+    |> maybe_put("temperature", request.temperature)
+    |> maybe_put("top_p", request.top_p)
+    |> maybe_put("stream", request.stream)
+    |> maybe_put("metadata", request.metadata)
+    |> maybe_put("stop_sequences", request.stop)
+    |> maybe_put("tool_choice", request.tool_choice)
   end
 
-  defp system?(%{"role" => "system"}), do: true
-  defp system?(_), do: false
-
-  defp convert_message_to_anthropic(%{"role" => "assistant", "tool_calls" => tool_calls} = msg) do
-    text_blocks = build_assistant_text_blocks(msg["content"])
-    tool_blocks = Enum.map(tool_calls, &convert_tool_call/1)
-
-    %{"role" => "assistant", "content" => text_blocks ++ tool_blocks}
+  defp message_to_anthropic(%Message{role: :user, content: content}) do
+    %{"role" => "user", "content" => content_to_anthropic(content)}
   end
 
-  defp convert_message_to_anthropic(%{"role" => "tool"} = msg) do
+  defp message_to_anthropic(%Message{role: :assistant, content: content, tool_calls: tool_calls}) do
+    %{"role" => "assistant", "content" => content_blocks(content) ++ tool_call_blocks(tool_calls)}
+  end
+
+  defp message_to_anthropic(%Message{role: :tool, content: content, tool_call_id: id}) do
     %{
       "role" => "user",
       "content" => [
-        %{
-          "type" => "tool_result",
-          "tool_use_id" => msg["tool_call_id"],
-          "content" => msg["content"] || ""
-        }
+        %{"type" => "tool_result", "tool_use_id" => id, "content" => text_content(content)}
       ]
     }
   end
 
-  defp convert_message_to_anthropic(msg), do: msg
+  defp content_to_anthropic([%ContentPart{type: :text, text: text}]), do: text || ""
+  defp content_to_anthropic(content), do: content_blocks(content)
+
+  defp content_blocks(content) do
+    Enum.map(content, fn
+      %ContentPart{type: :text, text: text} ->
+        %{"type" => "text", "text" => text || ""}
+
+      %ContentPart{type: :image_url, url: url} ->
+        %{"type" => "image", "source" => %{"type" => "url", "url" => url}}
+
+      %ContentPart{type: :thinking, text: text} ->
+        %{"type" => "thinking", "thinking" => text || ""}
+
+      %ContentPart{type: :image, data: data, media_type: media_type} ->
+        %{
+          "type" => "image",
+          "source" => %{"type" => "base64", "media_type" => media_type, "data" => data}
+        }
+    end)
+  end
+
+  defp tool_call_blocks(nil), do: []
+  defp tool_call_blocks([]), do: []
+  defp tool_call_blocks(tool_calls), do: Enum.map(tool_calls, &tool_call_block/1)
+
+  defp tool_call_block(%ToolCall{id: id, function: %{name: name, arguments: arguments}}) do
+    %{"type" => "tool_use", "id" => id, "name" => name, "input" => parse_arguments(arguments)}
+  end
+
+  defp text_content(content), do: Enum.map_join(content, "\n", &(&1.text || ""))
+
+  defp maybe_put_system_messages(body, []), do: body
+
+  defp maybe_put_system_messages(body, system_messages) do
+    system = Enum.flat_map(system_messages, &content_blocks(&1.content))
+    Map.put(body, "system", system)
+  end
 
   defp build_assistant_text_blocks(nil), do: []
   defp build_assistant_text_blocks(""), do: []
-  defp build_assistant_text_blocks(text) when is_binary(text), do: [%{"type" => "text", "text" => text}]
-  defp build_assistant_text_blocks(_), do: []
 
-  defp convert_tool_call(%{"function" => func} = tc) do
-    %{
-      "type" => "tool_use",
-      "id" => tc["id"],
-      "name" => func["name"],
-      "input" => parse_arguments(func["arguments"])
-    }
-  end
+  defp build_assistant_text_blocks(text) when is_binary(text),
+    do: [%{"type" => "text", "text" => text}]
+
+  defp build_assistant_text_blocks(_), do: []
 
   defp parse_arguments(args) when is_binary(args) do
     case Jason.decode(args) do
@@ -96,13 +123,6 @@ defmodule LLMProxy.Protocol.Anthropic do
 
   defp parse_arguments(args) when is_map(args), do: args
   defp parse_arguments(_), do: %{}
-
-  defp maybe_put_system(body, []), do: body
-
-  defp maybe_put_system(body, system_msgs) do
-    system = Enum.map(system_msgs, fn msg -> %{"type" => "text", "text" => msg["content"]} end)
-    Map.put(body, "system", system)
-  end
 
   defp maybe_put_tools(body, nil), do: body
   defp maybe_put_tools(body, []), do: body
@@ -124,13 +144,46 @@ defmodule LLMProxy.Protocol.Anthropic do
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
-  # --- Anthropic → OpenAI (for convert_request to :openai) ---
+  defp to_anthropic_response(response, model) do
+    choice = List.first(response["choices"] || []) || %{}
+    message = choice["message"] || %{}
 
-  defp from_anthropic(_body) do
-    raise "Anthropic→OpenAI request conversion not yet implemented"
+    %{
+      "id" => response["id"] || "",
+      "type" => "message",
+      "role" => "assistant",
+      "model" => model,
+      "content" => openai_message_to_anthropic_content(message),
+      "stop_reason" => map_finish_reason(choice["finish_reason"]),
+      "usage" => openai_usage_to_anthropic(response["usage"] || %{})
+    }
   end
 
-  defp to_anthropic_response(_response, _model) do
-    raise "OpenAI→Anthropic response conversion not yet implemented"
+  defp openai_message_to_anthropic_content(message) do
+    text_blocks = build_assistant_text_blocks(message["content"])
+
+    tool_blocks =
+      Enum.map(message["tool_calls"] || [], fn tool_call ->
+        %{
+          "type" => "tool_use",
+          "id" => tool_call["id"],
+          "name" => get_in(tool_call, ["function", "name"]),
+          "input" => parse_arguments(get_in(tool_call, ["function", "arguments"]))
+        }
+      end)
+
+    text_blocks ++ tool_blocks
   end
+
+  defp openai_usage_to_anthropic(usage) do
+    %{
+      "input_tokens" => usage["prompt_tokens"] || 0,
+      "output_tokens" => usage["completion_tokens"] || 0
+    }
+  end
+
+  defp map_finish_reason("tool_calls"), do: "tool_use"
+  defp map_finish_reason("stop"), do: "end_turn"
+  defp map_finish_reason("length"), do: "max_tokens"
+  defp map_finish_reason(other), do: other
 end

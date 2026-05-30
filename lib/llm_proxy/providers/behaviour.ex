@@ -2,24 +2,18 @@ defmodule LLMProxy.Providers.Behaviour do
   @moduledoc """
   Behaviour for LLM provider implementations.
 
-  Providers receive raw request bodies (maps) and return raw responses.
-  The proxy passes JSON through — no struct conversion.
+  Providers receive native request bodies and return `LLMProxy.Providers.Result` structs.
+  Wire JSON stays at protocol/provider boundaries.
   """
 
-  @type usage :: %{
-          input_tokens: non_neg_integer(),
-          output_tokens: non_neg_integer(),
-          cache_read_tokens: non_neg_integer(),
-          cache_write_tokens: non_neg_integer()
-        }
+  @type usage :: LLMProxy.Usage.t()
 
   @type call_result ::
-          {:ok, %{response: map(), token: map() | nil}}
-          | {:error, %{error: String.t(), status: integer(), token: map() | nil}}
+          {:ok, LLMProxy.Providers.Result.t()} | {:error, LLMProxy.Providers.Result.t()}
 
+  @type stream :: Enumerable.t()
   @type stream_result ::
-          {:ok, %{stream: Enumerable.t(), token: map() | nil}}
-          | {:error, %{error: String.t(), status: integer(), token: map() | nil}}
+          {:ok, LLMProxy.Providers.Result.t()} | {:error, LLMProxy.Providers.Result.t()}
 
   @doc ~s(Provider name, e.g. "anthropic", "openrouter")
   @callback name() :: String.t()
@@ -36,10 +30,10 @@ defmodule LLMProxy.Providers.Behaviour do
   @doc "Streaming call. Body is in the provider's native protocol format."
   @callback stream(body :: map(), user_id :: String.t()) :: stream_result()
 
-  @doc "Non-streaming native passthrough (provider's own API format, no conversion)"
+  @doc "Non-streaming native passthrough. Routes pass the validated native wire body explicitly."
   @callback call_native(body :: map(), user_id :: String.t()) :: call_result()
 
-  @doc "Streaming native passthrough"
+  @doc "Streaming native passthrough. Routes pass the validated native wire body explicitly."
   @callback stream_native(body :: map(), user_id :: String.t()) :: stream_result()
 
   @doc "Extract usage from a non-streaming response body"

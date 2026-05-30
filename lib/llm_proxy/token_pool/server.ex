@@ -65,7 +65,9 @@ defmodule LLMProxy.TokenPool.Server do
 
   @impl true
   def handle_cast({:mark_rate_limited, token_id}, state) do
-    cooldowns = Map.put(state.cooldowns, token_id, System.monotonic_time(:millisecond) + @cooldown_ms)
+    cooldowns =
+      Map.put(state.cooldowns, token_id, System.monotonic_time(:millisecond) + @cooldown_ms)
+
     {:noreply, %{state | cooldowns: cooldowns}}
   end
 
@@ -78,18 +80,21 @@ defmodule LLMProxy.TokenPool.Server do
 
   defp do_pick_with_fallback(provider, user_id, state) do
     case do_pick_oauth(provider, user_id, state) do
-      {:ok, token} ->
-        {:ok, token}
-
-      oauth_result ->
-        case do_pick_by_kind(provider, "api-key", user_id, state) do
-          {:ok, token} -> {:ok, token}
-          :none when oauth_result == :all_rate_limited -> {:error, :all_rate_limited}
-          :none -> {:error, :no_tokens}
-          :all_rate_limited -> {:error, :all_rate_limited}
-        end
+      {:ok, token} -> {:ok, token}
+      oauth_status -> pick_api_key_after_oauth(provider, user_id, state, oauth_status)
     end
   end
+
+  defp pick_api_key_after_oauth(provider, user_id, state, oauth_status) do
+    case do_pick_by_kind(provider, "api-key", user_id, state) do
+      {:ok, token} -> {:ok, token}
+      api_key_status -> fallback_error(oauth_status, api_key_status)
+    end
+  end
+
+  defp fallback_error(:all_rate_limited, :none), do: {:error, :all_rate_limited}
+  defp fallback_error(_oauth_status, :none), do: {:error, :no_tokens}
+  defp fallback_error(_oauth_status, :all_rate_limited), do: {:error, :all_rate_limited}
 
   defp do_pick_oauth(provider, user_id, state) do
     do_pick_by_kind(provider, "oauth", user_id, state)

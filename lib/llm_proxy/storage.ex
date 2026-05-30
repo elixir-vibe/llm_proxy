@@ -35,16 +35,26 @@ defmodule LLMProxy.Storage do
 
   def list_keys(opts \\ %{}) do
     query = from(k in ApiKey)
-    query = apply_sort(query, opts[:sort], opts[:dir], [:name, :input_tokens, :output_tokens, :cache_read_tokens])
+
+    query =
+      apply_sort(query, opts[:sort], opts[:dir], [
+        :name,
+        :input_tokens,
+        :output_tokens,
+        :cache_read_tokens
+      ])
+
     query = if query_has_order?(query), do: query, else: order_by(query, desc: :inserted_at)
     Repo.all(query)
   end
 
   def delete_key(id) do
     case Repo.get(ApiKey, id) do
-      nil -> {:error, :not_found}
+      nil ->
+        {:error, :not_found}
+
       key ->
-        Repo.delete_all(from u in UsageLog, where: u.key_id == ^id)
+        Repo.delete_all(from(u in UsageLog, where: u.key_id == ^id))
         Repo.delete(key)
     end
   end
@@ -82,9 +92,13 @@ defmodule LLMProxy.Storage do
 
   def check_model_access(key, model) do
     case key.allowed_models do
-      nil -> :ok
+      nil ->
+        :ok
+
       models when is_list(models) ->
-        if model in models, do: :ok, else: {:error, "Model '#{model}' not allowed. Allowed: #{Enum.join(models, ", ")}"}
+        if model in models,
+          do: :ok,
+          else: {:error, "Model '#{model}' not allowed. Allowed: #{Enum.join(models, ", ")}"}
     end
   end
 
@@ -161,7 +175,8 @@ defmodule LLMProxy.Storage do
     spend = get_budget_spend(key)
 
     if spend >= key.max_budget_usd do
-      {:error, "Budget exceeded ($#{Float.round(spend, 2)}/$#{Float.round(key.max_budget_usd, 2)})"}
+      {:error,
+       "Budget exceeded ($#{Float.round(spend, 2)}/$#{Float.round(key.max_budget_usd, 2)})"}
     else
       :ok
     end
@@ -176,7 +191,9 @@ defmodule LLMProxy.Storage do
 
     result =
       from(u in UsageLog,
-        where: u.key_id == ^key.id and u.timestamp >= ^DateTime.add(DateTime.utc_now(), -window_ms, :millisecond),
+        where:
+          u.key_id == ^key.id and
+            u.timestamp >= ^DateTime.add(DateTime.utc_now(), -window_ms, :millisecond),
         select: coalesce(sum(u.cost_usd), 0.0)
       )
       |> Repo.one()
@@ -254,7 +271,9 @@ defmodule LLMProxy.Storage do
     if total >= @min_tokens_for_ratio_check and ratio < key.min_cache_ratio do
       pct = Float.round(ratio * 100, 1)
       min_pct = Float.round(key.min_cache_ratio * 100, 1)
-      {:error, "Cache hit ratio too low: #{pct}% (minimum: #{min_pct}%). Fix your prompt caching to continue."}
+
+      {:error,
+       "Cache hit ratio too low: #{pct}% (minimum: #{min_pct}%). Fix your prompt caching to continue."}
     else
       :ok
     end
@@ -337,7 +356,12 @@ defmodule LLMProxy.Storage do
   def add_token(provider, kind, token, opts \\ %{}) do
     %ProviderToken{}
     |> ProviderToken.changeset(
-      Map.merge(opts, %{provider: provider, kind: kind, token: token, added_at: DateTime.utc_now()})
+      Map.merge(opts, %{
+        provider: provider,
+        kind: kind,
+        token: token,
+        added_at: DateTime.utc_now()
+      })
     )
     |> Repo.insert()
   end
@@ -465,9 +489,26 @@ defmodule LLMProxy.Storage do
     request_count = from(u in UsageLog, select: count(u.id)) |> Repo.one()
 
     recent =
-      UsageLog
-      |> order_by(desc: :timestamp)
-      |> limit(50)
+      from(u in UsageLog,
+        order_by: [desc: u.timestamp],
+        limit: 50,
+        select: %{
+          id: u.id,
+          key_id: u.key_id,
+          model: u.model,
+          input_tokens: u.input_tokens,
+          output_tokens: u.output_tokens,
+          cache_read_tokens: u.cache_read_tokens,
+          cache_write_tokens: u.cache_write_tokens,
+          cost_usd: u.cost_usd,
+          duration_ms: u.duration_ms,
+          ttft_ms: u.ttft_ms,
+          provider: u.provider,
+          tags: u.tags,
+          metadata: u.metadata,
+          timestamp: u.timestamp
+        }
+      )
       |> Repo.all()
 
     service_stats =
@@ -547,7 +588,13 @@ defmodule LLMProxy.Storage do
 
   defp traces_search(query, term) do
     pattern = "%#{term}%"
-    where(query, [t, k], fragment("lower(?) LIKE lower(?)", k.name, ^pattern) or fragment("lower(?) LIKE lower(?)", t.model, ^pattern))
+
+    where(
+      query,
+      [t, k],
+      fragment("lower(?) LIKE lower(?)", k.name, ^pattern) or
+        fragment("lower(?) LIKE lower(?)", t.model, ^pattern)
+    )
   end
 
   defp traces_offset(query, nil), do: query
@@ -561,19 +608,32 @@ defmodule LLMProxy.Storage do
     start_dt = DateTime.new!(start_date, ~T[00:00:00], "Etc/UTC")
     end_dt = DateTime.new!(Date.add(end_date, 1), ~T[00:00:00], "Etc/UTC")
 
-    query =
+    dated_usage =
       from(u in UsageLog,
         where: u.timestamp >= ^start_dt and u.timestamp < ^end_dt,
-        group_by: fragment("date(timestamp)"),
         select: %{
-          date: fragment("date(timestamp)"),
+          id: u.id,
+          key_id: u.key_id,
+          date: fragment("date(?)", u.timestamp),
+          input_tokens: u.input_tokens,
+          output_tokens: u.output_tokens,
+          cost_usd: u.cost_usd,
+          duration_ms: u.duration_ms
+        }
+      )
+
+    query =
+      from(u in subquery(dated_usage),
+        group_by: u.date,
+        select: %{
+          date: u.date,
           requests: count(u.id),
           input_tokens: coalesce(sum(u.input_tokens), 0),
           output_tokens: coalesce(sum(u.output_tokens), 0),
           cost_usd: coalesce(sum(u.cost_usd), 0.0),
           avg_duration_ms: avg(u.duration_ms)
         },
-        order_by: fragment("date(timestamp)")
+        order_by: u.date
       )
 
     query = daily_filter_key(query, opts[:key_id])
@@ -596,15 +656,12 @@ defmodule LLMProxy.Storage do
   # --- Helpers ---
 
   defp apply_sort(query, sort, dir, allowed_fields) do
-    field = if sort, do: String.to_existing_atom(sort), else: nil
+    fields = Map.new(allowed_fields, &{Atom.to_string(&1), &1})
 
-    if field && field in allowed_fields do
-      order_by(query, [{^sort_dir(dir), ^field}])
-    else
-      query
+    case Map.fetch(fields, sort) do
+      {:ok, field} -> order_by(query, [{^sort_dir(dir), ^field}])
+      :error -> query
     end
-  rescue
-    ArgumentError -> query
   end
 
   defp sort_dir("desc"), do: :desc

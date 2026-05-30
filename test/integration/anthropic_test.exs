@@ -5,10 +5,11 @@ defmodule LLMProxy.Integration.AnthropicTest do
   import Plug.Test
 
   alias Ecto.Adapters.SQL.Sandbox
-  alias LLMProxy.Providers.Anthropic
+  alias LLMProxy.Providers.{Anthropic, Result}
   alias LLMProxy.Repo
   alias LLMProxy.Router
   alias LLMProxy.Storage
+  alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
   @moduletag :integration
@@ -17,8 +18,8 @@ defmodule LLMProxy.Integration.AnthropicTest do
   @model "claude-3-5-haiku-20241022"
 
   @api_key Application.compile_env(:llm_proxy, :anthropic_api_keys, "")
-          |> String.split(",", trim: true)
-          |> List.first()
+           |> String.split(",", trim: true)
+           |> List.first()
 
   if is_nil(@api_key) do
     @moduletag :skip
@@ -42,7 +43,7 @@ defmodule LLMProxy.Integration.AnthropicTest do
         "max_tokens" => 20
       }
 
-      assert {:ok, %{response: response}} = Anthropic.call(body, "test-user")
+      assert {:ok, %Result{response: response}} = Anthropic.call(body, "test-user")
       assert is_map(response)
       assert [block | _] = response["content"]
       assert block["type"] == "text"
@@ -58,21 +59,21 @@ defmodule LLMProxy.Integration.AnthropicTest do
         "max_tokens" => 20
       }
 
-      assert {:ok, %{stream: stream}} = Anthropic.stream(body, "test-user")
+      assert {:ok, %Result{stream: stream}} = Anthropic.stream(body, "test-user")
 
       events = Enum.to_list(stream)
       assert events != []
 
       has_message_start =
         Enum.any?(events, fn event ->
-          match?(%{data: %{"type" => "message_start"}}, event)
+          match?(%Event{data: %{"type" => "message_start"}}, event)
         end)
 
       assert has_message_start, "Expected a message_start event"
 
       has_content_delta =
         Enum.any?(events, fn event ->
-          match?(%{data: %{"type" => "content_block_delta"}}, event)
+          match?(%Event{data: %{"type" => "content_block_delta"}}, event)
         end)
 
       assert has_content_delta, "Expected at least one content_block_delta event"
@@ -87,7 +88,7 @@ defmodule LLMProxy.Integration.AnthropicTest do
         "max_tokens" => 20
       }
 
-      assert {:ok, %{response: response}} = Anthropic.call_native(body, "test-user")
+      assert {:ok, %Result{response: response}} = Anthropic.call_native(body, "test-user")
       assert response["type"] == "message"
       assert [block | _] = response["content"]
       assert block["type"] == "text"

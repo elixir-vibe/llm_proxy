@@ -21,7 +21,7 @@ defmodule LLMProxy.Routes.Dynamic do
   end
 
   def dispatch(conn) do
-    path = "/" <> Enum.join(conn.path_info, "/")
+    path = IO.iodata_to_binary(["/", Enum.intersperse(conn.path_info, "/")])
     routes = :persistent_term.get(@registry_key, [])
 
     Enum.find_value(routes, fn {prefix, plug_module} ->
@@ -32,7 +32,12 @@ defmodule LLMProxy.Routes.Dynamic do
           remaining
           |> String.split("/", trim: true)
 
-        conn = %{conn | path_info: remaining_segments, script_name: conn.script_name ++ String.split(prefix, "/", trim: true)}
+        conn = %{
+          conn
+          | path_info: remaining_segments,
+            script_name: conn.script_name ++ String.split(prefix, "/", trim: true)
+        }
+
         plug_module.call(conn, plug_module.init([]))
       end
     end)

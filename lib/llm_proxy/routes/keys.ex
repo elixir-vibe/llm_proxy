@@ -5,14 +5,15 @@ defmodule LLMProxy.Routes.Keys do
   require Logger
 
   alias LLMProxy.Plugs.{Auth, MasterKey}
+  alias LLMProxy.Routes.Keys.Params
   alias LLMProxy.Storage
 
   @four_hours_ms 4 * 60 * 60 * 1000
   @one_week_ms 7 * 24 * 60 * 60 * 1000
 
-  plug :route_auth
-  plug :match
-  plug :dispatch
+  plug(:route_auth)
+  plug(:match)
+  plug(:dispatch)
 
   # --- Self-service endpoint (any valid API key) ---
 
@@ -51,23 +52,9 @@ defmodule LLMProxy.Routes.Keys do
   # --- Admin endpoints (master key required) ---
 
   post "/generate" do
-    body = conn.body_params
+    attrs = Params.parse_generate(conn.body_params)
 
-    opts =
-      %{}
-      |> put_if_present(:quota_4h_input, body["quota_4h_input"])
-      |> put_if_present(:quota_4h_output, body["quota_4h_output"])
-      |> put_if_present(:quota_week_input, body["quota_week_input"])
-      |> put_if_present(:quota_week_output, body["quota_week_output"])
-      |> put_if_present(:quota_4h_messages, body["quota_4h_messages"])
-      |> put_if_present(:quota_week_messages, body["quota_week_messages"])
-      |> put_if_present(:min_cache_ratio, body["min_cache_ratio"])
-      |> put_if_present(:allowed_models, body["allowed_models"])
-      |> put_if_present(:service_quotas, body["service_quotas"])
-
-    name = body["name"] || "Unnamed"
-
-    case Storage.create_key(name, opts) do
+    case Storage.create_key(attrs.name, attrs.opts) do
       {:ok, key, raw_key} ->
         Logger.info("Generated key #{key.name} id=#{key.id}")
 
@@ -112,92 +99,64 @@ defmodule LLMProxy.Routes.Keys do
   end
 
   post "/quota" do
-    body = conn.body_params
-    id = body["id"]
+    case Params.parse_quota(conn.body_params) do
+      {:ok, attrs} ->
+        case Storage.update_key_quota(attrs.id, attrs.attrs) do
+          {:ok, _} ->
+            Logger.info("Updated quota for key id=#{attrs.id}")
+            send_json(conn, 200, %{success: true})
 
-    has_token_quotas =
-      Map.has_key?(body, "quota_4h_input") or
-        Map.has_key?(body, "quota_4h_output") or
-        Map.has_key?(body, "quota_week_input") or
-        Map.has_key?(body, "quota_week_output") or
-        Map.has_key?(body, "quota_4h_messages") or
-        Map.has_key?(body, "quota_week_messages") or
-        Map.has_key?(body, "min_cache_ratio")
+          {:error, :not_found} ->
+            send_json(conn, 404, %{error: "Key not found"})
 
-    has_service_quotas = Map.has_key?(body, "service_quotas")
-
-    if not has_token_quotas and not has_service_quotas do
-      send_json(conn, 400, %{error: "No quota fields provided"})
-    else
-      result =
-        if has_token_quotas do
-          quota_attrs =
-            %{}
-            |> put_if_has_key(body, "quota_4h_input")
-            |> put_if_has_key(body, "quota_4h_output")
-            |> put_if_has_key(body, "quota_week_input")
-            |> put_if_has_key(body, "quota_week_output")
-            |> put_if_has_key(body, "quota_4h_messages")
-            |> put_if_has_key(body, "quota_week_messages")
-            |> put_if_has_key(body, "min_cache_ratio")
-
-          Storage.update_key_quota(id, quota_attrs)
-        else
-          {:ok, nil}
+          {:error, changeset} ->
+            Logger.error("Failed to update quota: #{inspect(changeset)}")
+            send_json(conn, 500, %{error: "Failed to update quota"})
         end
 
-      result =
-        if has_service_quotas do
-          Storage.update_key_quota(id, %{service_quotas: body["service_quotas"]})
-        else
-          result
-        end
-
-      case result do
-        {:ok, _} ->
-          Logger.info("Updated quota for key id=#{id}")
-          send_json(conn, 200, %{success: true})
-
-        {:error, :not_found} ->
-          send_json(conn, 404, %{error: "Key not found"})
-
-        {:error, changeset} ->
-          Logger.error("Failed to update quota: #{inspect(changeset)}")
-          send_json(conn, 500, %{error: "Failed to update quota"})
-      end
+      {:error, message} ->
+        send_json(conn, 400, %{error: message})
     end
   end
 
   post "/models" do
-    body = conn.body_params
-    id = body["id"]
-    allowed_models = body["allowed_models"]
+    case Params.parse_models(conn.body_params) do
+      {:ok, attrs} ->
+        case Storage.update_key_models(attrs.id, attrs.allowed_models) do
+          {:ok, _} ->
+            Logger.info(
+              "Updated models for key id=#{attrs.id} models=#{inspect(attrs.allowed_models)}"
+            )
 
-    case Storage.update_key_models(id, allowed_models) do
-      {:ok, _} ->
-        Logger.info("Updated models for key id=#{id} models=#{inspect(allowed_models)}")
-        send_json(conn, 200, %{success: true})
+            send_json(conn, 200, %{success: true})
 
-      {:error, :not_found} ->
-        send_json(conn, 404, %{error: "Key not found"})
+          {:error, :not_found} ->
+            send_json(conn, 404, %{error: "Key not found"})
 
-      {:error, changeset} ->
-        Logger.error("Failed to update models: #{inspect(changeset)}")
-        send_json(conn, 500, %{error: "Failed to update models"})
+          {:error, changeset} ->
+            Logger.error("Failed to update models: #{inspect(changeset)}")
+            send_json(conn, 500, %{error: "Failed to update models"})
+        end
+
+      {:error, message} ->
+        send_json(conn, 400, %{error: message})
     end
   end
 
   post "/delete" do
-    body = conn.body_params
-    id = body["id"]
+    case Params.parse_delete(conn.body_params) do
+      {:ok, attrs} ->
+        case Storage.delete_key(attrs.id) do
+          {:ok, _} ->
+            Logger.info("Deleted key id=#{attrs.id}")
+            send_json(conn, 200, %{success: true})
 
-    case Storage.delete_key(id) do
-      {:ok, _} ->
-        Logger.info("Deleted key id=#{id}")
-        send_json(conn, 200, %{success: true})
+          {:error, :not_found} ->
+            send_json(conn, 404, %{error: "Key not found"})
+        end
 
-      {:error, :not_found} ->
-        send_json(conn, 404, %{error: "Key not found"})
+      {:error, message} ->
+        send_json(conn, 400, %{error: message})
     end
   end
 
@@ -244,19 +203,6 @@ defmodule LLMProxy.Routes.Keys do
       Auth.call(conn, Auth.init([]))
     else
       MasterKey.call(conn, MasterKey.init([]))
-    end
-  end
-
-  defp put_if_present(map, _key, nil), do: map
-  defp put_if_present(map, key, value), do: Map.put(map, key, value)
-
-  defp put_if_has_key(map, body, json_key) do
-    atom_key = String.to_existing_atom(json_key)
-
-    if Map.has_key?(body, json_key) do
-      Map.put(map, atom_key, body[json_key])
-    else
-      map
     end
   end
 

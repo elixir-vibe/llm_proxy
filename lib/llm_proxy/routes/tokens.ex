@@ -3,12 +3,13 @@ defmodule LLMProxy.Routes.Tokens do
   use Plug.Router
 
   alias LLMProxy.Plugs.MasterKey
+  alias LLMProxy.Routes.Tokens.Params
   alias LLMProxy.Storage
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
-  plug MasterKey
-  plug :match
-  plug :dispatch
+  plug(MasterKey)
+  plug(:match)
+  plug(:dispatch)
 
   get "/" do
     provider = conn.query_params["provider"]
@@ -23,24 +24,21 @@ defmodule LLMProxy.Routes.Tokens do
   end
 
   post "/" do
-    body = conn.body_params
-    provider = body["provider"]
-    kind = body["kind"]
-    token = body["token"]
+    case Params.parse_create(conn.body_params) do
+      {:ok, attrs} ->
+        case Storage.add_token(attrs.provider, attrs.kind, attrs.token, %{
+               label: attrs.label,
+               proxy: attrs.proxy
+             }) do
+          {:ok, created} ->
+            send_json(conn, 200, serialize_token(created))
 
-    if is_nil(provider) or is_nil(kind) or is_nil(token) do
-      send_json(conn, 400, %{error: "provider, kind, and token are required"})
-    else
-      case Storage.add_token(provider, kind, token, %{
-             label: body["label"],
-             proxy: body["proxy"]
-           }) do
-        {:ok, created} ->
-          send_json(conn, 200, serialize_token(created))
+          {:error, changeset} ->
+            send_json(conn, 400, %{error: format_errors(changeset)})
+        end
 
-        {:error, changeset} ->
-          send_json(conn, 400, %{error: format_errors(changeset)})
-      end
+      {:error, message} ->
+        send_json(conn, 400, %{error: message})
     end
   end
 
@@ -53,22 +51,18 @@ defmodule LLMProxy.Routes.Tokens do
 
   patch "/:id" do
     id = String.to_integer(id)
-    body = conn.body_params
-    enabled = body["enabled"]
-    proxy = body["proxy"]
 
-    if is_nil(enabled) and not Map.has_key?(body, "proxy") do
-      send_json(conn, 400, %{error: "At least one of enabled or proxy is required"})
-    else
-      with :ok <- maybe_set_enabled(id, enabled),
-           :ok <- maybe_update_proxy(id, body) do
-        result = %{id: id}
-        result = if enabled != nil, do: Map.put(result, :enabled, enabled), else: result
-        result = if Map.has_key?(body, "proxy"), do: Map.put(result, :proxy, proxy), else: result
-        send_json(conn, 200, result)
-      else
-        {:error, :not_found} -> send_json(conn, 404, %{error: "Token not found"})
-      end
+    case Params.parse_update(conn.body_params) do
+      {:ok, attrs} ->
+        with :ok <- maybe_set_enabled(id, attrs),
+             :ok <- maybe_update_proxy(id, attrs) do
+          send_json(conn, 200, update_result(id, attrs))
+        else
+          {:error, :not_found} -> send_json(conn, 404, %{error: "Token not found"})
+        end
+
+      {:error, message} ->
+        send_json(conn, 400, %{error: message})
     end
   end
 
@@ -76,25 +70,32 @@ defmodule LLMProxy.Routes.Tokens do
     send_json(conn, 404, %{error: "Not found"})
   end
 
-  defp maybe_set_enabled(_id, nil), do: :ok
+  defp maybe_set_enabled(_id, %Params.Update{update_enabled?: false}), do: :ok
 
-  defp maybe_set_enabled(id, enabled) do
+  defp maybe_set_enabled(id, %Params.Update{enabled: enabled}) do
     case Storage.set_token_enabled(id, enabled) do
       {:ok, _} -> :ok
       {:error, :not_found} -> {:error, :not_found}
     end
   end
 
-  defp maybe_update_proxy(id, body) do
-    if Map.has_key?(body, "proxy") do
-      case Storage.update_token_proxy(id, body["proxy"]) do
-        {:ok, _} -> :ok
-        {:error, :not_found} -> {:error, :not_found}
-      end
-    else
-      :ok
+  defp maybe_update_proxy(_id, %Params.Update{update_proxy?: false}), do: :ok
+
+  defp maybe_update_proxy(id, %Params.Update{proxy: proxy}) do
+    case Storage.update_token_proxy(id, proxy) do
+      {:ok, _} -> :ok
+      {:error, :not_found} -> {:error, :not_found}
     end
   end
+
+  defp update_result(id, attrs) do
+    %{id: id}
+    |> maybe_put(:enabled, attrs.enabled, attrs.update_enabled?)
+    |> maybe_put(:proxy, attrs.proxy, attrs.update_proxy?)
+  end
+
+  defp maybe_put(map, _key, _value, false), do: map
+  defp maybe_put(map, key, value, true), do: Map.put(map, key, value)
 
   defp mask_token(token) when byte_size(token) <= 12, do: "***"
   defp mask_token(token), do: String.slice(token, 0, 6) <> "..." <> String.slice(token, -4, 4)

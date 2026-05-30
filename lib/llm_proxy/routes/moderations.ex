@@ -4,28 +4,38 @@ defmodule LLMProxy.Routes.Moderations do
 
   require Logger
 
+  alias LLMProxy.HTTP
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
+  alias LLMProxy.Routes.Moderations.Params
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
-  plug Auth
-  plug QuotaCheck
-  plug :match
-  plug :dispatch
+  plug(Auth)
+  plug(QuotaCheck)
+  plug(:match)
+  plug(:dispatch)
 
   post "/" do
-    api_key = conn.assigns.api_key
-    body = conn.body_params
-    model = body["model"] || "omni-moderation-latest"
+    case Params.parse_create(conn.body_params) do
+      {:ok, attrs} ->
+        moderate(conn, conn.assigns.api_key, attrs)
 
-    Logger.info("Moderation from #{api_key.name} model=#{model}")
+      {:error, message} ->
+        send_json(conn, 400, %{error: message})
+    end
+  end
+
+  defp moderate(conn, api_key, %Params.Create{} = attrs) do
+    Logger.info("Moderation from #{api_key.name} model=#{attrs.model}")
 
     case TokenPool.pick_token_by_kind("openai", "api-key", api_key.id) do
       {:ok, token} ->
         req =
-          Req.new(url: "https://api.openai.com/v1/moderations", headers: [{"authorization", "Bearer #{token.token}"}])
-          |> OpentelemetryReq.attach()
+          HTTP.new(
+            url: "https://api.openai.com/v1/moderations",
+            headers: [{"authorization", "Bearer #{token.token}"}]
+          )
 
-        case Req.post(req, json: %{input: body["input"], model: model}) do
+        case Req.post(req, json: %{input: attrs.input, model: attrs.model}) do
           {:ok, %{status: status, body: response}} ->
             send_json(conn, status, response)
 

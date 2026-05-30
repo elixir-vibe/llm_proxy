@@ -1,0 +1,64 @@
+defmodule LLMProxy.Routes.ModerationsTest do
+  use ExUnit.Case
+
+  alias LLMProxy.Routes.Moderations
+  alias LLMProxy.Storage
+  alias LLMProxy.TestSupport
+  alias LLMProxy.TokenPool.Server, as: TokenPool
+  alias LLMProxyTestModerationsStub, as: ModerationsStub
+  alias Req.Test, as: ReqTest
+
+  setup do
+    TestSupport.checkout_repo()
+    :ok = TestSupport.allow_token_pool()
+    TestSupport.clear_provider_tokens()
+    TokenPool.clear_rate_limits()
+
+    on_exit(fn ->
+      Application.delete_env(:llm_proxy, :req_plug)
+    end)
+  end
+
+  test "rejects missing input" do
+    {:ok, _key, raw_key} = Storage.create_key("moderation-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{})
+      |> TestSupport.put_bearer(raw_key)
+      |> Moderations.call(Moderations.init([]))
+
+    assert conn.status == 400
+    assert Jason.decode!(conn.resp_body) == %{"error" => "input is required"}
+  end
+
+  test "returns 503 when no OpenAI token is available" do
+    {:ok, _key, raw_key} = Storage.create_key("moderation-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{"input" => "hello"})
+      |> TestSupport.put_bearer(raw_key)
+      |> Moderations.call(Moderations.init([]))
+
+    assert conn.status == 503
+    assert Jason.decode!(conn.resp_body)["error"] =~ "No OpenAI token available"
+  end
+
+  test "proxies moderation requests" do
+    Application.put_env(:llm_proxy, :req_plug, {ReqTest, ModerationsStub})
+
+    ReqTest.stub(ModerationsStub, fn conn ->
+      ReqTest.json(conn, %{"results" => [%{"flagged" => false}]})
+    end)
+
+    {:ok, _key, raw_key} = Storage.create_key("moderation-user")
+    {:ok, _token} = Storage.add_token("openai", "api-key", "openai-token")
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{"input" => "hello"})
+      |> TestSupport.put_bearer(raw_key)
+      |> Moderations.call(Moderations.init([]))
+
+    assert conn.status == 200
+    assert Jason.decode!(conn.resp_body) == %{"results" => [%{"flagged" => false}]}
+  end
+end

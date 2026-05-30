@@ -14,7 +14,9 @@ defmodule LLMProxy.Plugs.QuotaCheck do
 
   def call(conn, _opts) do
     case Storage.check_quota(conn.assigns.api_key) do
-      :ok -> conn
+      :ok ->
+        conn
+
       {:error, reason} ->
         conn
         |> put_resp_content_type("application/json")

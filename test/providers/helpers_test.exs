@@ -1,6 +1,8 @@
 defmodule LLMProxy.Providers.HelpersTest do
   use ExUnit.Case, async: true
 
+  alias LLMProxy.Usage
+
   alias LLMProxy.Providers.Helpers
 
   describe "extract_openai_usage/1" do
@@ -12,12 +14,8 @@ defmodule LLMProxy.Providers.HelpersTest do
         }
       }
 
-      assert Helpers.extract_openai_usage(response) == %{
-               input_tokens: 150,
-               output_tokens: 80,
-               cache_read_tokens: 0,
-               cache_write_tokens: 0
-             }
+      assert Helpers.extract_openai_usage(response) ==
+               Usage.new(150, 80)
     end
 
     test "extracts cached_tokens from prompt_tokens_details" do
@@ -31,30 +29,18 @@ defmodule LLMProxy.Providers.HelpersTest do
         }
       }
 
-      assert Helpers.extract_openai_usage(response) == %{
-               input_tokens: 200,
-               output_tokens: 50,
-               cache_read_tokens: 120,
-               cache_write_tokens: 0
-             }
+      assert Helpers.extract_openai_usage(response) ==
+               Usage.new(200, 50, 120, 0)
     end
 
     test "handles nil usage" do
-      assert Helpers.extract_openai_usage(%{}) == %{
-               input_tokens: 0,
-               output_tokens: 0,
-               cache_read_tokens: 0,
-               cache_write_tokens: 0
-             }
+      assert Helpers.extract_openai_usage(%{}) ==
+               Usage.new(0, 0)
     end
 
     test "handles empty usage map" do
-      assert Helpers.extract_openai_usage(%{"usage" => %{}}) == %{
-               input_tokens: 0,
-               output_tokens: 0,
-               cache_read_tokens: 0,
-               cache_write_tokens: 0
-             }
+      assert Helpers.extract_openai_usage(%{"usage" => %{}}) ==
+               Usage.new(0, 0)
     end
 
     test "cache_write_tokens is always 0" do

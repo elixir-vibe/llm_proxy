@@ -4,10 +4,10 @@ defmodule LLMProxy.Schemas.ServiceUsage do
   import Ecto.Changeset
 
   schema "service_usage_log" do
-    field :key_id, :string
-    field :service, :string
-    field :endpoint, :string
-    field :timestamp, :utc_datetime
+    field(:key_id, :string)
+    field(:service, :string)
+    field(:endpoint, :string)
+    field(:timestamp, :utc_datetime)
   end
 
   def changeset(log, attrs) do

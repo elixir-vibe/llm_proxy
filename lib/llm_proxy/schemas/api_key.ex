@@ -6,25 +6,25 @@ defmodule LLMProxy.Schemas.ApiKey do
   @primary_key {:id, :string, autogenerate: false}
 
   schema "api_keys" do
-    field :hash, :string
-    field :name, :string
-    field :quota_4h_input, :integer
-    field :quota_4h_output, :integer
-    field :quota_week_input, :integer
-    field :quota_week_output, :integer
-    field :quota_4h_messages, :integer
-    field :quota_week_messages, :integer
-    field :min_cache_ratio, :float
-    field :allowed_models, {:array, :string}
-    field :service_quotas, :map
-    field :total_spend_usd, :float, default: 0.0
-    field :max_budget_usd, :float
-    field :budget_period, :string
-    field :trace_requests, :boolean, default: false
-    field :input_tokens, :integer, default: 0
-    field :output_tokens, :integer, default: 0
-    field :cache_read_tokens, :integer, default: 0
-    field :cache_write_tokens, :integer, default: 0
+    field(:hash, :string)
+    field(:name, :string)
+    field(:quota_4h_input, :integer)
+    field(:quota_4h_output, :integer)
+    field(:quota_week_input, :integer)
+    field(:quota_week_output, :integer)
+    field(:quota_4h_messages, :integer)
+    field(:quota_week_messages, :integer)
+    field(:min_cache_ratio, :float)
+    field(:allowed_models, {:array, :string})
+    field(:service_quotas, :map)
+    field(:total_spend_usd, :float, default: 0.0)
+    field(:max_budget_usd, :float)
+    field(:budget_period, :string)
+    field(:trace_requests, :boolean, default: false)
+    field(:input_tokens, :integer, default: 0)
+    field(:output_tokens, :integer, default: 0)
+    field(:cache_read_tokens, :integer, default: 0)
+    field(:cache_write_tokens, :integer, default: 0)
 
     timestamps(type: :utc_datetime)
   end
@@ -54,6 +54,16 @@ defmodule LLMProxy.Schemas.ApiKey do
       :cache_write_tokens
     ])
     |> validate_required([:id, :hash, :name])
+    |> validate_number(:quota_4h_input, greater_than_or_equal_to: 0)
+    |> validate_number(:quota_4h_output, greater_than_or_equal_to: 0)
+    |> validate_number(:quota_week_input, greater_than_or_equal_to: 0)
+    |> validate_number(:quota_week_output, greater_than_or_equal_to: 0)
+    |> validate_number(:quota_4h_messages, greater_than_or_equal_to: 0)
+    |> validate_number(:quota_week_messages, greater_than_or_equal_to: 0)
+    |> validate_number(:min_cache_ratio, greater_than_or_equal_to: 0, less_than_or_equal_to: 1)
+    |> validate_number(:total_spend_usd, greater_than_or_equal_to: 0)
+    |> validate_number(:max_budget_usd, greater_than_or_equal_to: 0)
+    |> validate_inclusion(:budget_period, ["4h", "week"], allow_nil: true)
     |> unique_constraint(:hash)
   end
 end

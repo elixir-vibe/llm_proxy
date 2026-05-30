@@ -3,7 +3,7 @@ defmodule LLMProxy.Protocol do
   Protocol detection and conversion between LLM API formats.
 
   Each protocol module knows how to:
-  - Convert requests from its format to another protocol's format
+  - Render normalized requests to wire format
   - Convert responses back to its format
   - Handle streaming event conversion
   """
@@ -12,9 +12,6 @@ defmodule LLMProxy.Protocol do
 
   @doc "Which protocol this module handles"
   @callback protocol() :: protocol()
-
-  @doc "Convert a request body from this protocol's format to the target protocol's format"
-  @callback convert_request(body :: map(), to :: protocol()) :: map()
 
   @doc "Convert a non-streaming response from source protocol to this protocol's format"
   @callback convert_response(response :: map(), from :: protocol(), model :: String.t()) :: map()

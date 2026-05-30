@@ -6,6 +6,8 @@ defmodule LLMProxy.Pricing do
   Loaded from priv/models/pricing.json into :persistent_term at startup.
   """
 
+  alias LLMProxy.Usage
+
   @pricing_key :llm_proxy_pricing
 
   @pricing_path Path.join(:code.priv_dir(:llm_proxy), "models/pricing.json")
@@ -21,7 +23,7 @@ defmodule LLMProxy.Pricing do
     :persistent_term.put(@pricing_key, pricing)
   end
 
-  def calculate_cost(model, usage) do
+  def calculate_cost(model, %Usage{} = usage) do
     case get_pricing(model) do
       nil ->
         0.0
@@ -29,8 +31,8 @@ defmodule LLMProxy.Pricing do
       pricing ->
         (usage.input_tokens * (pricing["input"] || 0) +
            usage.output_tokens * (pricing["output"] || 0) +
-           Map.get(usage, :cache_read_tokens, 0) * (pricing["cache_read"] || 0) +
-           Map.get(usage, :cache_write_tokens, 0) * (pricing["cache_write"] || 0)) / 1_000_000
+           usage.cache_read_tokens * (pricing["cache_read"] || 0) +
+           usage.cache_write_tokens * (pricing["cache_write"] || 0)) / 1_000_000
     end
   end
 

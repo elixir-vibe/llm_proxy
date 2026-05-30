@@ -6,7 +6,7 @@ defmodule LLMProxy.Plugs.Auth do
 
   import Plug.Conn
 
-  alias LLMProxy.Config
+  alias LLMProxy.{Actor, Config}
   alias LLMProxy.Storage
 
   def init(opts), do: opts
@@ -19,7 +19,7 @@ defmodule LLMProxy.Plugs.Auth do
         conn |> send_json(401, %{error: "Missing API key"}) |> halt()
 
       raw_key == Config.master_key() ->
-        assign(conn, :api_key, master_key_struct())
+        assign(conn, :api_key, Actor.master_key())
 
       true ->
         case Storage.find_key(raw_key) do
@@ -31,29 +31,15 @@ defmodule LLMProxy.Plugs.Auth do
 
   defp extract_key(conn) do
     case get_req_header(conn, "authorization") do
-      ["Bearer " <> key] -> key
+      ["Bearer " <> key] ->
+        key
+
       _ ->
         case get_req_header(conn, "x-api-key") do
           [key] -> key
           _ -> nil
         end
     end
-  end
-
-  defp master_key_struct do
-    %{
-      id: "master",
-      name: "Master",
-      quota_4h_input: nil,
-      quota_4h_output: nil,
-      quota_week_input: nil,
-      quota_week_output: nil,
-      quota_4h_messages: nil,
-      quota_week_messages: nil,
-      min_cache_ratio: nil,
-      allowed_models: nil,
-      service_quotas: nil
-    }
   end
 
   defp send_json(conn, status, body) do

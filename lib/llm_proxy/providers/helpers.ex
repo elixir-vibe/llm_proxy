@@ -1,12 +1,20 @@
 defmodule LLMProxy.Providers.Helpers do
   @moduledoc false
 
+  alias LLMProxy.HTTP
+  alias LLMProxy.Protocol.OpenAI
+  alias LLMProxy.Providers.Result
+  alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
+  alias LLMProxy.Usage
 
   def pick_token(provider_name, user_id) do
     case TokenPool.pick_token(provider_name, user_id) do
-      {:ok, token} -> {:ok, token}
-      {:error, reason} -> {:error, %{error: "No available tokens: #{reason}", status: 503, token: nil}}
+      {:ok, token} ->
+        {:ok, token}
+
+      {:error, reason} ->
+        {:error, Result.error("No available tokens: #{reason}", 503, nil)}
     end
   end
 
@@ -15,12 +23,18 @@ defmodule LLMProxy.Providers.Helpers do
       base_url = opts.base_url_fn.(token)
       headers = opts.headers_fn.(token)
 
-      req = Req.new(url: "#{base_url}/chat/completions", headers: headers, receive_timeout: 600_000) |> OpentelemetryReq.attach()
+      req =
+        HTTP.new(url: "#{base_url}/chat/completions", headers: headers, receive_timeout: 600_000)
 
       case Req.post(req, json: body) do
-        {:ok, %{status: 200, body: response}} -> {:ok, %{response: response, token: token}}
-        {:ok, %{status: status, body: resp_body}} -> handle_error_response(token, status, resp_body)
-        {:error, exception} -> handle_exception(exception)
+        {:ok, %{status: 200, body: response}} ->
+          {:ok, Result.response(response, token)}
+
+        {:ok, %{status: status, body: resp_body}} ->
+          handle_error_response(token, status, resp_body)
+
+        {:error, exception} ->
+          handle_exception(exception)
       end
     end
   end
@@ -32,8 +46,12 @@ defmodule LLMProxy.Providers.Helpers do
       stream_body = Map.put(body, "stream", true)
 
       req =
-        Req.new(url: "#{base_url}/chat/completions", headers: headers, into: :self, receive_timeout: 600_000)
-        |> OpentelemetryReq.attach()
+        HTTP.new(
+          url: "#{base_url}/chat/completions",
+          headers: headers,
+          into: :self,
+          receive_timeout: 600_000
+        )
 
       case Req.post(req, json: stream_body) do
         {:ok, %{status: 200} = resp} ->
@@ -43,7 +61,7 @@ defmodule LLMProxy.Providers.Helpers do
             |> Stream.map(&openai_to_stream_event/1)
             |> Stream.reject(&is_nil/1)
 
-          {:ok, %{stream: stream, token: token}}
+          {:ok, Result.stream(stream, token)}
 
         {:ok, %{status: status, body: resp_body}} ->
           handle_error_response(token, status, resp_body)
@@ -55,25 +73,13 @@ defmodule LLMProxy.Providers.Helpers do
   end
 
   def extract_openai_usage(response) do
-    LLMProxy.Protocol.OpenAI.extract_usage(response)
+    OpenAI.extract_usage(response)
   end
 
   def openai_stream_event_from_map(parsed) do
-    event = %{data: parsed}
-
     case parsed do
-      %{"usage" => usage} when is_map(usage) ->
-        cache_read = get_in(usage, ["prompt_tokens_details", "cached_tokens"]) || 0
-
-        Map.put(event, :usage, %{
-          input_tokens: usage["prompt_tokens"] || 0,
-          output_tokens: usage["completion_tokens"] || 0,
-          cache_read_tokens: cache_read,
-          cache_write_tokens: 0
-        })
-
-      _ ->
-        event
+      %{"usage" => usage} when is_map(usage) -> Event.new(parsed, usage: Usage.from_openai(usage))
+      _ -> Event.new(parsed)
     end
   end
 
@@ -87,11 +93,15 @@ defmodule LLMProxy.Providers.Helpers do
 
   def handle_error_response(token, status, body) do
     if status == 429, do: TokenPool.mark_rate_limited(token)
-    {:error, %{error: extract_error(body), status: status, token: token}}
+    error_result(extract_error(body), status, token)
   end
 
   def handle_exception(exception) do
-    {:error, %{error: Exception.message(exception), status: 502, token: nil}}
+    error_result(Exception.message(exception), 502, nil)
+  end
+
+  def error_result(error, status, token) do
+    {:error, Result.error(error, status, token)}
   end
 
   def extract_error(%{"error" => %{"message" => msg}}), do: msg

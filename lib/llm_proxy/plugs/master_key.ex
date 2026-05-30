@@ -16,7 +16,7 @@ defmodule LLMProxy.Plugs.MasterKey do
         _ -> nil
       end
 
-    if key == Config.master_key() do
+    if Config.valid_master_key?(key) do
       conn
     else
       conn

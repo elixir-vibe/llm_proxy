@@ -5,14 +5,16 @@ defmodule LLMProxy.Routes.Responses do
   require Logger
 
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
-  alias LLMProxy.Providers.Registry
+  alias LLMProxy.Protocol.Request
+  alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Routes.Helpers
-  alias LLMProxy.Stream.SSEWriter
+  alias LLMProxy.Stream.{Event, SSEWriter}
+  alias LLMProxy.Usage
 
-  plug Auth
-  plug QuotaCheck
-  plug :match
-  plug :dispatch
+  plug(Auth)
+  plug(QuotaCheck)
+  plug(:match)
+  plug(:dispatch)
 
   post "/" do
     handle_responses(conn)
@@ -26,33 +28,88 @@ defmodule LLMProxy.Routes.Responses do
     api_key = conn.assigns.api_key
     body = conn.body_params
     model = body["model"]
-    stream = body["stream"] != false
 
-    with :ok <- Helpers.check_model_access(api_key, model),
+    with {:ok, request} <- Request.parse(:openai_responses, body),
+         :ok <- Helpers.check_model_access(api_key, model),
          provider when not is_nil(provider) <- Registry.get_provider(model) do
-      Logger.debug("Responses request from #{api_key.name} model=#{model} stream=#{stream}")
-      Helpers.log_user_message(api_key, model, "responses", fn -> extract_user_message(body) end)
-      dispatch_provider(conn, provider, Map.put(body, "stream", stream), api_key, model)
+      Logger.debug(
+        "Responses request from #{api_key.name} model=#{model} stream=#{responses_stream?(request)}"
+      )
+
+      Helpers.log_user_message(api_key, model, "responses", fn -> Request.user_text(request) end)
+      dispatch_provider(conn, provider, normalize_stream(request), api_key, model)
     else
-      nil -> send_error(conn, 404, "not_found_error", "Model '#{model}' not found")
-      {:error, reason} -> send_error(conn, 403, "permission_error", reason)
+      nil ->
+        send_error(conn, 404, "not_found_error", "Model '#{model}' not found")
+
+      {:error, %Request.Error{} = error} ->
+        send_error(conn, 400, error.code, error.message)
+
+      {:error, reason} ->
+        send_error(conn, 403, "permission_error", reason)
     end
   end
 
-  defp dispatch_provider(conn, provider, body, api_key, model) do
-    case provider.call_native(body, api_key.id) do
-      {:ok, %{stream: stream_enum, token: token}} ->
+  defp normalize_stream(%Request{stream: false} = request), do: request
+
+  defp normalize_stream(%Request{} = request),
+    do: %{request | body: Map.put(request.body, "stream", true), stream: true}
+
+  defp responses_stream?(%Request{} = request), do: normalize_stream(request).stream
+
+  defp dispatch_provider(conn, provider, %Request{} = request, api_key, model) do
+    cond do
+      request.stream == true and function_exported?(provider, :stream_native, 2) ->
+        stream_native_provider(conn, provider, request, api_key, model)
+
+      request.stream == true ->
+        unsupported_api(conn, model)
+
+      function_exported?(provider, :call_native, 2) ->
+        call_native_provider(conn, provider, request, api_key, model)
+
+      true ->
+        unsupported_api(conn, model)
+    end
+  end
+
+  defp unsupported_api(conn, model) do
+    send_error(
+      conn,
+      400,
+      "invalid_request_error",
+      "Model '#{model}' does not support Responses API"
+    )
+  end
+
+  defp stream_native_provider(conn, provider, %Request{} = request, api_key, model) do
+    case provider.stream_native(Request.native_body(request), api_key.id) do
+      {:ok, %Result{stream: stream_enum, token: token}} ->
         handle_stream(conn, stream_enum, api_key, model, token)
 
-      {:ok, %{response: response}} ->
+      {:error, result} ->
+        handle_provider_error(conn, provider, result)
+    end
+  end
+
+  defp call_native_provider(conn, provider, %Request{} = request, api_key, model) do
+    case provider.call_native(Request.native_body(request), api_key.id) do
+      {:ok, %Result{response: response}} when not is_nil(response) ->
         handle_non_stream(conn, response, api_key, model)
 
-      {:error, %{error: error, status: status} = result} ->
-        token = Map.get(result, :token)
-        if status == 429 && token, do: Helpers.mark_rate_limited(token)
-        Logger.error("#{provider.name()} error (#{status}): #{error}")
-        send_error(conn, status, "api_error", error)
+      {:ok, %Result{stream: stream_enum, token: token}} when not is_nil(stream_enum) ->
+        handle_stream(conn, stream_enum, api_key, model, token)
+
+      {:error, result} ->
+        handle_provider_error(conn, provider, result)
     end
+  end
+
+  defp handle_provider_error(conn, provider, %Result{error: error, status: status} = result) do
+    token = Map.get(result, :token)
+    if status == 429 && token, do: Helpers.mark_rate_limited(token)
+    Logger.error("#{provider.name()} error (#{status}): #{error}")
+    send_error(conn, status, "api_error", error)
   end
 
   defp handle_non_stream(conn, response, api_key, model) do
@@ -63,25 +120,27 @@ defmodule LLMProxy.Routes.Responses do
 
   defp handle_stream(conn, stream, api_key, model, token) do
     conn = SSEWriter.start_sse(conn)
-    zero_usage = %{input_tokens: 0, output_tokens: 0, cache_read_tokens: 0}
+    zero_usage = Usage.zero()
 
     {conn, usage} =
       try do
-        Enum.reduce_while(stream, {conn, zero_usage}, fn event, {conn, usage} ->
+        Enum.reduce_while(stream, {conn, zero_usage}, fn %Event{} = event, {conn, usage} ->
           usage = merge_stream_usage(usage, event)
 
-          case SSEWriter.write_event(conn, encode_stream_event(event)) do
+          case SSEWriter.write_event(conn, encode_stream_event(event.data)) do
             {:ok, conn} -> {:cont, {conn, usage}}
             {:error, _reason} -> {:halt, {conn, usage}}
           end
         end)
       rescue
-        e ->
+        e in [RuntimeError, Jason.DecodeError, Protocol.UndefinedError] ->
           error_msg = Exception.message(e)
           Logger.error("Stream error: #{error_msg}")
           if String.contains?(error_msg, "429") && token, do: Helpers.mark_rate_limited(token)
 
-          error_event = Jason.encode!(%{type: "error", error: %{type: "api_error", message: error_msg}})
+          error_event =
+            Jason.encode!(%{type: "error", error: %{type: "api_error", message: error_msg}})
+
           Plug.Conn.chunk(conn, "data: #{error_event}\n\n")
           {conn, zero_usage}
       end
@@ -94,52 +153,24 @@ defmodule LLMProxy.Routes.Responses do
   defp encode_stream_event(event) when is_binary(event), do: event
   defp encode_stream_event(event), do: Jason.encode!(event)
 
-  defp merge_stream_usage(_usage, %{"type" => "response.completed", "response" => %{"usage" => resp_usage}})
-       when is_map(resp_usage) do
-    cached = get_in(resp_usage, ["input_tokens_details", "cached_tokens"]) || 0
-    input = (resp_usage["input_tokens"] || 0) - cached
+  defp merge_stream_usage(_usage, %Event{usage: event_usage}) when not is_nil(event_usage),
+    do: event_usage
 
-    %{
-      input_tokens: input,
-      output_tokens: resp_usage["output_tokens"] || 0,
-      cache_read_tokens: cached
-    }
+  defp merge_stream_usage(_usage, %Event{
+         data: %{
+           "type" => "response.completed",
+           "response" => %{"usage" => resp_usage}
+         }
+       })
+       when is_map(resp_usage) do
+    Usage.from_responses(resp_usage)
   end
 
   defp merge_stream_usage(usage, _event), do: usage
 
   defp extract_usage(response) do
     usage = response["usage"] || %{}
-    cached = get_in(usage, ["input_tokens_details", "cached_tokens"]) || 0
-    input = (usage["input_tokens"] || 0) - cached
-
-    %{
-      input_tokens: input,
-      output_tokens: usage["output_tokens"] || 0,
-      cache_read_tokens: cached
-    }
-  end
-
-  defp extract_user_message(%{"input" => input}) when is_list(input) do
-    case List.last(input) do
-      %{"role" => "user", "content" => content} when is_binary(content) -> content
-      %{"role" => "user", "content" => parts} when is_list(parts) -> extract_text_parts(parts)
-      _ -> ""
-    end
-  end
-
-  defp extract_user_message(_), do: ""
-
-  defp extract_text_parts(parts) do
-    parts
-    |> Enum.map(fn
-      %{"type" => "input_text", "text" => text} -> text
-      %{"type" => "text", "text" => text} -> text
-      text when is_binary(text) -> text
-      _ -> ""
-    end)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.join("\n")
+    Usage.from_responses(usage)
   end
 
   defp send_error(conn, status, type, message) do

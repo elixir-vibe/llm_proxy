@@ -3,6 +3,7 @@ defmodule LLMProxy.Providers.OpenRouter do
 
   @behaviour LLMProxy.Providers.Behaviour
 
+  alias LLMProxy.Protocol.OpenAI, as: OpenAIProtocol
   alias LLMProxy.Providers.Helpers
 
   @default_base_url "https://openrouter.ai/api/v1"
@@ -27,14 +28,12 @@ defmodule LLMProxy.Providers.OpenRouter do
   def stream(body, user_id), do: Helpers.openai_stream("openrouter", body, user_id, opts())
 
   @impl true
-  def extract_usage(response), do: Helpers.extract_openai_usage(response)
+  def extract_usage(response), do: OpenAIProtocol.extract_usage(response)
 
   @impl true
-  def to_openai_response(response, model), do: Map.put(response, "model", model)
+  def to_openai_response(response, model), do: response |> Map.put("model", model)
 
-  defp opts do
-    %{base_url_fn: &base_url/1, headers_fn: &headers/1}
-  end
+  defp opts, do: %{base_url_fn: &base_url/1, headers_fn: &headers/1}
 
   defp headers(token) do
     [

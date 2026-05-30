@@ -4,11 +4,11 @@ defmodule LLMProxy.Schemas.MessageLog do
   import Ecto.Changeset
 
   schema "message_log" do
-    field :key_id, :string
-    field :model, :string
-    field :route, :string
-    field :user_message, :string
-    field :timestamp, :utc_datetime
+    field(:key_id, :string)
+    field(:model, :string)
+    field(:route, :string)
+    field(:user_message, :string)
+    field(:timestamp, :utc_datetime)
   end
 
   def changeset(log, attrs) do

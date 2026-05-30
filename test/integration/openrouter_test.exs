@@ -5,7 +5,7 @@ defmodule LLMProxy.Integration.OpenRouterTest do
   import Plug.Test
 
   alias Ecto.Adapters.SQL.Sandbox
-  alias LLMProxy.Providers.OpenRouter
+  alias LLMProxy.Providers.{OpenRouter, Result}
   alias LLMProxy.Repo
   alias LLMProxy.Router
   alias LLMProxy.Storage
@@ -17,8 +17,8 @@ defmodule LLMProxy.Integration.OpenRouterTest do
   @model "openai/gpt-4o-mini"
 
   @api_key Application.compile_env(:llm_proxy, :openrouter_api_keys, "")
-          |> String.split(",", trim: true)
-          |> List.first()
+           |> String.split(",", trim: true)
+           |> List.first()
 
   if is_nil(@api_key) do
     @moduletag :skip
@@ -42,7 +42,7 @@ defmodule LLMProxy.Integration.OpenRouterTest do
         "max_tokens" => 20
       }
 
-      assert {:ok, %{response: response}} = OpenRouter.call(body, "test-user")
+      assert {:ok, %Result{response: response}} = OpenRouter.call(body, "test-user")
       assert is_map(response)
       assert [choice | _] = response["choices"]
       assert choice["message"]["content"]
@@ -59,7 +59,7 @@ defmodule LLMProxy.Integration.OpenRouterTest do
         "stream_options" => %{"include_usage" => true}
       }
 
-      assert {:ok, %{stream: stream}} = OpenRouter.stream(body, "test-user")
+      assert {:ok, %Result{stream: stream}} = OpenRouter.stream(body, "test-user")
 
       events = Enum.to_list(stream)
       assert events != []

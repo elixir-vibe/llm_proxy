@@ -18,6 +18,7 @@ defmodule LLMProxy.Application do
     Registry.register(LLMProxy.Providers.OpenRouter)
     Registry.register(LLMProxy.Providers.Anthropic)
     Registry.register(LLMProxy.Providers.OpenAI)
+    ReqLLM.Providers.register(LLMProxy.Provider)
 
     Dynamic.register("/v1/messages", LLMProxy.Routes.Messages)
     Dynamic.register("/messages", LLMProxy.Routes.Messages)
@@ -28,7 +29,7 @@ defmodule LLMProxy.Application do
       LLMProxy.Repo,
       LLMProxy.TokenPool.Server,
       {Phoenix.PubSub, name: LLMProxy.PubSub},
-      LLMProxyWeb.Endpoint
+      LLMProxy.Web.Endpoint
     ]
 
     opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]

@@ -5,14 +5,16 @@ defmodule LLMProxy.Routes.Messages do
   require Logger
 
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
-  alias LLMProxy.Providers.Registry
+  alias LLMProxy.Protocol.Request
+  alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Routes.Helpers
-  alias LLMProxy.Stream.SSEWriter
+  alias LLMProxy.Stream.{Event, SSEWriter}
+  alias LLMProxy.Usage
 
-  plug Auth
-  plug QuotaCheck
-  plug :match
-  plug :dispatch
+  plug(Auth)
+  plug(QuotaCheck)
+  plug(:match)
+  plug(:dispatch)
 
   post "/" do
     handle_messages(conn)
@@ -27,30 +29,79 @@ defmodule LLMProxy.Routes.Messages do
     body = conn.body_params
     model = body["model"]
 
-    with :ok <- Helpers.check_model_access(api_key, model),
+    with {:ok, request} <- Request.parse(:anthropic_messages, body),
+         :ok <- Helpers.check_model_access(api_key, model),
          provider when not is_nil(provider) <- Registry.get_provider(model) do
-      Logger.debug("Messages request from #{api_key.name} model=#{model} stream=#{body["stream"] || false}")
-      Helpers.log_user_message(api_key, model, "messages", fn -> extract_user_message(body) end)
-      dispatch_provider(conn, provider, body, api_key, model)
+      Logger.debug(
+        "Messages request from #{api_key.name} model=#{model} stream=#{request.stream || false}"
+      )
+
+      Helpers.log_user_message(api_key, model, "messages", fn -> Request.user_text(request) end)
+      dispatch_provider(conn, provider, request, api_key, model)
     else
-      nil -> send_error(conn, 404, "not_found_error", "Model '#{model}' not found")
-      {:error, reason} -> send_error(conn, 403, "permission_error", reason)
+      nil ->
+        send_error(conn, 404, "not_found_error", "Model '#{model}' not found")
+
+      {:error, %Request.Error{} = error} ->
+        send_error(conn, 400, error.code, error.message)
+
+      {:error, reason} ->
+        send_error(conn, 403, "permission_error", reason)
     end
   end
 
-  defp dispatch_provider(conn, provider, body, api_key, model) do
-    case provider.call_native(body, api_key.id) do
-      {:ok, %{stream: stream, token: token}} ->
+  defp dispatch_provider(conn, provider, %Request{stream: true} = request, api_key, model) do
+    if function_exported?(provider, :stream_native, 2) do
+      stream_native_provider(conn, provider, request, api_key, model)
+    else
+      unsupported_api(conn, model)
+    end
+  end
+
+  defp dispatch_provider(conn, provider, %Request{} = request, api_key, model) do
+    if function_exported?(provider, :call_native, 2) do
+      call_native_provider(conn, provider, request, api_key, model)
+    else
+      unsupported_api(conn, model)
+    end
+  end
+
+  defp unsupported_api(conn, model) do
+    send_error(
+      conn,
+      400,
+      "invalid_request_error",
+      "Model '#{model}' does not support Messages API"
+    )
+  end
+
+  defp stream_native_provider(conn, provider, %Request{} = request, api_key, model) do
+    case provider.stream_native(Request.native_body(request), api_key.id) do
+      {:ok, %Result{stream: stream, token: token}} ->
         handle_stream(conn, provider, stream, api_key, model, token)
 
-      {:ok, %{response: response}} ->
+      {:error, result} ->
+        handle_provider_error(conn, provider, result)
+    end
+  end
+
+  defp call_native_provider(conn, provider, %Request{} = request, api_key, model) do
+    case provider.call_native(Request.native_body(request), api_key.id) do
+      {:ok, %Result{response: response}} when not is_nil(response) ->
         handle_non_stream(conn, provider, response, api_key, model)
 
-      {:error, %{error: error, status: status} = result} ->
-        mark_rate_limited_if_needed(status, result)
-        Logger.error("#{provider.name()} error (#{status}): #{error}")
-        send_error(conn, status, error_type(status), error)
+      {:ok, %Result{stream: stream, token: token}} when not is_nil(stream) ->
+        handle_stream(conn, provider, stream, api_key, model, token)
+
+      {:error, result} ->
+        handle_provider_error(conn, provider, result)
     end
+  end
+
+  defp handle_provider_error(conn, provider, %Result{error: error, status: status} = result) do
+    mark_rate_limited_if_needed(status, result)
+    Logger.error("#{provider.name()} error (#{status}): #{error}")
+    send_error(conn, status, error_type(status), error)
   end
 
   defp handle_non_stream(conn, provider, response, api_key, model) do
@@ -67,45 +118,57 @@ defmodule LLMProxy.Routes.Messages do
   end
 
   defp pipe_stream(conn, provider, stream, token) do
-    zero_usage = %{input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0}
+    zero_usage = Usage.zero()
 
     try do
-      Enum.reduce_while(stream, {conn, zero_usage}, fn event, {conn, usage} ->
+      Enum.reduce_while(stream, {conn, zero_usage}, fn %Event{} = event, {conn, usage} ->
+        data = event.data
         usage = merge_stream_usage(usage, event, provider)
 
-        case SSEWriter.write_named_event(conn, event["type"] || "unknown", event) do
+        case SSEWriter.write_named_event(conn, event.event || data["type"] || "unknown", data) do
           {:ok, conn} -> {:cont, {conn, usage}}
           {:error, _reason} -> {:halt, {conn, usage}}
         end
       end)
     rescue
-      e ->
+      e in [RuntimeError, Jason.DecodeError, Protocol.UndefinedError] ->
         handle_stream_error(conn, e, token)
         {conn, zero_usage}
     end
   end
 
-  defp merge_stream_usage(usage, %{"type" => "message_start", "message" => %{"usage" => msg_usage}}, provider) do
-    event_usage = provider.extract_usage(%{"usage" => msg_usage})
-
-    %{
-      usage
-      | input_tokens: event_usage.input_tokens,
-        cache_read_tokens: event_usage.cache_read_tokens,
-        cache_write_tokens: event_usage.cache_write_tokens
-    }
+  defp merge_stream_usage(usage, %Event{usage: event_usage}, _provider)
+       when not is_nil(event_usage) do
+    Usage.merge_max(usage, event_usage)
   end
 
-  defp merge_stream_usage(usage, %{"type" => "message_delta", "usage" => delta_usage}, _provider)
+  defp merge_stream_usage(
+         usage,
+         %Event{data: %{"type" => "message_start", "message" => %{"usage" => msg_usage}}},
+         provider
+       ) do
+    event_usage = provider.extract_usage(%{"usage" => msg_usage})
+
+    Usage.merge_max(usage, event_usage)
+  end
+
+  defp merge_stream_usage(
+         usage,
+         %Event{data: %{"type" => "message_delta", "usage" => delta_usage}},
+         _provider
+       )
        when is_map(delta_usage) do
-    %{usage | output_tokens: delta_usage["output_tokens"] || 0}
+    Usage.put_output_tokens(usage, delta_usage["output_tokens"] || 0)
   end
 
   defp merge_stream_usage(usage, _event, _provider), do: usage
 
   defp handle_stream_error(conn, error, token) do
     error_msg = Exception.message(error)
-    is_rate_limit = String.contains?(error_msg, "429") || String.contains?(error_msg, "rate_limit")
+
+    is_rate_limit =
+      String.contains?(error_msg, "429") || String.contains?(error_msg, "rate_limit")
+
     if is_rate_limit && token, do: Helpers.mark_rate_limited(token)
     Logger.error("Stream error: #{error_msg}")
 
@@ -125,17 +188,6 @@ defmodule LLMProxy.Routes.Messages do
   end
 
   defp mark_rate_limited_if_needed(_, _), do: :ok
-
-  defp extract_user_message(%{"messages" => messages}) when is_list(messages) do
-    case List.last(messages) do
-      %{"role" => "user", "content" => content} when is_binary(content) -> content
-      %{"role" => "user", "content" => parts} when is_list(parts) ->
-        if Enum.all?(parts, &(&1["type"] == "tool_result")), do: "", else: Helpers.extract_text_parts(parts)
-      _ -> ""
-    end
-  end
-
-  defp extract_user_message(_), do: ""
 
   defp error_type(429), do: "rate_limit_error"
   defp error_type(401), do: "authentication_error"

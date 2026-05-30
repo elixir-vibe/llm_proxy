@@ -9,9 +9,30 @@ defmodule LLMProxy.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      preferred_cli_env: [ci: :test],
-      dialyzer: [plt_add_apps: [:mix]]
+      dialyzer: [plt_add_apps: [:mix]],
+      test_coverage: [
+        summary: [threshold: 85],
+        ignore_modules: [
+          Mix.Tasks.FetchModels,
+          LLMProxy.CacheBodyReader,
+          LLMProxy.HTTP,
+          LLMProxy.Repo,
+          LLMProxy.Routes.Moderations,
+          LLMProxy.Routes.Setup,
+          LLMProxy.Providers.Anthropic,
+          LLMProxy.Providers.Behaviour,
+          LLMProxy.Providers.Helpers,
+          LLMProxy.Providers.OpenAI,
+          LLMProxy.Providers.OpenRouter,
+          LLMProxy.Web.Layouts,
+          LLMProxy.Web.Router.Helpers
+        ]
+      ]
     ]
+  end
+
+  def cli do
+    [preferred_envs: [ci: :test]]
   end
 
   def application do
@@ -42,9 +63,12 @@ defmodule LLMProxy.MixProject do
 
       # Dev/test
       {:mox, "~> 1.1", only: :test},
+      {:lazy_html, ">= 0.1.0", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:ex_dna, "~> 1.0", only: [:dev, :test], runtime: false}
+      {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:reach, "~> 2.6", only: [:dev, :test], runtime: false}
     ]
   end
 
@@ -56,10 +80,12 @@ defmodule LLMProxy.MixProject do
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       ci: [
         "compile --warnings-as-errors",
+        "format --check-formatted",
         "test",
         "credo --strict",
         "dialyzer",
-        "ex_dna"
+        "ex_dna --max-clones 0",
+        "reach.check --arch --smells"
       ]
     ]
   end
