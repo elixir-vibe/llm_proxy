@@ -78,8 +78,12 @@ defmodule LLMProxy.Protocol.Anthropic do
       %ContentPart{type: :image_url, url: url} ->
         %{"type" => "image", "source" => %{"type" => "url", "url" => url}}
 
-      %ContentPart{type: :thinking, text: text} ->
+      %ContentPart{type: :thinking, metadata: %{"redacted" => true, "data" => data}} ->
+        %{"type" => "redacted_thinking", "data" => data}
+
+      %ContentPart{type: :thinking, text: text, metadata: metadata} ->
         %{"type" => "thinking", "thinking" => text || ""}
+        |> maybe_put("signature", metadata["signature"])
 
       %ContentPart{type: :image, data: data, media_type: media_type} ->
         %{

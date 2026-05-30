@@ -194,14 +194,14 @@ defmodule LLMProxy.Protocol.Request do
     {:ok, ContentPart.text(text)}
   end
 
-  defp content_part(%{"type" => "image_url", "image_url" => %{"url" => url}}, :openai)
+  defp content_part(%{"type" => "image_url", "image_url" => %{"url" => url} = image}, :openai)
        when is_binary(url) do
-    {:ok, ContentPart.image_url(url)}
+    {:ok, ContentPart.image_url(url, Map.take(image, ["detail"]))}
   end
 
-  defp content_part(%{"type" => "input_image", "image_url" => url}, :responses)
+  defp content_part(%{"type" => "input_image", "image_url" => url} = image, :responses)
        when is_binary(url) do
-    {:ok, ContentPart.image_url(url)}
+    {:ok, ContentPart.image_url(url, Map.take(image, ["detail"]))}
   end
 
   defp content_part(%{"type" => "input_file", "file_id" => file_id}, :responses)
@@ -223,9 +223,14 @@ defmodule LLMProxy.Protocol.Request do
      }}
   end
 
-  defp content_part(%{"type" => "thinking", "thinking" => text}, :anthropic)
+  defp content_part(%{"type" => "thinking", "thinking" => text} = block, :anthropic)
        when is_binary(text) do
-    {:ok, ContentPart.thinking(text)}
+    {:ok, ContentPart.thinking(text, Map.take(block, ["signature"]))}
+  end
+
+  defp content_part(%{"type" => "redacted_thinking", "data" => data}, :anthropic)
+       when is_binary(data) do
+    {:ok, ContentPart.thinking("", %{"redacted" => true, "data" => data})}
   end
 
   defp content_part(

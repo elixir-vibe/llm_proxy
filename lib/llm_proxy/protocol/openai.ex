@@ -66,6 +66,7 @@ defmodule LLMProxy.Protocol.OpenAI do
     %{"role" => "tool", "tool_call_id" => id, "content" => text_content(content)}
   end
 
+  defp content_to_openai([]), do: ""
   defp content_to_openai([%ContentPart{type: :text, text: text}]), do: text || ""
 
   defp content_to_openai(content) do
@@ -73,8 +74,8 @@ defmodule LLMProxy.Protocol.OpenAI do
       %ContentPart{type: :text, text: text} ->
         %{"type" => "text", "text" => text || ""}
 
-      %ContentPart{type: :image_url, url: url} ->
-        %{"type" => "image_url", "image_url" => %{"url" => url}}
+      %ContentPart{type: :image_url, url: url, metadata: metadata} ->
+        %{"type" => "image_url", "image_url" => image_url_payload(url, metadata)}
 
       %ContentPart{type: :image, data: data, media_type: media_type} ->
         %{"type" => "image_url", "image_url" => %{"url" => data_url(media_type, data)}}
@@ -88,6 +89,11 @@ defmodule LLMProxy.Protocol.OpenAI do
       %ContentPart{type: :thinking, text: text} ->
         %{"type" => "text", "text" => text || ""}
     end)
+  end
+
+  defp image_url_payload(url, metadata) do
+    %{"url" => url}
+    |> maybe_put("detail", metadata["detail"])
   end
 
   defp data_url(media_type, data), do: "data:#{media_type};base64,#{data}"
