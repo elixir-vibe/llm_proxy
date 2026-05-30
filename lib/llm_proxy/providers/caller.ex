@@ -18,11 +18,19 @@ defmodule LLMProxy.Providers.Caller do
 
   def call(provider, %Request{} = body, user_id, model) do
     attempts = build_attempts(provider, model)
+    call_attempts(attempts, body, user_id)
+  end
+
+  def call_attempts(attempts, %Request{} = body, user_id) when is_list(attempts) do
     try_call(attempts, body, user_id, nil)
   end
 
   def stream(provider, %Request{} = body, user_id, model) do
     attempts = build_attempts(provider, model)
+    stream_attempts(attempts, body, user_id)
+  end
+
+  def stream_attempts(attempts, %Request{} = body, user_id) when is_list(attempts) do
     try_stream(attempts, body, user_id, nil)
   end
 

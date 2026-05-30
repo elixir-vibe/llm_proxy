@@ -4,6 +4,7 @@ defmodule LLMProxy.Catalog do
   """
 
   alias LLMProxy.Catalog.Model
+  alias LLMProxy.Routing.{Ordered, Shuffle}
 
   @catalog_key :llm_proxy_catalog
 
@@ -40,10 +41,23 @@ defmodule LLMProxy.Catalog do
 
   @spec resolve(String.t()) :: {:ok, LLMProxy.Catalog.Deployment.t()} | :error
   def resolve(name) when is_binary(name) do
+    case resolve_deployments(name) do
+      {:ok, [deployment | _]} -> {:ok, deployment}
+      _ -> :error
+    end
+  end
+
+  @spec resolve_deployments(String.t()) :: {:ok, [LLMProxy.Catalog.Deployment.t()]} | :error
+  def resolve_deployments(name) when is_binary(name) do
     case get_model(name) do
-      %Model{deployments: [deployment | _]} -> {:ok, deployment}
-      %Model{deployments: []} -> :error
-      nil -> :error
+      %Model{deployments: []} ->
+        :error
+
+      %Model{deployments: deployments, routing_strategy: strategy} ->
+        {:ok, route(strategy, deployments)}
+
+      nil ->
+        :error
     end
   end
 
@@ -60,6 +74,9 @@ defmodule LLMProxy.Catalog do
 
   defp normalize_model(%Model{} = model), do: model
   defp normalize_model(attrs), do: Model.new(attrs)
+
+  defp route(:shuffle, deployments), do: Shuffle.order(deployments)
+  defp route(_strategy, deployments), do: Ordered.order(deployments)
 
   defp owner([%{provider: provider} | _]) when is_atom(provider) do
     if function_exported?(provider, :name, 0), do: provider.name(), else: inspect(provider)

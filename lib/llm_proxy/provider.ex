@@ -37,7 +37,8 @@ defmodule LLMProxy.Provider do
          {:ok, api_key} <- fetch_api_key(actor),
          :ok <- check_quota(actor, api_key),
          :ok <- Helpers.check_model_access(api_key, request.model),
-         {:ok, {provider, upstream_model}} <- Registry.resolve_model(request.model) do
+         {:ok, [{provider, upstream_model} | _] = attempts} <-
+           Registry.resolve_attempts(request.model) do
       Logger.debug(
         "Provider request from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
@@ -46,7 +47,7 @@ defmodule LLMProxy.Provider do
         Request.user_text(request)
       end)
 
-      call_provider(provider, request, api_key, upstream_model, opts)
+      call_provider(provider, request, api_key, upstream_model, attempts, opts)
     else
       :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
       {:error, {:missing_api_key, _}} = error -> error
@@ -171,11 +172,11 @@ defmodule LLMProxy.Provider do
   defp check_quota(%Actor{kind: :master}, _api_key), do: :ok
   defp check_quota(_actor, api_key), do: LLMProxy.Storage.check_quota(api_key)
 
-  defp call_provider(provider, request, api_key, upstream_model, opts) do
+  defp call_provider(provider, request, api_key, upstream_model, attempts, opts) do
     start = System.monotonic_time(:millisecond)
 
     case Telemetry.with_provider_span(provider.name(), upstream_model, :call, fn ->
-           Caller.call(provider, request, api_key.id, upstream_model)
+           Caller.call_attempts(attempts, request, api_key.id)
          end) do
       {:ok, %Result{response: provider_body, provider: used_provider, model: used_model}} ->
         duration_ms = System.monotonic_time(:millisecond) - start

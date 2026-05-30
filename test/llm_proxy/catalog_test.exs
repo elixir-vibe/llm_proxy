@@ -7,7 +7,7 @@ defmodule LLMProxy.CatalogTest do
 
   defmodule Provider do
     def name, do: "catalog-provider"
-    def models, do: ["upstream-model"]
+    def models, do: ["upstream-model", "second-upstream-model"]
   end
 
   setup do
@@ -45,7 +45,21 @@ defmodule LLMProxy.CatalogTest do
     })
 
     assert {:ok, {Provider, "upstream-model"}} = Registry.resolve_model("fast")
+    assert {:ok, [{Provider, "upstream-model"}]} = Registry.resolve_attempts("fast")
     assert Provider == Registry.get_provider("fast")
+  end
+
+  test "catalog deployments are ordered by strategy" do
+    Catalog.put_model(%{
+      name: "ordered",
+      deployments: [
+        %{provider: Provider, upstream_model: "second-upstream-model", order: 2},
+        %{provider: Provider, upstream_model: "upstream-model", order: 1}
+      ]
+    })
+
+    assert {:ok, [{Provider, "upstream-model"}, {Provider, "second-upstream-model"}]} =
+             Registry.resolve_attempts("ordered")
   end
 
   test "all models includes visible aliases and hides hidden aliases" do

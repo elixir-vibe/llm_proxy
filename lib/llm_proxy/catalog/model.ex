@@ -3,11 +3,13 @@ defmodule LLMProxy.Catalog.Model do
 
   alias LLMProxy.Catalog.Deployment
 
-  defstruct [:name, hidden: false, deployments: [], metadata: %{}]
+  defstruct [:name, hidden: false, routing_strategy: :ordered, deployments: [], metadata: %{}]
 
+  @type routing_strategy :: :ordered | :shuffle
   @type t :: %__MODULE__{
           name: String.t(),
           hidden: boolean(),
+          routing_strategy: routing_strategy(),
           deployments: [Deployment.t()],
           metadata: map()
         }
@@ -19,6 +21,8 @@ defmodule LLMProxy.Catalog.Model do
     %__MODULE__{
       name: fetch!(attrs, :name, "name"),
       hidden: get(attrs, :hidden, "hidden", false),
+      routing_strategy:
+        routing_strategy(get(attrs, :routing_strategy, "routing_strategy", :ordered)),
       deployments: attrs |> get(:deployments, "deployments", []) |> Enum.map(&Deployment.new/1),
       metadata: get(attrs, :metadata, "metadata", %{})
     }
@@ -31,4 +35,8 @@ defmodule LLMProxy.Catalog.Model do
   defp get(attrs, atom_key, string_key, default) do
     Map.get(attrs, atom_key, Map.get(attrs, string_key, default))
   end
+
+  defp routing_strategy(:shuffle), do: :shuffle
+  defp routing_strategy("shuffle"), do: :shuffle
+  defp routing_strategy(_strategy), do: :ordered
 end
