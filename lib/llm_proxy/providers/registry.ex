@@ -6,6 +6,8 @@ defmodule LLMProxy.Providers.Registry do
   Model→provider lookup is O(1).
   """
 
+  alias LLMProxy.Routing.Attempt
+
   @registry_key :llm_proxy_providers
   @model_index_key :llm_proxy_model_index
 
@@ -37,22 +39,25 @@ defmodule LLMProxy.Providers.Registry do
 
   def resolve_model(model_id) when is_binary(model_id) do
     case resolve_attempts(model_id) do
-      {:ok, [attempt | _]} -> {:ok, attempt}
-      :error -> :error
+      {:ok, [%Attempt{provider: provider, model: upstream_model} | _]} ->
+        {:ok, {provider, upstream_model}}
+
+      :error ->
+        :error
     end
   end
 
   def resolve_attempts(model_id) when is_binary(model_id) do
     case LLMProxy.Catalog.resolve_deployments(model_id) do
       {:ok, deployments} ->
-        {:ok, Enum.map(deployments, &{&1.provider, &1.upstream_model}) ++ get_fallbacks(model_id)}
+        {:ok, Enum.map(deployments, &Attempt.new/1) ++ get_fallbacks(model_id)}
 
       :error ->
         model_index = :persistent_term.get(@model_index_key, %{})
 
         case Map.get(model_index, model_id) do
           nil -> :error
-          provider -> {:ok, [{provider, model_id} | get_fallbacks(model_id)]}
+          provider -> {:ok, [Attempt.new({provider, model_id}) | get_fallbacks(model_id)]}
         end
     end
   end
@@ -68,7 +73,7 @@ defmodule LLMProxy.Providers.Registry do
 
     for fb_model <- fallback_models,
         {:ok, {provider, upstream_model}} <- [resolve_model_without_fallbacks(fb_model)] do
-      {provider, upstream_model}
+      Attempt.new({provider, upstream_model})
     end
   end
 

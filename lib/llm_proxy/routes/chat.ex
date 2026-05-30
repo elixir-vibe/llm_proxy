@@ -62,7 +62,9 @@ defmodule LLMProxy.Routes.Chat do
            usage_metadata: Map.to_list(meta)
          ) do
       {:ok, response} ->
-        Helpers.send_json(conn, 200, response.body)
+        conn
+        |> put_resp_header("x-llm-proxy-trace-id", response.trace_id)
+        |> Helpers.send_json(200, response.body)
 
       {:error, {:provider, %Result{error: error, status: status}}} ->
         Logger.error("#{provider.name()} error (#{status}): #{error}")

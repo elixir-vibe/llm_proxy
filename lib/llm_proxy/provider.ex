@@ -17,6 +17,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Providers.{Caller, Registry, Result}
   alias LLMProxy.Response
   alias LLMProxy.Routes.Helpers
+  alias LLMProxy.Routing.Attempt
   alias LLMProxy.Telemetry
   alias ReqLLM.Message.ContentPart
 
@@ -37,7 +38,7 @@ defmodule LLMProxy.Provider do
          {:ok, api_key} <- fetch_api_key(actor),
          :ok <- check_quota(actor, api_key),
          :ok <- Helpers.check_model_access(api_key, request.model),
-         {:ok, [{provider, upstream_model} | _] = attempts} <-
+         {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request.model) do
       Logger.debug(
         "Provider request from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
@@ -175,9 +176,15 @@ defmodule LLMProxy.Provider do
   defp call_provider(provider, request, api_key, upstream_model, attempts, opts) do
     start = System.monotonic_time(:millisecond)
 
-    case Telemetry.with_provider_span(provider.name(), upstream_model, :call, fn ->
-           Caller.call_attempts(attempts, request, api_key.id)
-         end) do
+    trace_id = Keyword.get(opts, :trace_id) || LLMProxy.Trace.new_id()
+
+    case Telemetry.with_provider_span(
+           provider.name(),
+           upstream_model,
+           :call,
+           fn -> Caller.call_attempts(attempts, request, api_key.id) end,
+           %{"llm_proxy.trace_id" => trace_id}
+         ) do
       {:ok, %Result{response: provider_body, provider: used_provider, model: used_model}} ->
         duration_ms = System.monotonic_time(:millisecond) - start
         usage = used_provider.extract_usage(provider_body)
@@ -187,7 +194,7 @@ defmodule LLMProxy.Provider do
             duration_ms: duration_ms,
             provider: used_provider.name(),
             tags: request.tags,
-            metadata: request.metadata
+            metadata: Map.put(request.metadata || %{}, "trace_id", trace_id)
           }
           |> Map.merge(Map.new(Keyword.get(opts, :usage_metadata, [])))
 
@@ -209,7 +216,8 @@ defmodule LLMProxy.Provider do
            provider: used_provider,
            model: used_model,
            request: request,
-           usage: usage
+           usage: usage,
+           trace_id: trace_id
          }}
 
       {:error, %Result{} = result} ->

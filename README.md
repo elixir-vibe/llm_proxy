@@ -13,7 +13,8 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 - **Anthropic Messages** (`/v1/messages`) with streaming support
 - **OpenAI Responses** (`/v1/responses`) with streaming support
 - **OpenAI Moderations** (`/v1/moderations`)
-- **Provider system** with model-based dispatch, retries, and fallback models
+- **Provider system** with model-based dispatch, retries, fallback models, and catalog aliases
+- **Catalog routing** with ordered/shuffled deployments, per-deployment timeouts, and circuit breakers
 - **Token pool** with multiple upstream API keys, stable user pinning, and cooldowns
 - **Usage tracking** for input/output/cache tokens and estimated cost
 - **Quota enforcement** with per-key token/message/cache controls
@@ -133,6 +134,41 @@ Require the master key.
 
 `/setup` is not mounted by default in embeddable router usage. It exists for local/onboarding helper flows such as install script, model listing, and client config snippets.
 
+## Catalog routing
+
+Public model names can be backed by one or more upstream deployments:
+
+```elixir
+config :llm_proxy,
+  catalog: [
+    %{
+      name: "fast",
+      routing_strategy: :ordered,
+      deployments: [
+        %{
+          provider: LLMProxy.Providers.OpenAI,
+          upstream_model: "gpt-4o-mini",
+          timeout_ms: 15_000,
+          failure_threshold: 3,
+          cooldown_ms: 30_000
+        },
+        %{
+          provider: LLMProxy.Providers.Anthropic,
+          upstream_model: "claude-3-haiku-20240307",
+          order: 2
+        }
+      ]
+    }
+  ]
+```
+
+Routing strategies:
+
+- `:ordered` — stable ordered fallback by deployment `order`
+- `:shuffle` — shuffle deployments within each `order` group
+
+Retryable provider failures and timeouts open a deployment-level circuit breaker after `failure_threshold` failures. Open deployments are skipped until `cooldown_ms` elapses.
+
 ## Bundled providers
 
 - **OpenAI** — GPT/o-series models via standard API key
@@ -156,6 +192,8 @@ Environment variables can be loaded from `.env` through Dotenvy.
 | `OPENROUTER_API_KEYS` | Comma-separated OpenRouter API keys |
 | `LLM_FALLBACKS` | JSON map of model fallback chains |
 | `LLM_MAX_RETRIES` | Number of fallback models to try, default `1` |
+
+HTTP chat responses include `x-llm-proxy-trace-id`; local calls expose the same value as `response.trace_id`.
 
 ## Setup
 

@@ -3,10 +3,25 @@ defmodule LLMProxy.Telemetry do
 
   require OpenTelemetry.Tracer, as: Tracer
 
-  def with_provider_span(provider_name, model, operation, fun) do
+  def with_provider_span(provider_name, model, operation, fun, attrs \\ %{}) do
     Tracer.with_span "llm_proxy.provider.#{operation}",
-      attributes: %{"llm.provider": provider_name, "llm.model": model} do
+      attributes: Map.merge(%{"llm.provider" => provider_name, "llm.model" => model}, attrs) do
       fun.()
     end
+  end
+
+  def emit(event, attempt, measurements \\ %{}, metadata \\ %{}) do
+    :telemetry.execute(
+      [:llm_proxy | event],
+      measurements,
+      Map.merge(
+        %{
+          provider: attempt.provider.name(),
+          model: attempt.model,
+          timeout_ms: attempt.timeout_ms
+        },
+        metadata
+      )
+    )
   end
 end

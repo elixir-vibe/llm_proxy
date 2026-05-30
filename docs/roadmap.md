@@ -77,30 +77,36 @@ limits: [
 
 ### 3. Routing strategies
 
-Current behavior supports provider resolution and fallback chains. Add explicit routing strategies over catalog deployments.
+Current behavior supports catalog-aware routing over provider deployments.
 
-Targets:
+Implemented:
 
 - ordered fallback
+- random shuffle within order groups
+- cooldown-aware routing through deployment circuit breakers
+- request timeout per deployment
+
+Future targets:
+
 - round robin
-- random shuffle
 - least busy
-- cooldown-aware routing
 - lowest cost
 - latency-aware routing
-- request timeout per deployment
 
 ### 4. Circuit breakers
 
 Move beyond single-token cooldowns to deployment-level health state.
 
-Targets:
+Implemented:
 
 - open/half-open/closed breaker state
 - failure threshold per deployment
 - cooldown duration
-- retry-after handling
 - observable breaker events
+
+Future target:
+
+- retry-after handling
 
 ### 5. Caching
 
@@ -137,10 +143,15 @@ Targets:
 
 Current storage has usage logs, traces, message logs, and basic telemetry. Improve it without locking users into a hosted product.
 
-Targets:
+Implemented:
 
-- structured trace IDs surfaced in HTTP response headers
-- OpenTelemetry spans for routing, provider calls, retries, fallback, cache, guardrails
+- structured trace IDs surfaced in chat HTTP response headers and local `LLMProxy.Response`
+- telemetry events for routing attempts and circuit breaker transitions
+- OpenTelemetry provider spans with trace ID attributes
+
+Future targets:
+
+- spans for cache and guardrails after those hooks exist
 - feedback API linked to trace IDs
 - export hooks for external analytics
 
@@ -159,9 +170,12 @@ First version can use `:erpc.call/4`. Streaming can follow with a process-backed
 
 ## Near-term order
 
-1. Update docs and test layout to match the current architecture.
-2. Add `LLMProxy.Catalog` structs and config loader without changing routing behavior yet.
-3. Migrate provider registry reads to catalog-aware resolution.
-4. Replace quota fields with a limit evaluator while keeping migration-compatible schema fields.
-5. Add timeout and circuit breaker state.
-6. Add explicit routing strategy modules.
+1. ✅ Update docs and test layout to match the current architecture.
+2. ✅ Add `LLMProxy.Catalog` structs and config loader.
+3. ✅ Migrate provider registry reads to catalog-aware resolution.
+4. ✅ Replace quota fields with a limit evaluator while keeping migration-compatible schema fields.
+5. ✅ Add timeout and circuit breaker state.
+6. ✅ Add explicit routing strategy modules.
+7. Add cache hooks.
+8. Add guardrail behaviours.
+9. Add remote BEAM calls.

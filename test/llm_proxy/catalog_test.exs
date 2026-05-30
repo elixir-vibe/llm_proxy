@@ -4,6 +4,7 @@ defmodule LLMProxy.CatalogTest do
   alias LLMProxy.Catalog
   alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Providers.Registry
+  alias LLMProxy.Routing.Attempt
 
   defmodule Provider do
     def name, do: "catalog-provider"
@@ -45,7 +46,10 @@ defmodule LLMProxy.CatalogTest do
     })
 
     assert {:ok, {Provider, "upstream-model"}} = Registry.resolve_model("fast")
-    assert {:ok, [{Provider, "upstream-model"}]} = Registry.resolve_attempts("fast")
+
+    assert {:ok, [%Attempt{provider: Provider, model: "upstream-model"}]} =
+             Registry.resolve_attempts("fast")
+
     assert Provider == Registry.get_provider("fast")
   end
 
@@ -58,8 +62,11 @@ defmodule LLMProxy.CatalogTest do
       ]
     })
 
-    assert {:ok, [{Provider, "upstream-model"}, {Provider, "second-upstream-model"}]} =
-             Registry.resolve_attempts("ordered")
+    assert {:ok,
+            [
+              %Attempt{provider: Provider, model: "upstream-model"},
+              %Attempt{provider: Provider, model: "second-upstream-model"}
+            ]} = Registry.resolve_attempts("ordered")
   end
 
   test "all models includes visible aliases and hides hidden aliases" do

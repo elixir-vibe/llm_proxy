@@ -92,6 +92,7 @@ defmodule LLMProxy.Routes.ChatTest do
       |> Chat.call(Chat.init([]))
 
     assert conn.status == 200
+    assert Plug.Conn.get_resp_header(conn, "x-llm-proxy-trace-id") != []
     assert Jason.decode!(conn.resp_body)["model"] == "fake-chat-model"
 
     [message] = Storage.get_messages(%{per_page: 10})
