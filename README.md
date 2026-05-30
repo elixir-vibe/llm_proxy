@@ -15,6 +15,7 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 - **OpenAI Moderations** (`/v1/moderations`)
 - **Provider system** with model-based dispatch, retries, fallback models, and catalog aliases
 - **Catalog routing** with ordered/shuffled deployments, per-deployment timeouts, and circuit breakers
+- **Guardrail hooks** for request/response/stream policy without bundling a policy engine
 - **Token pool** with multiple upstream API keys, stable user pinning, and cooldowns
 - **Usage tracking** for input/output/cache tokens and estimated cost
 - **Quota enforcement** with per-key token/message/cache controls
@@ -157,6 +158,26 @@ Require the master key.
 ### Optional setup routes
 
 `/setup` is not mounted by default in embeddable router usage. It exists for local/onboarding helper flows such as install script, model listing, and client config snippets.
+
+## Guardrail hooks
+
+Host apps can configure policy modules around the provider execution path:
+
+```elixir
+config :llm_proxy, guardrails: [MyApp.LLMPolicy]
+```
+
+```elixir
+defmodule MyApp.LLMPolicy do
+  @behaviour LLMProxy.Guardrail
+
+  def before_request(request, _context), do: {:ok, request}
+  def after_response(response, _context), do: {:ok, response}
+  def on_stream_event(event, _context), do: {:ok, event}
+end
+```
+
+Return `{:error, reason}` from a hook to reject the request/response. Returning `{:ok, nil}` from `on_stream_event/2` filters a stream chunk.
 
 ## Catalog routing
 

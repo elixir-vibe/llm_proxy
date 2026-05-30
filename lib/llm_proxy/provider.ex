@@ -13,6 +13,7 @@ defmodule LLMProxy.Provider do
   require Logger
 
   alias LLMProxy.Actor
+  alias LLMProxy.Guardrails
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Caller, Registry, Result}
   alias LLMProxy.ReqLLM.Model
@@ -28,6 +29,7 @@ defmodule LLMProxy.Provider do
           | {:not_found, String.t()}
           | {:missing_api_key, term()}
           | {:invalid_api_key, String.t()}
+          | {:guardrail, term()}
           | {:provider, Result.t()}
 
   @spec call(Request.t(), Actor.t() | map() | String.t(), keyword()) ::
@@ -38,6 +40,7 @@ defmodule LLMProxy.Provider do
     with {:ok, actor} <- normalize_actor(actor_or_key),
          {:ok, api_key} <- fetch_api_key(actor),
          :ok <- check_quota(actor, api_key),
+         {:ok, request} <- guard_before_request(request, actor, api_key, route),
          :ok <- Helpers.check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request.model) do
@@ -49,11 +52,12 @@ defmodule LLMProxy.Provider do
         Request.user_text(request)
       end)
 
-      call_provider(provider, request, api_key, upstream_model, attempts, opts)
+      call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
     else
       :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
       {:error, {:missing_api_key, _}} = error -> error
       {:error, {:invalid_api_key, _}} = error -> error
+      {:error, {:guardrail, _reason}} = error -> error
       {:error, reason} when is_binary(reason) -> {:error, {:permission, reason}}
     end
   end
@@ -171,10 +175,32 @@ defmodule LLMProxy.Provider do
   defp fetch_api_key(%Actor{api_key: %{id: _id} = api_key}), do: {:ok, api_key}
   defp fetch_api_key(%Actor{} = actor), do: {:error, {:missing_api_key, actor}}
 
+  defp guard_before_request(request, actor, api_key, route) do
+    context = guard_context(request, actor, api_key, route)
+
+    case Guardrails.before_request(request, context) do
+      {:ok, request} -> {:ok, request}
+      {:error, reason} -> {:error, {:guardrail, reason}}
+    end
+  end
+
+  defp guard_context(request, actor, api_key, route, extra \\ %{}) do
+    Map.merge(
+      %{
+        actor: actor,
+        api_key: api_key,
+        route: route,
+        model: request.model,
+        metadata: request.metadata || %{}
+      },
+      extra
+    )
+  end
+
   defp check_quota(%Actor{kind: :master}, _api_key), do: :ok
   defp check_quota(_actor, api_key), do: LLMProxy.Storage.check_quota(api_key)
 
-  defp call_provider(provider, request, api_key, upstream_model, attempts, opts) do
+  defp call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
     start = System.monotonic_time(:millisecond)
 
     trace_id = Keyword.get(opts, :trace_id) || LLMProxy.Trace.new_id()
@@ -190,36 +216,50 @@ defmodule LLMProxy.Provider do
         duration_ms = System.monotonic_time(:millisecond) - start
         usage = used_provider.extract_usage(provider_body)
 
-        tracking_opts =
-          %{
-            duration_ms: duration_ms,
-            provider: used_provider.name(),
-            tags: request.tags,
-            metadata: Map.put(request.metadata || %{}, "trace_id", trace_id)
-          }
-          |> Map.merge(Map.new(Keyword.get(opts, :usage_metadata, [])))
+        response = %Response{
+          body: used_provider.to_openai_response(provider_body, used_model),
+          provider_body: provider_body,
+          provider: used_provider,
+          model: used_model,
+          request: request,
+          usage: usage,
+          trace_id: trace_id
+        }
 
-        Helpers.track_usage(api_key, used_model, usage, tracking_opts)
+        context =
+          guard_context(request, actor, api_key, route, %{
+            provider: used_provider,
+            model: used_model,
+            trace_id: trace_id
+          })
 
-        Helpers.maybe_record_trace(
-          api_key,
-          used_model,
-          request.body,
-          provider_body,
-          usage,
-          tracking_opts
-        )
+        case Guardrails.after_response(response, context) do
+          {:ok, response} ->
+            tracking_opts =
+              %{
+                duration_ms: duration_ms,
+                provider: used_provider.name(),
+                tags: request.tags,
+                metadata: Map.put(request.metadata || %{}, "trace_id", trace_id)
+              }
+              |> Map.merge(Map.new(Keyword.get(opts, :usage_metadata, [])))
 
-        {:ok,
-         %Response{
-           body: used_provider.to_openai_response(provider_body, used_model),
-           provider_body: provider_body,
-           provider: used_provider,
-           model: used_model,
-           request: request,
-           usage: usage,
-           trace_id: trace_id
-         }}
+            Helpers.track_usage(api_key, used_model, response.usage, tracking_opts)
+
+            Helpers.maybe_record_trace(
+              api_key,
+              used_model,
+              request.body,
+              response.provider_body,
+              response.usage,
+              tracking_opts
+            )
+
+            {:ok, response}
+
+          {:error, reason} ->
+            {:error, {:guardrail, reason}}
+        end
 
       {:error, %Result{} = result} ->
         {:error, {:provider, result}}

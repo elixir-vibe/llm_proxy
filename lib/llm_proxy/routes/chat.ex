@@ -5,6 +5,7 @@ defmodule LLMProxy.Routes.Chat do
   require Logger
 
   alias LLMProxy.Actor
+  alias LLMProxy.Guardrails
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.{OpenAI, Request}
   alias LLMProxy.Provider
@@ -75,31 +76,31 @@ defmodule LLMProxy.Routes.Chat do
 
       {:error, {:not_found, reason}} ->
         Helpers.send_json(conn, 404, %{error: reason})
+
+      {:error, {:guardrail, reason}} ->
+        Helpers.send_json(conn, 403, %{error: inspect(reason)})
     end
   end
 
   defp handle_stream(conn, provider, api_key, %Request{} = request, model, meta) do
-    Helpers.log_user_message(api_key, model, "chat", fn -> Request.user_text(request) end)
+    case Guardrails.before_request(request, stream_context(api_key, request, model)) do
+      {:ok, request} ->
+        do_handle_stream(conn, provider, api_key, request, model, meta)
+
+      {:error, reason} ->
+        Helpers.send_json(conn, 403, %{error: inspect(reason)})
+    end
+  end
+
+  defp do_handle_stream(conn, provider, api_key, %Request{} = request, model, meta) do
+    Helpers.log_user_message(api_key, request.model, "chat", fn -> Request.user_text(request) end)
     start = System.monotonic_time(:millisecond)
 
     case Telemetry.with_provider_span(provider.name(), model, :stream, fn ->
            Caller.stream(provider, request, api_key.id, model)
          end) do
       {:ok, %Result{stream: stream, provider: used_provider, model: used_model}} ->
-        conn = SSEWriter.start_sse(conn)
-        from_protocol = provider_protocol(used_provider)
-        {conn, usage, ttft_ms} = pipe_stream(conn, stream, start, from_protocol, used_model)
-        duration_ms = System.monotonic_time(:millisecond) - start
-
-        opts =
-          Map.merge(meta, %{
-            duration_ms: duration_ms,
-            ttft_ms: ttft_ms,
-            provider: used_provider.name()
-          })
-
-        Helpers.track_usage(api_key, used_model, usage, opts)
-        conn
+        finish_stream(conn, stream, start, used_provider, used_model, api_key, request, meta)
 
       {:error, %Result{error: error, status: status}} ->
         Logger.error("#{provider.name()} stream error (#{status}): #{error}")
@@ -107,14 +108,46 @@ defmodule LLMProxy.Routes.Chat do
     end
   end
 
-  defp pipe_stream(conn, stream, start, from_protocol, model) do
+  defp finish_stream(conn, stream, start, used_provider, used_model, api_key, request, meta) do
+    conn = SSEWriter.start_sse(conn)
+    from_protocol = provider_protocol(used_provider)
+    context = stream_context(api_key, request, used_model, provider: used_provider)
+    {conn, usage, ttft_ms} = pipe_stream(conn, stream, start, from_protocol, used_model, context)
+    duration_ms = System.monotonic_time(:millisecond) - start
+
+    opts =
+      Map.merge(meta, %{
+        duration_ms: duration_ms,
+        ttft_ms: ttft_ms,
+        provider: used_provider.name()
+      })
+
+    Helpers.track_usage(api_key, used_model, usage, opts)
+    conn
+  end
+
+  defp pipe_stream(conn, stream, start, from_protocol, model, context) do
     usage = Usage.zero()
 
     Enum.reduce_while(stream, {conn, usage, nil}, fn %Event{} = event, {conn, usage, ttft} ->
-      usage = merge_stream_usage(usage, event)
-      ttft = ttft || System.monotonic_time(:millisecond) - start
+      case Guardrails.on_stream_event(event, context) do
+        {:ok, nil} ->
+          {:cont, {conn, usage, ttft}}
 
-      write_stream_event(conn, usage, ttft, OpenAI.stream_event(event.data, from_protocol, model))
+        {:ok, %Event{} = event} ->
+          usage = merge_stream_usage(usage, event)
+          ttft = ttft || System.monotonic_time(:millisecond) - start
+
+          write_stream_event(
+            conn,
+            usage,
+            ttft,
+            OpenAI.stream_event(event.data, from_protocol, model)
+          )
+
+        {:error, _reason} ->
+          {:halt, {conn, usage, ttft}}
+      end
     end)
     |> then(fn {conn, usage, ttft} ->
       {:ok, conn} = SSEWriter.write_done(conn)
@@ -129,6 +162,16 @@ defmodule LLMProxy.Routes.Chat do
       {:ok, conn} -> {:cont, {conn, usage, ttft}}
       {:error, _reason} -> {:halt, {conn, usage, ttft}}
     end
+  end
+
+  defp stream_context(api_key, request, model, extra \\ []) do
+    %{
+      api_key: api_key,
+      route: :chat,
+      model: model,
+      metadata: request.metadata || %{}
+    }
+    |> Map.merge(Map.new(extra))
   end
 
   defp provider_protocol(provider) do

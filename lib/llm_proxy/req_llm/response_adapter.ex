@@ -29,6 +29,7 @@ defmodule LLMProxy.ReqLLM.ResponseAdapter do
   def error_status({:permission, _}), do: 403
   def error_status({:missing_api_key, _}), do: 401
   def error_status({:invalid_api_key, _}), do: 401
+  def error_status({:guardrail, _}), do: 403
   def error_status({:provider, %{status: status}}) when is_integer(status), do: status
   def error_status(_reason), do: 500
 

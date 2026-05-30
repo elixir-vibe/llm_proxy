@@ -125,19 +125,19 @@ Semantic caching should remain optional and not be part of the initial core.
 
 Keep guardrails as behaviours/hooks, not a bundled policy engine.
 
-Potential callbacks:
+Implemented callbacks:
 
 ```elixir
 c:LLMProxy.Guardrail.before_request/2
-c:LLMProxy.Guardrail.after_response/3
-c:LLMProxy.Guardrail.on_stream_event/3
+c:LLMProxy.Guardrail.after_response/2
+c:LLMProxy.Guardrail.on_stream_event/2
 ```
 
-Targets:
+Implemented:
 
 - deterministic allow/deny/mask hooks
-- provider-independent request/response shape
-- metadata for trace records
+- provider-independent request/response shape via `%LLMProxy.Protocol.Request{}`, `%LLMProxy.Response{}`, and `%LLMProxy.Stream.Event{}`
+- context metadata for route/model/api key/provider
 
 ### 7. Observability
 
@@ -186,5 +186,5 @@ First version uses `:erpc.call/4`. Streaming can follow with a process-backed pr
 5. ✅ Add timeout and circuit breaker state.
 6. ✅ Add explicit routing strategy modules.
 7. Add cache hooks.
-8. Add guardrail behaviours.
+8. ✅ Add guardrail behaviours.
 9. ✅ Add remote BEAM calls.
