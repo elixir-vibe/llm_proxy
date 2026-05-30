@@ -31,13 +31,17 @@ defmodule LLMProxy.StorageTest do
                  quota_4h_input: -1,
                  min_cache_ratio: 1.5,
                  max_budget_usd: -10.0,
-                 budget_period: "month"
+                 budget_period: "month",
+                 budget_limits: %{
+                   "limits" => [%{"metric" => "nope", "window" => "24h", "max" => 1}]
+                 }
                })
 
       assert changeset.errors[:quota_4h_input]
       assert changeset.errors[:min_cache_ratio]
       assert changeset.errors[:max_budget_usd]
       assert changeset.errors[:budget_period]
+      assert changeset.errors[:budget_limits]
     end
 
     test "list_keys returns all keys" do
@@ -131,6 +135,30 @@ defmodule LLMProxy.StorageTest do
   end
 
   describe "budget and cache ratio" do
+    test "composable budget limits are enforced" do
+      {:ok, key, _} =
+        Storage.create_key("budget-limits", %{
+          budget_limits: %{
+            "limits" => [
+              %{"metric" => "cost_usd", "window" => "24h", "max" => 1.0},
+              %{"metric" => "requests", "window" => "1h", "max" => 10}
+            ]
+          }
+        })
+
+      Storage.record_usage(%{
+        key_id: key.id,
+        model: "test",
+        input_tokens: 10,
+        output_tokens: 5,
+        cost_usd: 1.5,
+        timestamp: DateTime.utc_now()
+      })
+
+      assert {:error, msg} = Storage.check_quota(key)
+      assert msg =~ "cost_usd limit exceeded for 24h"
+    end
+
     test "budget and cache ratio checks are enforced" do
       {:ok, key, _} =
         Storage.create_key("budgeted", %{

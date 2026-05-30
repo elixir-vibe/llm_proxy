@@ -39,7 +39,11 @@ defmodule LLMProxy.Routes.KeysTest do
 
   test "generates, updates, and deletes keys with the master key" do
     generated =
-      TestSupport.json_conn(:post, "/generate", %{"name" => "generated", "quota_4h_input" => 50})
+      TestSupport.json_conn(:post, "/generate", %{
+        "name" => "generated",
+        "quota_4h_input" => 50,
+        "budget_limits" => [%{"metric" => "requests", "window" => "1h", "max" => 10}]
+      })
       |> TestSupport.put_bearer("master-key")
       |> Keys.call(Keys.init([]))
 
@@ -47,6 +51,10 @@ defmodule LLMProxy.Routes.KeysTest do
     generated_body = Jason.decode!(generated.resp_body)
     key_id = generated_body["id"]
     assert generated_body["name"] == "generated"
+
+    assert generated_body["budget_limits"] == %{
+             "limits" => [%{"metric" => "requests", "window" => "1h", "max" => 10}]
+           }
 
     updated_quota =
       TestSupport.json_conn(:post, "/quota", %{"id" => key_id, "quota_4h_output" => 75})

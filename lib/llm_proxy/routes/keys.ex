@@ -70,6 +70,9 @@ defmodule LLMProxy.Routes.Keys do
           quota_4h_messages: key.quota_4h_messages,
           quota_week_messages: key.quota_week_messages,
           min_cache_ratio: key.min_cache_ratio,
+          max_budget_usd: key.max_budget_usd,
+          budget_period: key.budget_period,
+          budget_limits: key.budget_limits,
           allowed_models: key.allowed_models,
           service_quotas: key.service_quotas
         })
@@ -184,6 +187,9 @@ defmodule LLMProxy.Routes.Keys do
       quota_4h_messages: key.quota_4h_messages,
       quota_week_messages: key.quota_week_messages,
       min_cache_ratio: key.min_cache_ratio,
+      max_budget_usd: key.max_budget_usd,
+      budget_period: key.budget_period,
+      budget_limits: key.budget_limits,
       allowed_models: key.allowed_models,
       service_quotas: key.service_quotas,
       usage_4h: usage_4h,

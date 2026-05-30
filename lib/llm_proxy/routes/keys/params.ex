@@ -8,7 +8,9 @@ defmodule LLMProxy.Routes.Keys.Params do
     "quota_week_output" => :quota_week_output,
     "quota_4h_messages" => :quota_4h_messages,
     "quota_week_messages" => :quota_week_messages,
-    "min_cache_ratio" => :min_cache_ratio
+    "min_cache_ratio" => :min_cache_ratio,
+    "max_budget_usd" => :max_budget_usd,
+    "budget_period" => :budget_period
   }
 
   defmodule Generate do
@@ -45,6 +47,7 @@ defmodule LLMProxy.Routes.Keys.Params do
       body
       |> take_known_fields(@quota_fields)
       |> put_if_present(:allowed_models, body["allowed_models"])
+      |> put_if_present(:budget_limits, budget_limits(body["budget_limits"]))
       |> put_if_present(:service_quotas, body["service_quotas"])
 
     %Generate{name: body["name"] || "Unnamed", opts: opts}
@@ -55,6 +58,7 @@ defmodule LLMProxy.Routes.Keys.Params do
     attrs =
       body
       |> take_known_fields(@quota_fields)
+      |> put_if_present(:budget_limits, budget_limits(body["budget_limits"]))
       |> put_if_present(:service_quotas, body["service_quotas"])
 
     if attrs == %{} do
@@ -80,6 +84,10 @@ defmodule LLMProxy.Routes.Keys.Params do
   end
 
   def parse_delete(_body), do: {:error, "id is required"}
+
+  defp budget_limits(nil), do: nil
+  defp budget_limits(limits) when is_list(limits), do: %{"limits" => limits}
+  defp budget_limits(%{} = limits), do: limits
 
   defp put_if_present(map, _key, nil), do: map
   defp put_if_present(map, key, value), do: Map.put(map, key, value)

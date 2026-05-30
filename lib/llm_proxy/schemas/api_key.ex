@@ -20,6 +20,7 @@ defmodule LLMProxy.Schemas.ApiKey do
     field(:total_spend_usd, :float, default: 0.0)
     field(:max_budget_usd, :float)
     field(:budget_period, :string)
+    field(:budget_limits, :map)
     field(:trace_requests, :boolean, default: false)
     field(:input_tokens, :integer, default: 0)
     field(:output_tokens, :integer, default: 0)
@@ -47,6 +48,7 @@ defmodule LLMProxy.Schemas.ApiKey do
       :total_spend_usd,
       :max_budget_usd,
       :budget_period,
+      :budget_limits,
       :trace_requests,
       :input_tokens,
       :output_tokens,
@@ -64,6 +66,11 @@ defmodule LLMProxy.Schemas.ApiKey do
     |> validate_number(:total_spend_usd, greater_than_or_equal_to: 0)
     |> validate_number(:max_budget_usd, greater_than_or_equal_to: 0)
     |> validate_inclusion(:budget_period, ["4h", "week"], allow_nil: true)
+    |> validate_change(:budget_limits, fn :budget_limits, limits ->
+      if LLMProxy.Limits.valid?(limits),
+        do: [],
+        else: [budget_limits: "has invalid limit definitions"]
+    end)
     |> unique_constraint(:hash)
   end
 end
