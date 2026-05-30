@@ -86,8 +86,7 @@ defmodule LLMProxy.Routes.Keys.Params do
   def parse_delete(_body), do: {:error, "id is required"}
 
   defp budget_limits(nil), do: nil
-  defp budget_limits(limits) when is_list(limits), do: %{"limits" => limits}
-  defp budget_limits(%{} = limits), do: limits
+  defp budget_limits(limits) when is_list(limits), do: limits
 
   defp put_if_present(map, _key, nil), do: map
   defp put_if_present(map, key, value), do: Map.put(map, key, value)

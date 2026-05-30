@@ -52,9 +52,9 @@ defmodule LLMProxy.Routes.KeysTest do
     key_id = generated_body["id"]
     assert generated_body["name"] == "generated"
 
-    assert generated_body["budget_limits"] == %{
-             "limits" => [%{"metric" => "requests", "window" => "1h", "max" => 10}]
-           }
+    assert generated_body["budget_limits"] == [
+             %{"metric" => "requests", "window" => "hour", "max" => 10}
+           ]
 
     updated_quota =
       TestSupport.json_conn(:post, "/quota", %{"id" => key_id, "quota_4h_output" => 75})

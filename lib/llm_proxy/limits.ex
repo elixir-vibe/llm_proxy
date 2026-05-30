@@ -3,10 +3,11 @@ defmodule LLMProxy.Limits do
 
   import Ecto.Query
 
+  alias LLMProxy.Limit
   alias LLMProxy.Repo
   alias LLMProxy.Schemas.UsageLog
 
-  @metrics %{
+  @metric_aliases %{
     "cost_usd" => :cost_usd,
     "input_tokens" => :input_tokens,
     "output_tokens" => :output_tokens,
@@ -15,20 +16,34 @@ defmodule LLMProxy.Limits do
     "requests" => :requests
   }
 
-  @windows %{
-    "1m" => 60_000,
-    "1h" => 60 * 60_000,
-    "4h" => 4 * 60 * 60_000,
-    "24h" => 24 * 60 * 60_000,
-    "7d" => 7 * 24 * 60 * 60_000,
-    "week" => 7 * 24 * 60 * 60_000,
-    "30d" => 30 * 24 * 60 * 60_000
+  @window_aliases %{
+    "1m" => :minute,
+    "minute" => :minute,
+    "1h" => :hour,
+    "hour" => :hour,
+    "4h" => :four_hours,
+    "four_hours" => :four_hours,
+    "24h" => :day,
+    "day" => :day,
+    "7d" => :week,
+    "week" => :week,
+    "30d" => :month,
+    "month" => :month
+  }
+
+  @window_ms %{
+    minute: 60_000,
+    hour: 60 * 60_000,
+    four_hours: 4 * 60 * 60_000,
+    day: 24 * 60 * 60_000,
+    week: 7 * 24 * 60 * 60_000,
+    month: 30 * 24 * 60 * 60_000
   }
 
   @spec check(map()) :: :ok | {:error, String.t()}
   def check(%{budget_limits: limits, id: key_id}) do
     limits
-    |> normalize_limits()
+    |> normalize_all()
     |> Enum.reduce_while(:ok, fn limit, :ok ->
       case check_limit(key_id, limit) do
         :ok -> {:cont, :ok}
@@ -39,37 +54,82 @@ defmodule LLMProxy.Limits do
 
   def check(_key), do: :ok
 
-  @spec valid?(term()) :: boolean()
-  def valid?(nil), do: true
-  def valid?(%{"limits" => limits}) when is_list(limits), do: Enum.all?(limits, &valid_limit?/1)
-  def valid?(%{limits: limits}) when is_list(limits), do: Enum.all?(limits, &valid_limit?/1)
-  def valid?(_limits), do: false
+  @spec normalize(term()) :: {:ok, [Limit.t()]} | {:error, String.t()}
+  def normalize(nil), do: {:ok, []}
 
-  defp normalize_limits(nil), do: []
-  defp normalize_limits(%{"limits" => limits}) when is_list(limits), do: limits
-  defp normalize_limits(%{limits: limits}) when is_list(limits), do: limits
-  defp normalize_limits(_limits), do: []
-
-  defp valid_limit?(%{} = limit) do
-    metric = get(limit, :metric, "metric")
-    window = get(limit, :window, "window")
-    max = get(limit, :max, "max")
-
-    is_binary(metric) and Map.has_key?(@metrics, metric) and
-      is_binary(window) and Map.has_key?(@windows, window) and number?(max) and max >= 0
+  def normalize(limits) when is_list(limits) do
+    limits
+    |> Enum.reduce_while({:ok, []}, fn limit, {:ok, acc} ->
+      case normalize_limit(limit) do
+        {:ok, normalized} -> {:cont, {:ok, [normalized | acc]}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, normalized} -> {:ok, Enum.reverse(normalized)}
+      error -> error
+    end
   end
 
-  defp valid_limit?(_limit), do: false
+  def normalize(_limits), do: {:error, "must be a list of limits"}
 
-  defp check_limit(key_id, limit) do
-    metric = get(limit, :metric, "metric")
-    window = get(limit, :window, "window")
-    max = get(limit, :max, "max")
-    usage = usage(key_id, Map.fetch!(@metrics, metric), Map.fetch!(@windows, window))
+  @spec valid?(term()) :: boolean()
+  def valid?(limits), do: match?({:ok, _limits}, normalize(limits))
 
-    if usage >= max do
+  defp normalize_all(limits) do
+    case normalize(limits) do
+      {:ok, normalized} -> normalized
+      {:error, _reason} -> []
+    end
+  end
+
+  defp normalize_limit(%Limit{} = limit), do: {:ok, limit}
+
+  defp normalize_limit(%{} = limit) do
+    with {:ok, metric} <- normalize_metric(get(limit, :metric, "metric")),
+         {:ok, window} <- normalize_window(get(limit, :window, "window")),
+         {:ok, max} <- normalize_max(get(limit, :max, "max")) do
+      {:ok, Limit.new(metric, window, max)}
+    end
+  end
+
+  defp normalize_limit(_limit), do: {:error, "limit must be a map"}
+
+  defp normalize_metric(metric) when is_atom(metric) do
+    if metric in Limit.metrics(), do: {:ok, metric}, else: {:error, "invalid metric"}
+  end
+
+  defp normalize_metric(metric) when is_binary(metric) do
+    case Map.fetch(@metric_aliases, metric) do
+      {:ok, normalized} -> {:ok, normalized}
+      :error -> {:error, "invalid metric"}
+    end
+  end
+
+  defp normalize_metric(_metric), do: {:error, "invalid metric"}
+
+  defp normalize_window(window) when is_atom(window) do
+    if window in Limit.windows(), do: {:ok, window}, else: {:error, "invalid window"}
+  end
+
+  defp normalize_window(window) when is_binary(window) do
+    case Map.fetch(@window_aliases, window) do
+      {:ok, normalized} -> {:ok, normalized}
+      :error -> {:error, "invalid window"}
+    end
+  end
+
+  defp normalize_window(_window), do: {:error, "invalid window"}
+
+  defp normalize_max(max) when is_number(max) and max >= 0, do: {:ok, max}
+  defp normalize_max(_max), do: {:error, "invalid max"}
+
+  defp check_limit(key_id, %Limit{} = limit) do
+    usage = usage(key_id, limit.metric, Map.fetch!(@window_ms, limit.window))
+
+    if usage >= limit.max do
       {:error,
-       "#{metric} limit exceeded for #{window} (#{format_usage(usage)}/#{format_usage(max)})"}
+       "#{limit.metric} limit exceeded for #{limit.window} (#{format_usage(usage)}/#{format_usage(limit.max)})"}
     else
       :ok
     end
@@ -104,8 +164,6 @@ defmodule LLMProxy.Limits do
     do: select(query, [u], coalesce(sum(u.cache_write_tokens), 0))
 
   defp get(map, atom_key, string_key), do: Map.get(map, atom_key, Map.get(map, string_key))
-
-  defp number?(value), do: is_integer(value) or is_float(value)
 
   defp format_usage(value) when is_float(value), do: Float.round(value, 6)
   defp format_usage(value), do: value

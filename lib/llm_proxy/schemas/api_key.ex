@@ -20,7 +20,7 @@ defmodule LLMProxy.Schemas.ApiKey do
     field(:total_spend_usd, :float, default: 0.0)
     field(:max_budget_usd, :float)
     field(:budget_period, :string)
-    field(:budget_limits, :map)
+    field(:budget_limits, {:array, :map})
     field(:trace_requests, :boolean, default: false)
     field(:input_tokens, :integer, default: 0)
     field(:output_tokens, :integer, default: 0)
@@ -71,6 +71,23 @@ defmodule LLMProxy.Schemas.ApiKey do
         do: [],
         else: [budget_limits: "has invalid limit definitions"]
     end)
+    |> normalize_budget_limits()
     |> unique_constraint(:hash)
+  end
+
+  defp normalize_budget_limits(changeset) do
+    case get_change(changeset, :budget_limits) do
+      nil ->
+        changeset
+
+      limits ->
+        case LLMProxy.Limits.normalize(limits) do
+          {:ok, normalized} ->
+            put_change(changeset, :budget_limits, Enum.map(normalized, &Map.from_struct/1))
+
+          {:error, _reason} ->
+            changeset
+        end
+    end
   end
 end
