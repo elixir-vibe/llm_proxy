@@ -14,6 +14,7 @@ defmodule LLMProxy.Application do
 
     Registry.init()
     Dynamic.init()
+    LLMProxy.Catalog.init()
     LLMProxy.Pricing.init()
     Registry.register(LLMProxy.Providers.OpenRouter)
     Registry.register(LLMProxy.Providers.Anthropic)

@@ -29,8 +29,25 @@ defmodule LLMProxy.Providers.Registry do
   end
 
   def get_provider(model_id) when is_binary(model_id) do
-    model_index = :persistent_term.get(@model_index_key, %{})
-    Map.get(model_index, model_id)
+    case resolve_model(model_id) do
+      {:ok, {provider, _upstream_model}} -> provider
+      :error -> nil
+    end
+  end
+
+  def resolve_model(model_id) when is_binary(model_id) do
+    case LLMProxy.Catalog.resolve(model_id) do
+      {:ok, deployment} ->
+        {:ok, {deployment.provider, deployment.upstream_model}}
+
+      :error ->
+        model_index = :persistent_term.get(@model_index_key, %{})
+
+        case Map.get(model_index, model_id) do
+          nil -> :error
+          provider -> {:ok, {provider, model_id}}
+        end
+    end
   end
 
   @doc """
@@ -43,20 +60,22 @@ defmodule LLMProxy.Providers.Registry do
     fallback_models = Map.get(LLMProxy.Config.fallbacks(), model_id, [])
 
     for fb_model <- fallback_models,
-        provider = get_provider(fb_model),
-        not is_nil(provider) do
-      {provider, fb_model}
+        {:ok, {provider, upstream_model}} <- [resolve_model(fb_model)] do
+      {provider, upstream_model}
     end
   end
 
   def all_models do
     providers = :persistent_term.get(@registry_key, %{})
 
-    Enum.flat_map(providers, fn {name, module} ->
-      Enum.map(module.models(), fn id ->
-        %{id: id, object: "model", owned_by: name}
+    provider_models =
+      Enum.flat_map(providers, fn {name, module} ->
+        Enum.map(module.models(), fn id ->
+          %{id: id, object: "model", owned_by: name}
+        end)
       end)
-    end)
+
+    LLMProxy.Catalog.all_models() ++ provider_models
   end
 
   def list_providers do

@@ -1,0 +1,63 @@
+defmodule LLMProxy.ProviderCatalogTest do
+  use ExUnit.Case
+
+  alias LLMProxy.Catalog
+  alias LLMProxy.Providers.{Registry, Result}
+  alias LLMProxy.Storage
+  alias LLMProxy.TestSupport
+
+  defmodule Provider do
+    def name, do: "provider-catalog-test"
+    def models, do: ["upstream-catalog-model"]
+
+    def call(%{"model" => "upstream-catalog-model"}, _user_id) do
+      {:ok,
+       Result.response(
+         %{
+           "id" => "catalog-response",
+           "choices" => [
+             %{
+               "message" => %{"role" => "assistant", "content" => "via catalog"},
+               "finish_reason" => "stop"
+             }
+           ],
+           "usage" => %{"prompt_tokens" => 2, "completion_tokens" => 3}
+         },
+         nil
+       )}
+    end
+
+    def extract_usage(response) do
+      usage = response["usage"] || %{}
+      LLMProxy.Usage.new(usage["prompt_tokens"] || 0, usage["completion_tokens"] || 0)
+    end
+
+    def to_openai_response(response, model), do: Map.put(response, "model", model)
+  end
+
+  setup do
+    TestSupport.checkout_repo()
+    Catalog.load([])
+    Registry.register(Provider)
+
+    Catalog.put_model(%{
+      name: "public-catalog-model",
+      deployments: [%{provider: Provider, upstream_model: "upstream-catalog-model"}]
+    })
+
+    on_exit(fn -> Catalog.load([]) end)
+
+    :ok
+  end
+
+  test "LLMProxy.Provider resolves public catalog model names to upstream deployments" do
+    {:ok, key, _raw_key} = Storage.create_key("catalog-user")
+
+    assert {:ok, response} =
+             LLMProxy.chat("hello", model: "public-catalog-model", api_key: key)
+
+    assert response.body["model"] == "upstream-catalog-model"
+    assert response.usage.input_tokens == 2
+    assert response.usage.output_tokens == 3
+  end
+end
