@@ -5,7 +5,7 @@ defmodule LLMProxy.Catalog.Model do
 
   defstruct [:name, hidden: false, routing_strategy: :ordered, deployments: [], metadata: %{}]
 
-  @type routing_strategy :: :ordered | :shuffle
+  @type routing_strategy :: :ordered | :shuffle | :round_robin | :weighted_shuffle | :lowest_cost
   @type t :: %__MODULE__{
           name: String.t(),
           hidden: boolean(),
@@ -36,7 +36,13 @@ defmodule LLMProxy.Catalog.Model do
     Map.get(attrs, atom_key, Map.get(attrs, string_key, default))
   end
 
-  defp routing_strategy(:shuffle), do: :shuffle
+  defp routing_strategy(strategy)
+       when strategy in [:shuffle, :round_robin, :weighted_shuffle, :lowest_cost],
+       do: strategy
+
   defp routing_strategy("shuffle"), do: :shuffle
+  defp routing_strategy("round_robin"), do: :round_robin
+  defp routing_strategy("weighted_shuffle"), do: :weighted_shuffle
+  defp routing_strategy("lowest_cost"), do: :lowest_cost
   defp routing_strategy(_strategy), do: :ordered
 end

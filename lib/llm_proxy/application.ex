@@ -30,6 +30,7 @@ defmodule LLMProxy.Application do
     children = [
       LLMProxy.Repo,
       LLMProxy.CircuitBreaker,
+      LLMProxy.Routing.RoundRobin,
       LLMProxy.TokenPool.Server,
       {Phoenix.PubSub, name: LLMProxy.PubSub},
       LLMProxy.Web.Endpoint

@@ -83,14 +83,15 @@ Implemented:
 
 - ordered fallback
 - random shuffle within order groups
+- round robin within order groups
+- weighted shuffle within order groups
+- lowest cost within order groups using LLMDB pricing
 - cooldown-aware routing through deployment circuit breakers
 - request timeout per deployment
 
 Future targets:
 
-- round robin
 - least busy
-- lowest cost
 - latency-aware routing
 
 ### 4. Circuit breakers

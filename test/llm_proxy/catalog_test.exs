@@ -3,8 +3,8 @@ defmodule LLMProxy.CatalogTest do
 
   alias LLMProxy.Catalog
   alias LLMProxy.Catalog.{Deployment, Model}
-  alias LLMProxy.Providers.Registry
-  alias LLMProxy.Routing.Attempt
+  alias LLMProxy.Providers.{Anthropic, OpenAI, Registry}
+  alias LLMProxy.Routing.{Attempt, RoundRobin}
 
   defmodule Provider do
     def name, do: "catalog-provider"
@@ -13,9 +13,13 @@ defmodule LLMProxy.CatalogTest do
 
   setup do
     Catalog.load([])
+    RoundRobin.reset()
     Registry.register(Provider)
 
-    on_exit(fn -> Catalog.load([]) end)
+    on_exit(fn ->
+      Catalog.load([])
+      RoundRobin.reset()
+    end)
 
     :ok
   end
@@ -67,6 +71,63 @@ defmodule LLMProxy.CatalogTest do
               %Attempt{provider: Provider, model: "upstream-model"},
               %Attempt{provider: Provider, model: "second-upstream-model"}
             ]} = Registry.resolve_attempts("ordered")
+  end
+
+  test "round robin strategy rotates deployments within order groups" do
+    Catalog.put_model(%{
+      name: "round-robin",
+      routing_strategy: :round_robin,
+      deployments: [
+        %{provider: Provider, upstream_model: "upstream-model"},
+        %{provider: Provider, upstream_model: "second-upstream-model"}
+      ]
+    })
+
+    assert {:ok,
+            [
+              %Attempt{provider: Provider, model: "upstream-model"},
+              %Attempt{provider: Provider, model: "second-upstream-model"}
+            ]} = Registry.resolve_attempts("round-robin")
+
+    assert {:ok,
+            [
+              %Attempt{provider: Provider, model: "second-upstream-model"},
+              %Attempt{provider: Provider, model: "upstream-model"}
+            ]} = Registry.resolve_attempts("round-robin")
+  end
+
+  test "weighted shuffle keeps order groups and all deployments" do
+    Catalog.put_model(%{
+      name: "weighted",
+      routing_strategy: "weighted_shuffle",
+      deployments: [
+        %{provider: Provider, upstream_model: "second-upstream-model", order: 2, weight: 10},
+        %{provider: Provider, upstream_model: "upstream-model", order: 1, weight: 1}
+      ]
+    })
+
+    assert {:ok,
+            [
+              %Attempt{provider: Provider, model: "upstream-model"},
+              %Attempt{provider: Provider, model: "second-upstream-model"}
+            ]} = Registry.resolve_attempts("weighted")
+  end
+
+  test "lowest cost strategy orders deployments by LLMDB pricing" do
+    Catalog.put_model(%{
+      name: "cheap",
+      routing_strategy: :lowest_cost,
+      deployments: [
+        %{provider: OpenAI, upstream_model: "gpt-4o"},
+        %{provider: Anthropic, upstream_model: "claude-3-haiku-20240307"}
+      ]
+    })
+
+    assert {:ok,
+            [
+              %Attempt{provider: Anthropic, model: "claude-3-haiku-20240307"},
+              %Attempt{provider: OpenAI, model: "gpt-4o"}
+            ]} = Registry.resolve_attempts("cheap")
   end
 
   test "all models includes visible aliases and hides hidden aliases" do

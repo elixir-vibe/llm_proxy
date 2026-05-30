@@ -208,7 +208,7 @@ config :llm_proxy,
   catalog: [
     %{
       name: "fast",
-      routing_strategy: :ordered,
+      routing_strategy: :lowest_cost,
       deployments: [
         %{
           provider: LLMProxy.Providers.OpenAI,
@@ -231,6 +231,9 @@ Routing strategies:
 
 - `:ordered` — stable ordered fallback by deployment `order`
 - `:shuffle` — shuffle deployments within each `order` group
+- `:round_robin` — rotate deployments within each `order` group
+- `:weighted_shuffle` — weighted random order within each `order` group using deployment `weight`
+- `:lowest_cost` — sort deployments within each `order` group by LLMDB input+output pricing
 
 Retryable provider failures and timeouts open a deployment-level circuit breaker after `failure_threshold` failures. Open deployments are skipped until `cooldown_ms` elapses.
 

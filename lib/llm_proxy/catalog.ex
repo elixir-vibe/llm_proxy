@@ -4,7 +4,7 @@ defmodule LLMProxy.Catalog do
   """
 
   alias LLMProxy.Catalog.Model
-  alias LLMProxy.Routing.{Ordered, Shuffle}
+  alias LLMProxy.Routing.{LowestCost, Ordered, RoundRobin, Shuffle, WeightedShuffle}
 
   @catalog_key :llm_proxy_catalog
 
@@ -54,7 +54,7 @@ defmodule LLMProxy.Catalog do
         :error
 
       %Model{deployments: deployments, routing_strategy: strategy} ->
-        {:ok, route(strategy, deployments)}
+        {:ok, route(strategy, name, deployments)}
 
       nil ->
         :error
@@ -75,8 +75,11 @@ defmodule LLMProxy.Catalog do
   defp normalize_model(%Model{} = model), do: model
   defp normalize_model(attrs), do: Model.new(attrs)
 
-  defp route(:shuffle, deployments), do: Shuffle.order(deployments)
-  defp route(_strategy, deployments), do: Ordered.order(deployments)
+  defp route(:lowest_cost, _name, deployments), do: LowestCost.order(deployments)
+  defp route(:round_robin, name, deployments), do: RoundRobin.order(name, deployments)
+  defp route(:shuffle, _name, deployments), do: Shuffle.order(deployments)
+  defp route(:weighted_shuffle, _name, deployments), do: WeightedShuffle.order(deployments)
+  defp route(_strategy, _name, deployments), do: Ordered.order(deployments)
 
   defp owner([%{provider: provider} | _]) when is_atom(provider) do
     if function_exported?(provider, :name, 0), do: provider.name(), else: inspect(provider)
