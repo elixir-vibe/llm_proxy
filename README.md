@@ -261,7 +261,7 @@ Environment variables can be loaded from `.env` through Dotenvy.
 | `LLM_FALLBACKS` | JSON map of model fallback chains |
 | `LLM_MAX_RETRIES` | Number of fallback models to try, default `1` |
 
-HTTP chat responses include `x-llm-proxy-trace-id`; local calls expose the same value as `response.trace_id`.
+HTTP chat responses use Phoenix/Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.
 
 ## Setup
 

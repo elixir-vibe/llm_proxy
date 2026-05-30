@@ -88,11 +88,17 @@ defmodule LLMProxy.Routes.ChatTest do
         "model" => "fake-chat-model",
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
+      |> Plug.Conn.put_req_header("x-request-id", "incoming-request-id-12345")
       |> TestSupport.put_bearer(raw_key)
       |> Chat.call(Chat.init([]))
 
     assert conn.status == 200
-    assert Plug.Conn.get_resp_header(conn, "x-llm-proxy-trace-id") != []
+    assert Plug.Conn.get_resp_header(conn, "x-request-id") == ["incoming-request-id-12345"]
+
+    assert Plug.Conn.get_resp_header(conn, "x-llm-proxy-trace-id") == [
+             "incoming-request-id-12345"
+           ]
+
     assert Jason.decode!(conn.resp_body)["model"] == "fake-chat-model"
 
     [message] = Storage.get_messages(%{per_page: 10})

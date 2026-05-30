@@ -23,7 +23,7 @@ defmodule LLMProxy.Web.Endpoint do
     only: ~w(assets)
   )
 
-  plug(Plug.RequestId)
+  plug(Plug.RequestId, assign_as: :request_id)
   plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])
 
   plug(Plug.Parsers,

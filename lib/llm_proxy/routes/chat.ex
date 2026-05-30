@@ -13,6 +13,7 @@ defmodule LLMProxy.Routes.Chat do
   alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.{Event, SSEWriter}
   alias LLMProxy.Telemetry
+  alias LLMProxy.Trace
   alias LLMProxy.Usage
 
   plug(Auth)
@@ -58,14 +59,15 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   defp handle_non_stream(conn, provider, api_key, %Request{} = request, _model, meta) do
+    {conn, request_id} = Trace.ensure_conn(conn)
+
     case Provider.call(request, Actor.from_api_key(api_key),
            route: :chat,
+           trace_id: request_id,
            usage_metadata: Map.to_list(meta)
          ) do
       {:ok, response} ->
-        conn
-        |> put_resp_header("x-llm-proxy-trace-id", response.trace_id)
-        |> Helpers.send_json(200, response.body)
+        Helpers.send_json(conn, 200, response.body)
 
       {:error, {:provider, %Result{error: error, status: status}}} ->
         Logger.error("#{provider.name()} error (#{status}): #{error}")
@@ -83,24 +85,33 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   defp handle_stream(conn, provider, api_key, %Request{} = request, model, meta) do
-    case Guardrails.before_request(request, stream_context(api_key, request, model)) do
+    {conn, request_id} = Trace.ensure_conn(conn)
+
+    case Guardrails.before_request(
+           request,
+           stream_context(api_key, request, model, trace_id: request_id)
+         ) do
       {:ok, request} ->
-        do_handle_stream(conn, provider, api_key, request, model, meta)
+        do_handle_stream(conn, provider, api_key, request, model, meta, request_id)
 
       {:error, reason} ->
         Helpers.send_json(conn, 403, %{error: inspect(reason)})
     end
   end
 
-  defp do_handle_stream(conn, provider, api_key, %Request{} = request, model, meta) do
+  defp do_handle_stream(conn, provider, api_key, %Request{} = request, model, meta, request_id) do
     Helpers.log_user_message(api_key, request.model, "chat", fn -> Request.user_text(request) end)
     start = System.monotonic_time(:millisecond)
 
-    case Telemetry.with_provider_span(provider.name(), model, :stream, fn ->
-           Caller.stream(provider, request, api_key.id, model)
-         end) do
-      {:ok, %Result{stream: stream, provider: used_provider, model: used_model}} ->
-        finish_stream(conn, stream, start, used_provider, used_model, api_key, request, meta)
+    case Telemetry.with_provider_span(
+           provider.name(),
+           model,
+           :stream,
+           fn -> Caller.stream(provider, request, api_key.id, model) end,
+           %{"llm_proxy.trace_id" => request_id}
+         ) do
+      {:ok, %Result{} = result} ->
+        finish_stream(conn, result, start, api_key, request, meta, request_id)
 
       {:error, %Result{error: error, status: status}} ->
         Logger.error("#{provider.name()} stream error (#{status}): #{error}")
@@ -108,10 +119,21 @@ defmodule LLMProxy.Routes.Chat do
     end
   end
 
-  defp finish_stream(conn, stream, start, used_provider, used_model, api_key, request, meta) do
+  defp finish_stream(
+         conn,
+         %Result{stream: stream, provider: used_provider, model: used_model},
+         start,
+         api_key,
+         request,
+         meta,
+         request_id
+       ) do
     conn = SSEWriter.start_sse(conn)
     from_protocol = provider_protocol(used_provider)
-    context = stream_context(api_key, request, used_model, provider: used_provider)
+
+    context =
+      stream_context(api_key, request, used_model, provider: used_provider, trace_id: request_id)
+
     {conn, usage, ttft_ms} = pipe_stream(conn, stream, start, from_protocol, used_model, context)
     duration_ms = System.monotonic_time(:millisecond) - start
 
@@ -119,7 +141,8 @@ defmodule LLMProxy.Routes.Chat do
       Map.merge(meta, %{
         duration_ms: duration_ms,
         ttft_ms: ttft_ms,
-        provider: used_provider.name()
+        provider: used_provider.name(),
+        metadata: Map.put(meta.metadata || %{}, "trace_id", request_id)
       })
 
     Helpers.track_usage(api_key, used_model, usage, opts)
@@ -164,7 +187,7 @@ defmodule LLMProxy.Routes.Chat do
     end
   end
 
-  defp stream_context(api_key, request, model, extra \\ []) do
+  defp stream_context(api_key, request, model, extra) do
     %{
       api_key: api_key,
       route: :chat,
