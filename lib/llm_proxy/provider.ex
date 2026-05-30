@@ -15,11 +15,12 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Actor
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Caller, Registry, Result}
+  alias LLMProxy.ReqLLM.Model
+  alias LLMProxy.ReqLLM.ResponseAdapter
   alias LLMProxy.Response
   alias LLMProxy.Routes.Helpers
   alias LLMProxy.Routing.Attempt
   alias LLMProxy.Telemetry
-  alias ReqLLM.Message.ContentPart
 
   @type call_error ::
           {:request, Request.Error.t()}
@@ -84,7 +85,7 @@ defmodule LLMProxy.Provider do
   @impl ReqLLM.Provider
   def prepare_request(:chat, model, messages, opts) do
     with {:ok, context} <- ReqLLM.Context.normalize(messages, opts),
-         {:ok, request} <- chat_request(context, Keyword.put(opts, :model, model_id(model))) do
+         {:ok, request} <- chat_request(context, Keyword.put(opts, :model, Model.id(model))) do
       req =
         Req.new()
         |> Req.Request.prepend_request_steps(llm_proxy_provider: &run_req_llm/1)
@@ -233,66 +234,14 @@ defmodule LLMProxy.Provider do
 
     case call(request, actor || api_key, route: :req_llm) do
       {:ok, response} ->
-        req_llm_response = to_req_llm_response(response)
+        req_llm_response = ResponseAdapter.from_response(response)
         Req.Request.halt(req_request, Req.Response.new(status: 200, body: req_llm_response))
 
       {:error, reason} ->
         Req.Request.halt(
           req_request,
-          Req.Response.new(status: error_status(reason), body: inspect(reason))
+          Req.Response.new(status: ResponseAdapter.error_status(reason), body: inspect(reason))
         )
     end
   end
-
-  defp to_req_llm_response(%Response{} = response) do
-    body = response.body
-    text = response_text(body)
-
-    %ReqLLM.Response{
-      id: body["id"] || "llm_proxy",
-      model: response.model,
-      context: response.request.messages,
-      message: ReqLLM.Context.assistant([ContentPart.text(text)]),
-      object: body,
-      stream?: false,
-      stream: nil,
-      usage: usage_map(response.usage),
-      finish_reason: finish_reason(body),
-      provider_meta: %{provider: response.provider.name()},
-      error: nil
-    }
-  end
-
-  defp model_id(%{model: model}) when is_binary(model), do: model
-  defp model_id(%{id: id}) when is_binary(id), do: id
-  defp model_id(model) when is_binary(model), do: model
-
-  defp response_text(%{"choices" => [%{"message" => %{"content" => text}} | _]})
-       when is_binary(text),
-       do: text
-
-  defp response_text(%{"output_text" => text}) when is_binary(text), do: text
-  defp response_text(_body), do: ""
-
-  defp finish_reason(%{"choices" => [%{"finish_reason" => "stop"} | _]}), do: :stop
-  defp finish_reason(%{"choices" => [%{"finish_reason" => "length"} | _]}), do: :length
-  defp finish_reason(%{"choices" => [%{"finish_reason" => "tool_calls"} | _]}), do: :tool_calls
-  defp finish_reason(%{"choices" => [%{"finish_reason" => nil} | _]}), do: nil
-  defp finish_reason(_body), do: nil
-
-  defp usage_map(usage) do
-    %{
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
-      cache_read_tokens: usage.cache_read_tokens,
-      cache_write_tokens: usage.cache_write_tokens
-    }
-  end
-
-  defp error_status({:not_found, _}), do: 404
-  defp error_status({:permission, _}), do: 403
-  defp error_status({:missing_api_key, _}), do: 401
-  defp error_status({:invalid_api_key, _}), do: 401
-  defp error_status({:provider, %{status: status}}) when is_integer(status), do: status
-  defp error_status(_reason), do: 500
 end

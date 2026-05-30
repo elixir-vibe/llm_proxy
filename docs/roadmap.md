@@ -157,16 +157,25 @@ Future targets:
 
 ### 8. Remote BEAM calls
 
-After `LLMProxy.Provider` stabilizes, add a remote node wrapper over the same in-process API.
-
-Potential shape:
+Implemented a remote node wrapper and ReqLLM provider over the same in-process API.
 
 ```elixir
 LLMProxy.Remote.chat(:proxy@host, messages, opts)
 LLMProxy.Remote.call(:proxy@host, request, actor, opts)
 ```
 
-First version can use `:erpc.call/4`. Streaming can follow with a process-backed protocol.
+ReqLLM can call remote nodes via provider id `:llm_proxy_remote`:
+
+```elixir
+ReqLLM.Generation.generate_text(
+  %{provider: :llm_proxy_remote, id: "fast", model: "fast"},
+  "Hello",
+  node: :proxy@host,
+  api_key: raw_key
+)
+```
+
+First version uses `:erpc.call/4`. Streaming can follow with a process-backed protocol.
 
 ## Near-term order
 
@@ -178,4 +187,4 @@ First version can use `:erpc.call/4`. Streaming can follow with a process-backed
 6. ✅ Add explicit routing strategy modules.
 7. Add cache hooks.
 8. Add guardrail behaviours.
-9. Add remote BEAM calls.
+9. ✅ Add remote BEAM calls.

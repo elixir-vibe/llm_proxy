@@ -7,7 +7,7 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 ## What it provides
 
 - **In-process Elixir API** via `LLMProxy.Provider` and `LLMProxy.chat/2`
-- **ReqLLM provider** registered as `:llm_proxy`
+- **ReqLLM providers** registered as `:llm_proxy` and `:llm_proxy_remote`
 - **Phoenix/Plug HTTP API** for OpenAI-compatible clients
 - **OpenAI Chat Completions** (`/v1/chat/completions`) with streaming support
 - **Anthropic Messages** (`/v1/messages`) with streaming support
@@ -55,6 +55,8 @@ response.usage
 
 ## ReqLLM usage
 
+Local in-process provider:
+
 ```elixir
 model = %{
   provider: :llm_proxy,
@@ -68,6 +70,28 @@ model = %{
   )
 
 ReqLLM.Response.text(response)
+```
+
+Remote BEAM provider over distributed Erlang:
+
+```elixir
+model = %{
+  provider: :llm_proxy_remote,
+  id: "fast",
+  model: "fast"
+}
+
+{:ok, response} =
+  ReqLLM.Generation.generate_text(model, "Hello",
+    node: :"proxy@host",
+    api_key: raw_llm_proxy_key
+  )
+```
+
+The lower-level remote API is also available:
+
+```elixir
+LLMProxy.Remote.chat(:"proxy@host", "Hello", model: "fast", api_key: raw_key)
 ```
 
 ## Phoenix embedding
@@ -217,7 +241,7 @@ Test files mirror source structure under `test/llm_proxy/**`.
 LLMProxy intentionally focuses on a smaller surface than LiteLLM or Portkey:
 
 - embeddable in Phoenix apps
-- Elixir/ReqLLM-native execution
+- Elixir/ReqLLM-native execution, including remote BEAM calls
 - HTTP compatibility where useful
 - strict internal contracts
 - local ownership of usage and quota data

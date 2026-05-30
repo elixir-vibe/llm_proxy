@@ -20,6 +20,7 @@ defmodule LLMProxy.Application do
     Registry.register(LLMProxy.Providers.Anthropic)
     Registry.register(LLMProxy.Providers.OpenAI)
     ReqLLM.Providers.register(LLMProxy.Provider)
+    ReqLLM.Providers.register(LLMProxy.RemoteProvider)
 
     Dynamic.register("/v1/messages", LLMProxy.Routes.Messages)
     Dynamic.register("/messages", LLMProxy.Routes.Messages)
