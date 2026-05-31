@@ -211,6 +211,32 @@ defmodule LLMProxy.StorageTest do
     end
   end
 
+  describe "trace feedback" do
+    test "records feedback linked by trace id" do
+      {:ok, key, _} = Storage.create_key("trace-feedback")
+
+      {:ok, trace} =
+        Storage.record_trace(%{
+          key_id: key.id,
+          model: "gpt-4o",
+          metadata: %{"trace_id" => "feedback-request"},
+          timestamp: DateTime.utc_now()
+        })
+
+      assert {:ok, feedback} =
+               Storage.record_trace_feedback(%{
+                 request_id: "feedback-request",
+                 key_id: key.id,
+                 rating: "negative",
+                 comment: "not useful"
+               })
+
+      assert feedback.trace_id == trace.id
+      assert [stored] = Storage.get_trace_feedback(trace.id)
+      assert stored.rating == "negative"
+    end
+  end
+
   describe "provider tokens" do
     test "add, list, and remove tokens" do
       {:ok, token} = Storage.add_token("anthropic", "oauth", "tok-123")

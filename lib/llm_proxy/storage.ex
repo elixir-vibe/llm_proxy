@@ -4,7 +4,16 @@ defmodule LLMProxy.Storage do
   """
 
   alias LLMProxy.Repo
-  alias LLMProxy.Schemas.{ApiKey, MessageLog, ProviderToken, ServiceUsage, Trace, UsageLog}
+
+  alias LLMProxy.Schemas.{
+    ApiKey,
+    MessageLog,
+    ProviderToken,
+    ServiceUsage,
+    Trace,
+    TraceFeedback,
+    UsageLog
+  }
 
   import Ecto.Query
 
@@ -572,6 +581,67 @@ defmodule LLMProxy.Storage do
   def get_trace(id) do
     Repo.get(Trace, id)
   end
+
+  def record_trace_feedback(attrs) do
+    attrs =
+      attrs
+      |> resolve_feedback_trace()
+      |> Map.put_new(:timestamp, DateTime.utc_now() |> DateTime.truncate(:second))
+
+    %TraceFeedback{}
+    |> TraceFeedback.changeset(attrs)
+    |> Repo.insert()
+  end
+
+  def list_trace_feedback(trace_or_request_id) do
+    TraceFeedback
+    |> feedback_for(trace_or_request_id)
+    |> order_by([f], desc: f.timestamp)
+    |> Repo.all()
+  end
+
+  def get_trace_feedback(trace_id) when is_integer(trace_id) do
+    from(f in TraceFeedback,
+      where: f.trace_id == ^trace_id,
+      order_by: [desc: f.timestamp]
+    )
+    |> Repo.all()
+  end
+
+  def find_trace_by_request_id(request_id) when is_binary(request_id) do
+    from(t in Trace,
+      where: fragment("json_extract(?, '$.trace_id') = ?", t.metadata, ^request_id),
+      order_by: [desc: t.timestamp],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  defp resolve_feedback_trace(%{trace_id: trace_id} = attrs) when is_integer(trace_id) do
+    attrs
+    |> Map.put_new(
+      :request_id,
+      trace_request_id(Repo.get(Trace, trace_id)) || Integer.to_string(trace_id)
+    )
+  end
+
+  defp resolve_feedback_trace(%{request_id: request_id} = attrs) when is_binary(request_id) do
+    case find_trace_by_request_id(request_id) do
+      %Trace{id: id} -> Map.put_new(attrs, :trace_id, id)
+      nil -> attrs
+    end
+  end
+
+  defp resolve_feedback_trace(attrs), do: attrs
+
+  defp trace_request_id(%Trace{metadata: %{"trace_id" => request_id}}), do: request_id
+  defp trace_request_id(_trace), do: nil
+
+  defp feedback_for(query, trace_id) when is_integer(trace_id),
+    do: where(query, [f], f.trace_id == ^trace_id)
+
+  defp feedback_for(query, request_id) when is_binary(request_id),
+    do: where(query, [f], f.request_id == ^request_id)
 
   defp traces_filter_key(query, nil), do: query
   defp traces_filter_key(query, key_id), do: where(query, [t], t.key_id == ^key_id)

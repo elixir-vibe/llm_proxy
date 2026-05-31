@@ -42,8 +42,10 @@ defmodule LLMProxy.Web.TracesLive do
 
   @impl true
   def handle_event("view_trace", %{"id" => id}, socket) do
-    trace = Storage.get_trace(String.to_integer(id))
-    {:noreply, assign(socket, trace_detail: trace)}
+    trace_id = String.to_integer(id)
+    trace = Storage.get_trace(trace_id)
+    feedback = Storage.get_trace_feedback(trace_id)
+    {:noreply, assign(socket, trace_detail: trace, trace_feedback: feedback)}
   end
 
   def handle_event("close_trace", _, socket) do
@@ -83,6 +85,18 @@ defmodule LLMProxy.Web.TracesLive do
             <div><span class="text-gray-500">TTFT:</span> {Format.ms(@trace_detail.ttft_ms)}</div>
             <div><span class="text-gray-500">Cost:</span> {Format.usd(@trace_detail.cost_usd)}</div>
             <div><span class="text-gray-500">Session:</span> {@trace_detail.session_id || "—"}</div>
+          </div>
+          <div :if={@trace_feedback != []} class="mb-4">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">Feedback</h3>
+            <div class="space-y-2">
+              <div :for={feedback <- @trace_feedback} class="bg-gray-50 rounded p-3 text-sm">
+                <div class="flex gap-2 items-center mb-1">
+                  <span class="font-medium">{feedback.rating}</span>
+                  <span class="text-xs text-gray-500">{format_time(feedback.timestamp)}</span>
+                </div>
+                <p :if={feedback.comment} class="text-gray-700">{feedback.comment}</p>
+              </div>
+            </div>
           </div>
           <div class="space-y-4">
             <div>

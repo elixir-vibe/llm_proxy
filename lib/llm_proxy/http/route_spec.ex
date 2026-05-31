@@ -4,6 +4,8 @@ defmodule LLMProxy.HTTP.RouteSpec do
   @type route :: {String.t(), module()}
 
   @core_routes [
+    {"/feedback", LLMProxy.HTTP.Routes.Feedback},
+    {"/v1/feedback", LLMProxy.HTTP.Routes.Feedback},
     {"/v1/models", LLMProxy.HTTP.Routes.Models},
     {"/models", LLMProxy.HTTP.Routes.Models},
     {"/v1/chat", LLMProxy.HTTP.Routes.Chat},

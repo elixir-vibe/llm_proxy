@@ -134,6 +134,7 @@ Route groups:
 - `POST /v1/responses`
 - `POST /v1/moderations`
 - `POST /moderations`
+- `POST /feedback` / `POST /v1/feedback` — submit trace feedback by `request_id` or `trace_id`
 
 ### Admin routes
 
