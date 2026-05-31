@@ -8,7 +8,7 @@ defmodule LLMProxy.Repo.Migrations.CreateTraceFeedback do
       add :key_id, :string, null: false
       add :rating, :string, null: false
       add :comment, :text
-      add :metadata, :map
+      add :metadata, :string
       add :timestamp, :utc_datetime, null: false
     end
 

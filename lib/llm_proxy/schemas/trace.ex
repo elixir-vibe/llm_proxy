@@ -14,8 +14,8 @@ defmodule LLMProxy.Schemas.Trace do
     field(:cost_usd, :float)
     field(:duration_ms, :integer)
     field(:ttft_ms, :integer)
-    field(:tags, {:array, :string})
-    field(:metadata, :map)
+    field(:tags, LLMProxy.Storage.JSON)
+    field(:metadata, LLMProxy.Storage.JSON)
     field(:session_id, :string)
     field(:timestamp, :utc_datetime)
   end

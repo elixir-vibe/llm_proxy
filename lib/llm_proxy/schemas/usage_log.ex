@@ -14,8 +14,8 @@ defmodule LLMProxy.Schemas.UsageLog do
     field(:duration_ms, :integer)
     field(:ttft_ms, :integer)
     field(:provider, :string)
-    field(:tags, {:array, :string})
-    field(:metadata, :map)
+    field(:tags, LLMProxy.Storage.JSON)
+    field(:metadata, LLMProxy.Storage.JSON)
     field(:timestamp, :utc_datetime)
   end
 

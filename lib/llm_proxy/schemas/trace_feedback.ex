@@ -9,7 +9,7 @@ defmodule LLMProxy.Schemas.TraceFeedback do
     field(:key_id, :string)
     field(:rating, :string)
     field(:comment, :string)
-    field(:metadata, :map)
+    field(:metadata, LLMProxy.Storage.JSON)
     field(:timestamp, :utc_datetime)
   end
 
