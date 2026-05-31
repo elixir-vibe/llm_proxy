@@ -1,7 +1,22 @@
 defmodule LLMProxy.Storage.Repo do
   @moduledoc false
 
-  def configured, do: LLMProxy.Config.repo()
+  def configured do
+    repo = LLMProxy.Config.repo()
+
+    if repo == LLMProxy.Repo and not Code.ensure_loaded?(LLMProxy.Repo) do
+      raise """
+      LLMProxy is configured to use the bundled SQLite repo, but ecto_sqlite3 is not available.
+
+      Either add {:ecto_sqlite3, \"~> 0.17\"} to your dependencies for standalone SQLite storage,
+      or configure LLMProxy to use your host repo:
+
+          config :llm_proxy, repo: MyApp.Repo
+      """
+    end
+
+    repo
+  end
 
   def bundled?, do: configured() == LLMProxy.Repo
 

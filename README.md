@@ -113,14 +113,21 @@ defmodule MyAppWeb.Router do
 end
 ```
 
-Storage defaults to the bundled SQLite repo for standalone use. Host Phoenix apps can provide their own Ecto repo:
+Storage defaults to the bundled SQLite repo for standalone use. SQLite is an optional dependency for downstream apps; add it when you want LLMProxy to run standalone:
+
+```elixir
+{:llm_proxy, "~> ..."},
+{:ecto_sqlite3, "~> 0.17"}
+```
+
+Host Phoenix apps can instead provide their own Ecto repo:
 
 ```elixir
 config :llm_proxy,
   repo: MyApp.Repo
 ```
 
-LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, and MySQL-compatible Ecto adapters.
+LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, and MySQL-compatible Ecto adapters. PostgreSQL/MySQL adapter dependencies should come from the host app.
 
 Route groups:
 
