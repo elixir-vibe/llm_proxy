@@ -154,8 +154,6 @@ Require the master key.
 - `GET /stats/daily`
 - `GET /stats/messages`
 
-`/admin` is an alias for stats.
-
 ### Optional setup routes
 
 `/setup` is not mounted by default in embeddable router usage. It exists for local/onboarding helper flows such as install script, model listing, and client config snippets.
@@ -252,7 +250,7 @@ Additional upstream providers can be registered with `LLMProxy.Providers.Registr
 
 ## Configuration
 
-See [`docs/architecture.md`](docs/architecture.md) for the module hierarchy and boundary rules.
+See [`docs/architecture.md`](docs/architecture.md) for the module hierarchy and boundary rules. See [`docs/providers.md`](docs/providers.md) for custom provider authoring.
 
 Environment variables can be loaded from `.env` through Dotenvy.
 
