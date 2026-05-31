@@ -1,4 +1,4 @@
-defmodule LLMProxy.ProviderRouting.LowestCost do
+defmodule LLMProxy.Providers.Routing.LowestCost do
   @moduledoc false
 
   alias LLMProxy.ModelDB

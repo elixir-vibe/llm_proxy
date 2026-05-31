@@ -4,17 +4,17 @@ defmodule LLMProxy.HTTP.Routes.Responses do
 
   require Logger
 
-  alias LLMProxy.AccessControl
+  alias LLMProxy.Accounting.UsageTracking
+  alias LLMProxy.Auth.AccessControl
   alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Stream.{Event, SSEWriter}
   alias LLMProxy.Telemetry
-  alias LLMProxy.TokenRateLimit
+  alias LLMProxy.TokenPool.RateLimit
   alias LLMProxy.Trace
   alias LLMProxy.Usage
-  alias LLMProxy.UsageTracking
 
   plug(Auth)
   plug(QuotaCheck)
@@ -120,7 +120,7 @@ defmodule LLMProxy.HTTP.Routes.Responses do
 
   defp handle_provider_error(conn, provider, %Result{error: error, status: status} = result) do
     token = Map.get(result, :token)
-    if status == 429 && token, do: TokenRateLimit.mark_rate_limited(token)
+    if status == 429 && token, do: RateLimit.mark_rate_limited(token)
     Logger.error("#{provider.name()} error (#{status}): #{error}")
     send_error(conn, status, "api_error", error)
   end
@@ -151,7 +151,7 @@ defmodule LLMProxy.HTTP.Routes.Responses do
           Logger.error("Stream error: #{error_msg}")
 
           if String.contains?(error_msg, "429") && token,
-            do: TokenRateLimit.mark_rate_limited(token)
+            do: RateLimit.mark_rate_limited(token)
 
           error_event =
             Jason.encode!(%{type: "error", error: %{type: "api_error", message: error_msg}})

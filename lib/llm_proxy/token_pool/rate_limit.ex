@@ -1,4 +1,4 @@
-defmodule LLMProxy.TokenRateLimit do
+defmodule LLMProxy.TokenPool.RateLimit do
   @moduledoc false
 
   require Logger

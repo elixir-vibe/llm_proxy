@@ -12,18 +12,18 @@ defmodule LLMProxy.Provider do
 
   require Logger
 
-  alias LLMProxy.AccessControl
+  alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
+  alias LLMProxy.Auth.AccessControl
   alias LLMProxy.Cache.Runtime, as: CacheRuntime
   alias LLMProxy.Guardrails
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.ProviderRouting.Attempt
   alias LLMProxy.Providers.{Caller, Registry, Result}
+  alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.ReqLLM.Model
   alias LLMProxy.ReqLLM.ResponseAdapter
   alias LLMProxy.Response
   alias LLMProxy.Telemetry
-  alias LLMProxy.UsageTracking
 
   @type call_error ::
           {:request, Request.Error.t()}

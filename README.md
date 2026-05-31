@@ -252,6 +252,8 @@ Additional upstream providers can be registered with `LLMProxy.Providers.Registr
 
 ## Configuration
 
+See [`docs/architecture.md`](docs/architecture.md) for the module hierarchy and boundary rules.
+
 Environment variables can be loaded from `.env` through Dotenvy.
 
 | Variable | Description |

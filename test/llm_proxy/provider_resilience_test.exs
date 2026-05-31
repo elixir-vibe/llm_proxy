@@ -2,9 +2,9 @@ defmodule LLMProxy.ProviderResilienceTest do
   use ExUnit.Case
 
   alias LLMProxy.Catalog
-  alias LLMProxy.CircuitBreaker
-  alias LLMProxy.ProviderRouting.Attempt
+  alias LLMProxy.Providers.CircuitBreaker
   alias LLMProxy.Providers.{Registry, Result}
+  alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 

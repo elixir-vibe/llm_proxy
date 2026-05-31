@@ -1,4 +1,4 @@
-defmodule LLMProxy.ProviderRouting.Ordered do
+defmodule LLMProxy.Providers.Routing.Ordered do
   @moduledoc false
 
   @spec order([term()]) :: [term()]

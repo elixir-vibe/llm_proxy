@@ -1,4 +1,4 @@
-defmodule LLMProxy.ProviderRouting.RoundRobin do
+defmodule LLMProxy.Providers.Routing.RoundRobin do
   @moduledoc false
 
   use GenServer

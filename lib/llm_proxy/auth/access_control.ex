@@ -1,4 +1,4 @@
-defmodule LLMProxy.AccessControl do
+defmodule LLMProxy.Auth.AccessControl do
   @moduledoc false
 
   def check_model_access(%{id: "master"}, _model), do: :ok

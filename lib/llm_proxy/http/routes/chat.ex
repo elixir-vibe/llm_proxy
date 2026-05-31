@@ -4,8 +4,9 @@ defmodule LLMProxy.HTTP.Routes.Chat do
 
   require Logger
 
-  alias LLMProxy.AccessControl
+  alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
+  alias LLMProxy.Auth.AccessControl
   alias LLMProxy.Guardrails
   alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
@@ -16,7 +17,6 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   alias LLMProxy.Telemetry
   alias LLMProxy.Trace
   alias LLMProxy.Usage
-  alias LLMProxy.UsageTracking
 
   plug(Auth)
   plug(QuotaCheck)

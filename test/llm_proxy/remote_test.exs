@@ -38,7 +38,7 @@ defmodule LLMProxy.RemoteTest do
   setup do
     TestSupport.checkout_repo()
     Registry.register(Provider)
-    ReqLLM.Providers.register(LLMProxy.RemoteProvider)
+    ReqLLM.Providers.register(LLMProxy.ReqLLM.RemoteProvider)
     :ok
   end
 

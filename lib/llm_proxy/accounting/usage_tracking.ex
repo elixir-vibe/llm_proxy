@@ -1,4 +1,4 @@
-defmodule LLMProxy.UsageTracking do
+defmodule LLMProxy.Accounting.UsageTracking do
   @moduledoc false
 
   require Logger

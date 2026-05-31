@@ -9,12 +9,13 @@ defmodule LLMProxy.Providers.Caller do
 
   require Logger
 
-  alias LLMProxy.CircuitBreaker
   alias LLMProxy.Config
   alias LLMProxy.Protocol
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.ProviderRouting.Attempt
-  alias LLMProxy.Providers.{Registry, Result}
+  alias LLMProxy.Providers.CircuitBreaker
+  alias LLMProxy.Providers.Registry
+  alias LLMProxy.Providers.Result
+  alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.Telemetry
 
   @retryable_statuses [500, 502, 503, 504, 529]

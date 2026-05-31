@@ -1,9 +1,9 @@
-defmodule LLMProxy.CircuitBreaker do
+defmodule LLMProxy.Providers.CircuitBreaker do
   @moduledoc false
 
   use GenServer
 
-  alias LLMProxy.ProviderRouting.Attempt
+  alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.Telemetry
 
   defstruct state: :closed, failures: 0, opened_at: nil, cooldown_ms: nil

@@ -1,4 +1,4 @@
-defmodule LLMProxy.ProviderRoutingTest do
+defmodule LLMProxy.Providers.RoutingTest do
   use ExUnit.Case
 
   alias LLMProxy.Catalog

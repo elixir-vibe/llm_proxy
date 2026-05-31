@@ -1,4 +1,4 @@
-defmodule LLMProxy.RemoteProvider do
+defmodule LLMProxy.ReqLLM.RemoteProvider do
   @moduledoc """
   ReqLLM provider for calling a remote LLMProxy node over distributed Erlang.
   """

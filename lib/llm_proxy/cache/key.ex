@@ -2,7 +2,7 @@ defmodule LLMProxy.Cache.Key do
   @moduledoc false
 
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.ProviderRouting.Attempt
+  alias LLMProxy.Providers.Routing.Attempt
 
   @spec build(Request.t(), [Attempt.t()]) :: String.t()
   def build(%Request{} = request, attempts) when is_list(attempts) do

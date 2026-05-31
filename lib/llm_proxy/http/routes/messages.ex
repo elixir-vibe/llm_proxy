@@ -4,17 +4,17 @@ defmodule LLMProxy.HTTP.Routes.Messages do
 
   require Logger
 
-  alias LLMProxy.AccessControl
+  alias LLMProxy.Accounting.UsageTracking
+  alias LLMProxy.Auth.AccessControl
   alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Stream.{Event, SSEWriter}
   alias LLMProxy.Telemetry
-  alias LLMProxy.TokenRateLimit
+  alias LLMProxy.TokenPool.RateLimit
   alias LLMProxy.Trace
   alias LLMProxy.Usage
-  alias LLMProxy.UsageTracking
 
   plug(Auth)
   plug(QuotaCheck)
@@ -189,7 +189,7 @@ defmodule LLMProxy.HTTP.Routes.Messages do
     is_rate_limit =
       String.contains?(error_msg, "429") || String.contains?(error_msg, "rate_limit")
 
-    if is_rate_limit && token, do: TokenRateLimit.mark_rate_limited(token)
+    if is_rate_limit && token, do: RateLimit.mark_rate_limited(token)
     Logger.error("Stream error: #{error_msg}")
 
     error_event = %{
@@ -214,7 +214,7 @@ defmodule LLMProxy.HTTP.Routes.Messages do
   end
 
   defp mark_rate_limited_if_needed(429, %{token: token}) when not is_nil(token) do
-    TokenRateLimit.mark_rate_limited(token)
+    RateLimit.mark_rate_limited(token)
   end
 
   defp mark_rate_limited_if_needed(_, _), do: :ok

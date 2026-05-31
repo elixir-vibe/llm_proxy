@@ -3,12 +3,12 @@ defmodule LLMProxy.HTTP.Routes.HelpersTest do
 
   import Plug.Test
 
-  alias LLMProxy.AccessControl
+  alias LLMProxy.Accounting.UsageTracking
+  alias LLMProxy.Auth.AccessControl
   alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias LLMProxy.Usage
-  alias LLMProxy.UsageTracking
 
   setup do
     TestSupport.checkout_repo()

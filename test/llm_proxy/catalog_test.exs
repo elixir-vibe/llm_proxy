@@ -3,8 +3,8 @@ defmodule LLMProxy.CatalogTest do
 
   alias LLMProxy.Catalog
   alias LLMProxy.Catalog.{Deployment, Model}
-  alias LLMProxy.ProviderRouting.{Attempt, RoundRobin}
   alias LLMProxy.Providers.{Anthropic, OpenAI, Registry}
+  alias LLMProxy.Providers.Routing.{Attempt, RoundRobin}
 
   defmodule Provider do
     def name, do: "catalog-provider"

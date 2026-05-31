@@ -40,6 +40,6 @@ defmodule LLMProxy.Web.Endpoint do
   end
 
   defp route(conn, _opts) do
-    LLMProxy.Router.call(conn, LLMProxy.Router.init([]))
+    LLMProxy.HTTP.Router.call(conn, LLMProxy.HTTP.Router.init([]))
   end
 end

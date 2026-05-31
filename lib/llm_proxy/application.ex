@@ -20,7 +20,7 @@ defmodule LLMProxy.Application do
     Registry.register(LLMProxy.Providers.Anthropic)
     Registry.register(LLMProxy.Providers.OpenAI)
     ReqLLM.Providers.register(LLMProxy.Provider)
-    ReqLLM.Providers.register(LLMProxy.RemoteProvider)
+    ReqLLM.Providers.register(LLMProxy.ReqLLM.RemoteProvider)
 
     Dynamic.register("/v1/messages", LLMProxy.HTTP.Routes.Messages)
     Dynamic.register("/messages", LLMProxy.HTTP.Routes.Messages)
@@ -29,8 +29,8 @@ defmodule LLMProxy.Application do
 
     children = [
       LLMProxy.Repo,
-      LLMProxy.CircuitBreaker,
-      LLMProxy.ProviderRouting.RoundRobin,
+      LLMProxy.Providers.CircuitBreaker,
+      LLMProxy.Providers.Routing.RoundRobin,
       LLMProxy.TokenPool.Server,
       {Phoenix.PubSub, name: LLMProxy.PubSub},
       LLMProxy.Web.Endpoint
