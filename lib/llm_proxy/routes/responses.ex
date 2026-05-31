@@ -9,6 +9,8 @@ defmodule LLMProxy.Routes.Responses do
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.{Event, SSEWriter}
+  alias LLMProxy.Telemetry
+  alias LLMProxy.Trace
   alias LLMProxy.Usage
 
   plug(Auth)
@@ -25,6 +27,7 @@ defmodule LLMProxy.Routes.Responses do
   end
 
   defp handle_responses(conn) do
+    {conn, trace_id} = Trace.ensure_conn(conn)
     api_key = conn.assigns.api_key
     body = conn.body_params
     model = body["model"]
@@ -37,7 +40,7 @@ defmodule LLMProxy.Routes.Responses do
       )
 
       Helpers.log_user_message(api_key, model, "responses", fn -> Request.user_text(request) end)
-      dispatch_provider(conn, provider, normalize_stream(request), api_key, model)
+      dispatch_provider(conn, provider, normalize_stream(request), api_key, model, trace_id)
     else
       nil ->
         send_error(conn, 404, "not_found_error", "Model '#{model}' not found")
@@ -57,16 +60,16 @@ defmodule LLMProxy.Routes.Responses do
 
   defp responses_stream?(%Request{} = request), do: normalize_stream(request).stream
 
-  defp dispatch_provider(conn, provider, %Request{} = request, api_key, model) do
+  defp dispatch_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
     cond do
       request.stream == true and function_exported?(provider, :stream_native, 2) ->
-        stream_native_provider(conn, provider, request, api_key, model)
+        stream_native_provider(conn, provider, request, api_key, model, trace_id)
 
       request.stream == true ->
         unsupported_api(conn, model)
 
       function_exported?(provider, :call_native, 2) ->
-        call_native_provider(conn, provider, request, api_key, model)
+        call_native_provider(conn, provider, request, api_key, model, trace_id)
 
       true ->
         unsupported_api(conn, model)
@@ -82,23 +85,27 @@ defmodule LLMProxy.Routes.Responses do
     )
   end
 
-  defp stream_native_provider(conn, provider, %Request{} = request, api_key, model) do
-    case provider.stream_native(Request.native_body(request), api_key.id) do
+  defp stream_native_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
+    case native_span(provider, model, :responses_stream, trace_id, fn ->
+           provider.stream_native(Request.native_body(request), api_key.id)
+         end) do
       {:ok, %Result{stream: stream_enum, token: token}} ->
-        handle_stream(conn, stream_enum, api_key, model, token)
+        handle_stream(conn, provider, stream_enum, api_key, model, token, trace_id)
 
       {:error, result} ->
         handle_provider_error(conn, provider, result)
     end
   end
 
-  defp call_native_provider(conn, provider, %Request{} = request, api_key, model) do
-    case provider.call_native(Request.native_body(request), api_key.id) do
+  defp call_native_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
+    case native_span(provider, model, :responses_call, trace_id, fn ->
+           provider.call_native(Request.native_body(request), api_key.id)
+         end) do
       {:ok, %Result{response: response}} when not is_nil(response) ->
-        handle_non_stream(conn, response, api_key, model)
+        handle_non_stream(conn, provider, response, api_key, model, trace_id)
 
       {:ok, %Result{stream: stream_enum, token: token}} when not is_nil(stream_enum) ->
-        handle_stream(conn, stream_enum, api_key, model, token)
+        handle_stream(conn, provider, stream_enum, api_key, model, token, trace_id)
 
       {:error, result} ->
         handle_provider_error(conn, provider, result)
@@ -112,13 +119,13 @@ defmodule LLMProxy.Routes.Responses do
     send_error(conn, status, "api_error", error)
   end
 
-  defp handle_non_stream(conn, response, api_key, model) do
+  defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
     usage = extract_usage(response)
-    Helpers.track_usage(api_key, model, usage)
+    Helpers.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
     Helpers.send_json(conn, 200, response)
   end
 
-  defp handle_stream(conn, stream, api_key, model, token) do
+  defp handle_stream(conn, provider, stream, api_key, model, token, trace_id) do
     conn = SSEWriter.start_sse(conn)
     zero_usage = Usage.zero()
 
@@ -146,7 +153,7 @@ defmodule LLMProxy.Routes.Responses do
       end
 
     Plug.Conn.chunk(conn, "data: [DONE]\n\n")
-    Helpers.track_usage(api_key, model, usage)
+    Helpers.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
     conn
   end
 
@@ -171,6 +178,16 @@ defmodule LLMProxy.Routes.Responses do
   defp extract_usage(response) do
     usage = response["usage"] || %{}
     Usage.from_responses(usage)
+  end
+
+  defp native_span(provider, model, operation, trace_id, fun) do
+    Telemetry.with_provider_span(provider.name(), model, operation, fun, %{
+      "llm_proxy.trace_id" => trace_id
+    })
+  end
+
+  defp tracking_opts(provider, trace_id) do
+    %{provider: provider.name(), metadata: %{"trace_id" => trace_id}}
   end
 
   defp send_error(conn, status, type, message) do

@@ -55,10 +55,17 @@ defmodule LLMProxy.Routes.ModerationsTest do
 
     conn =
       TestSupport.json_conn(:post, "/", %{"input" => "hello"})
+      |> Plug.Conn.put_req_header("x-request-id", "moderations-request-id-123")
       |> TestSupport.put_bearer(raw_key)
       |> Moderations.call(Moderations.init([]))
 
     assert conn.status == 200
+    assert Plug.Conn.get_resp_header(conn, "x-request-id") == ["moderations-request-id-123"]
+
+    assert Plug.Conn.get_resp_header(conn, "x-llm-proxy-trace-id") == [
+             "moderations-request-id-123"
+           ]
+
     assert Jason.decode!(conn.resp_body) == %{"results" => [%{"flagged" => false}]}
   end
 end

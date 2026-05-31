@@ -77,10 +77,13 @@ defmodule LLMProxy.Routes.MessagesTest do
         "model" => "fake-messages-model",
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
+      |> Plug.Conn.put_req_header("x-request-id", "messages-request-id-123")
       |> TestSupport.put_bearer(raw_key)
       |> Messages.call(Messages.init([]))
 
     assert conn.status == 200
+    assert Plug.Conn.get_resp_header(conn, "x-request-id") == ["messages-request-id-123"]
+    assert Plug.Conn.get_resp_header(conn, "x-llm-proxy-trace-id") == ["messages-request-id-123"]
     assert Jason.decode!(conn.resp_body)["id"] == "msg-1"
 
     [updated_key] = Storage.list_keys()

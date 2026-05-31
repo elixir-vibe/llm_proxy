@@ -71,10 +71,13 @@ defmodule LLMProxy.Routes.ResponsesTest do
         "input" => [%{"role" => "user", "content" => "hello"}],
         "stream" => false
       })
+      |> Plug.Conn.put_req_header("x-request-id", "responses-request-id-123")
       |> TestSupport.put_bearer(raw_key)
       |> Responses.call(Responses.init([]))
 
     assert conn.status == 200
+    assert Plug.Conn.get_resp_header(conn, "x-request-id") == ["responses-request-id-123"]
+    assert Plug.Conn.get_resp_header(conn, "x-llm-proxy-trace-id") == ["responses-request-id-123"]
     assert Jason.decode!(conn.resp_body)["id"] == "resp-1"
 
     [updated_key] = Storage.list_keys()

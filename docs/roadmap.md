@@ -151,9 +151,9 @@ Current storage has usage logs, traces, message logs, and basic telemetry. Impro
 
 Implemented:
 
-- structured trace IDs surfaced in chat HTTP response headers and local `LLMProxy.Response`
+- structured trace IDs surfaced in HTTP generation route headers and local `LLMProxy.Response`
 - telemetry events for routing attempts and circuit breaker transitions
-- OpenTelemetry provider spans with trace ID attributes
+- OpenTelemetry provider spans with trace ID attributes, including native Messages/Responses/Moderations paths
 
 Future targets:
 
