@@ -119,10 +119,13 @@ Implemented:
 - cache key from normalized request + resolved deployment attempts
 - strict cache adapter contract using `%LLMProxy.Response{}`
 - cache hit metadata on `LLMProxy.Response.cache_hit`
+- per-model cache policy
+- request metadata cache bypass and TTL override
+- TTL hints passed to cache adapters
 
 Future targets:
 
-- per-key or per-model cache policy
+- per-key cache policy
 - usage/tracing metadata for cache hit analytics
 
 Semantic caching should remain optional and not be part of the initial core.

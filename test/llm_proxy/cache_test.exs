@@ -16,9 +16,17 @@ defmodule LLMProxy.CacheTest do
       Agent.get(__MODULE__, fn cache -> Map.get(cache, key) end) || :miss
     end
 
+    def ttl_ms do
+      Agent.get(__MODULE__, fn cache -> Map.get(cache, :ttl_ms) end)
+    end
+
     @impl LLMProxy.Cache
-    def put(key, response, _context) do
-      Agent.update(__MODULE__, &Map.put(&1, key, {:hit, response}))
+    def put(key, response, context) do
+      Agent.update(__MODULE__, fn cache ->
+        cache
+        |> Map.put(key, {:hit, response})
+        |> Map.put(:ttl_ms, context[:cache_ttl_ms])
+      end)
     end
   end
 
@@ -64,7 +72,10 @@ defmodule LLMProxy.CacheTest do
     Registry.register(Provider)
     Application.put_env(:llm_proxy, :cache, Store)
 
-    on_exit(fn -> Application.delete_env(:llm_proxy, :cache) end)
+    on_exit(fn ->
+      Application.delete_env(:llm_proxy, :cache)
+      Application.delete_env(:llm_proxy, :cache_policy)
+    end)
 
     :ok
   end
@@ -80,6 +91,41 @@ defmodule LLMProxy.CacheTest do
     assert second.cache_hit
     assert second.body == first.body
     assert Provider.calls() == 1
+  end
+
+  test "per-request metadata can bypass cache" do
+    {:ok, key, _raw_key} = Storage.create_key("cache-bypass-user")
+
+    opts = [model: "cache-model", metadata: %{"no_cache" => true}, api_key: key]
+
+    assert {:ok, first} = LLMProxy.chat("hello", opts)
+    refute first.cache_hit
+
+    assert {:ok, second} = LLMProxy.chat("hello", opts)
+    refute second.cache_hit
+    assert Provider.calls() == 2
+  end
+
+  test "cache policy can set ttl context for adapters" do
+    Application.put_env(:llm_proxy, :cache_policy, ttl_ms: 60_000)
+    {:ok, key, _raw_key} = Storage.create_key("cache-ttl-user")
+
+    assert {:ok, response} = LLMProxy.chat("hello", model: "cache-model", api_key: key)
+    assert response.cache_ttl_ms == 60_000
+    assert Store.ttl_ms() == 60_000
+  end
+
+  test "cache policy can disable a model" do
+    Application.put_env(:llm_proxy, :cache_policy, models: %{"cache-model" => [enabled: false]})
+
+    {:ok, key, _raw_key} = Storage.create_key("cache-disabled-user")
+
+    assert {:ok, first} = LLMProxy.chat("hello", model: "cache-model", api_key: key)
+    refute first.cache_hit
+
+    assert {:ok, second} = LLMProxy.chat("hello", model: "cache-model", api_key: key)
+    refute second.cache_hit
+    assert Provider.calls() == 2
   end
 
   test "does not cache streamed requests" do

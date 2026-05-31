@@ -12,6 +12,8 @@ defmodule LLMProxy.Response do
     :request,
     :trace_id,
     cache_hit: false,
+    cacheable: true,
+    cache_ttl_ms: nil,
     usage: Usage.zero()
   ]
 
@@ -23,6 +25,8 @@ defmodule LLMProxy.Response do
           request: Request.t(),
           trace_id: String.t() | nil,
           cache_hit: boolean(),
+          cacheable: boolean(),
+          cache_ttl_ms: pos_integer() | nil,
           usage: Usage.t()
         }
 end

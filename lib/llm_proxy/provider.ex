@@ -227,7 +227,7 @@ defmodule LLMProxy.Provider do
   end
 
   defp cache_get(cache_key, request, context) do
-    if Caches.enabled?(request) do
+    if Caches.enabled?(request, context) do
       case Caches.get(cache_key, context) do
         {:hit, %Response{} = response} ->
           {:hit, %{response | request: request, trace_id: context.trace_id, cache_hit: true}}
@@ -262,6 +262,8 @@ defmodule LLMProxy.Provider do
     duration_ms = System.monotonic_time(:millisecond) - start
     usage = used_provider.extract_usage(provider_body)
 
+    cache_policy = Caches.policy(request, context)
+
     response = %Response{
       body: used_provider.to_openai_response(provider_body, used_model),
       provider_body: provider_body,
@@ -269,7 +271,8 @@ defmodule LLMProxy.Provider do
       model: used_model,
       request: request,
       usage: usage,
-      trace_id: context.trace_id
+      trace_id: context.trace_id,
+      cache_ttl_ms: cache_policy.ttl_ms
     }
 
     context = %{context | provider: used_provider, model: used_model}

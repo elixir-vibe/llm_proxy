@@ -165,7 +165,12 @@ Require the master key.
 Host apps can configure an optional deterministic cache adapter for non-stream provider calls:
 
 ```elixir
-config :llm_proxy, cache: MyApp.LLMCache
+config :llm_proxy,
+  cache: MyApp.LLMCache,
+  cache_policy: [
+    ttl_ms: 60_000,
+    models: %{"no-cache-model" => [enabled: false]}
+  ]
 ```
 
 ```elixir
@@ -177,7 +182,7 @@ defmodule MyApp.LLMCache do
 end
 ```
 
-Cache keys are derived from the normalized request and resolved deployment attempts. Adapters return `{:hit, %LLMProxy.Response{}}` or `:miss`.
+Cache keys are derived from the normalized request and resolved deployment attempts. Adapters return `{:hit, %LLMProxy.Response{}}` or `:miss`. Requests can bypass cache with metadata such as `%{"no_cache" => true}` or override TTL with `%{"cache_ttl_ms" => 30_000}`.
 
 ## Guardrail hooks
 

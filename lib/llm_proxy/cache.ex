@@ -26,4 +26,6 @@ defmodule LLMProxy.Cache do
 
   @callback get(String.t(), context()) :: {:hit, Response.t()} | :miss | {:error, term()}
   @callback put(String.t(), Response.t(), context()) :: :ok | {:error, term()}
+
+  @optional_callbacks put: 3
 end

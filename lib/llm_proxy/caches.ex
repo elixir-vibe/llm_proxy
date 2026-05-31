@@ -1,7 +1,7 @@
 defmodule LLMProxy.Caches do
   @moduledoc false
 
-  alias LLMProxy.Cache.Key
+  alias LLMProxy.Cache.{Key, Policy}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Response
   alias LLMProxy.Routing.Attempt
@@ -24,22 +24,42 @@ defmodule LLMProxy.Caches do
   end
 
   @spec put(String.t(), Response.t(), LLMProxy.Cache.context()) :: :ok
-  def put(key, %Response{} = response, context) when is_binary(key) do
+  def put(key, %Response{cacheable: true} = response, context) when is_binary(key) do
+    context = put_policy(context, response)
+
     case adapter() do
       nil -> ignore()
       module -> put_response(module, key, response, context)
     end
   end
 
-  @spec enabled?(Request.t()) :: boolean()
-  def enabled?(%Request{stream: true}), do: false
-  def enabled?(%Request{}), do: not is_nil(adapter())
+  def put(_key, %Response{}, _context), do: :ok
+
+  @spec enabled?(Request.t(), LLMProxy.Cache.context()) :: boolean()
+  def enabled?(%Request{stream: true}, _context), do: false
+
+  def enabled?(%Request{} = request, context) do
+    not is_nil(adapter()) and Policy.resolve(request, context).enabled
+  end
+
+  @spec policy(Request.t(), LLMProxy.Cache.context()) :: Policy.t()
+  def policy(%Request{} = request, context), do: Policy.resolve(request, context)
 
   defp put_response(module, key, response, context) do
-    case module.put(key, response, context) do
-      :ok -> :ok
-      _other -> :ok
+    if function_exported?(module, :put, 3) do
+      case module.put(key, response, context) do
+        :ok -> :ok
+        _other -> :ok
+      end
+    else
+      :ok
     end
+  end
+
+  defp put_policy(context, response) do
+    context
+    |> Map.put(:cache_ttl_ms, response.cache_ttl_ms)
+    |> Map.put(:cacheable, response.cacheable)
   end
 
   defp adapter do
