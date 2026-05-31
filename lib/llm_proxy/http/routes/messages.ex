@@ -5,13 +5,13 @@ defmodule LLMProxy.HTTP.Routes.Messages do
   require Logger
 
   alias LLMProxy.Accounting.UsageTracking
-  alias LLMProxy.Auth.AccessControl
-  alias LLMProxy.HTTP.Routes.Helpers
+  alias LLMProxy.Actor
+  alias LLMProxy.HTTP.Routes.{Helpers, NativeErrors, NativeResults}
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.Providers.{Registry, Result}
+  alias LLMProxy.Provider
+  alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.{Event, SSEWriter}
-  alias LLMProxy.Telemetry
   alias LLMProxy.TokenPool.RateLimit
   alias LLMProxy.Trace
   alias LLMProxy.Usage
@@ -35,93 +35,53 @@ defmodule LLMProxy.HTTP.Routes.Messages do
     body = conn.body_params
     model = body["model"]
 
-    with {:ok, request} <- Request.parse(:anthropic_messages, body),
-         :ok <- AccessControl.check_model_access(api_key, model),
-         provider when not is_nil(provider) <- Registry.get_provider(model) do
-      Logger.debug(
-        "Messages request from #{api_key.name} model=#{model} stream=#{request.stream || false}"
-      )
+    case Request.parse(:anthropic_messages, body) do
+      {:ok, request} ->
+        Logger.debug(
+          "Messages request from #{api_key.name} model=#{model} stream=#{request.stream || false}"
+        )
 
-      UsageTracking.log_user_message(api_key, model, "messages", fn ->
-        Request.user_text(request)
-      end)
-
-      dispatch_provider(conn, provider, request, api_key, model, trace_id)
-    else
-      nil ->
-        send_error(conn, 404, "not_found_error", "Model '#{model}' not found")
+        dispatch_provider(conn, request, api_key, trace_id)
 
       {:error, %Request.Error{} = error} ->
         send_error(conn, 400, error.code, error.message)
+    end
+  end
+
+  defp dispatch_provider(conn, %Request{stream: true} = request, api_key, trace_id) do
+    case Provider.stream_native(request, Actor.from_api_key(api_key),
+           route: :messages,
+           trace_id: trace_id,
+           api_name: "Messages API"
+         ) do
+      {:ok, %Result{stream: stream, token: token, provider: provider, model: model}} ->
+        handle_stream(conn, provider, stream, api_key, model, token, trace_id)
 
       {:error, reason} ->
-        send_error(conn, 403, "permission_error", reason)
+        handle_provider_error(conn, reason)
     end
   end
 
-  defp dispatch_provider(
-         conn,
-         provider,
-         %Request{stream: true} = request,
-         api_key,
-         model,
-         trace_id
-       ) do
-    if function_exported?(provider, :stream_native, 2) do
-      stream_native_provider(conn, provider, request, api_key, model, trace_id)
-    else
-      unsupported_api(conn, model)
+  defp dispatch_provider(conn, %Request{} = request, api_key, trace_id) do
+    case Provider.call_native(request, Actor.from_api_key(api_key),
+           route: :messages,
+           trace_id: trace_id,
+           api_name: "Messages API"
+         ) do
+      {:ok, %Result{} = result} ->
+        NativeResults.handle(conn, result, api_key, trace_id, native_handlers())
+
+      {:error, reason} ->
+        handle_provider_error(conn, reason)
     end
   end
 
-  defp dispatch_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
-    if function_exported?(provider, :call_native, 2) do
-      call_native_provider(conn, provider, request, api_key, model, trace_id)
-    else
-      unsupported_api(conn, model)
-    end
+  defp native_handlers do
+    %{non_stream: &handle_non_stream/6, stream: &handle_stream/7}
   end
 
-  defp unsupported_api(conn, model) do
-    send_error(
-      conn,
-      400,
-      "invalid_request_error",
-      "Model '#{model}' does not support Messages API"
-    )
-  end
-
-  defp stream_native_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
-    case native_span(provider, model, :messages_stream, trace_id, fn ->
-           provider.stream_native(Request.native_body(request), api_key.id)
-         end) do
-      {:ok, %Result{stream: stream, token: token}} ->
-        handle_stream(conn, provider, stream, api_key, model, token, trace_id)
-
-      {:error, result} ->
-        handle_provider_error(conn, provider, result)
-    end
-  end
-
-  defp call_native_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
-    case native_span(provider, model, :messages_call, trace_id, fn ->
-           provider.call_native(Request.native_body(request), api_key.id)
-         end) do
-      {:ok, %Result{response: response}} when not is_nil(response) ->
-        handle_non_stream(conn, provider, response, api_key, model, trace_id)
-
-      {:ok, %Result{stream: stream, token: token}} when not is_nil(stream) ->
-        handle_stream(conn, provider, stream, api_key, model, token, trace_id)
-
-      {:error, result} ->
-        handle_provider_error(conn, provider, result)
-    end
-  end
-
-  defp handle_provider_error(conn, provider, %Result{error: error, status: status} = result) do
-    mark_rate_limited_if_needed(status, result)
-    Logger.error("#{provider.name()} error (#{status}): #{error}")
-    send_error(conn, status, error_type(status), error)
+  defp handle_provider_error(conn, reason) do
+    NativeErrors.send(conn, reason, &send_error/4, &error_type/1, &mark_rate_limited_if_needed/1)
   end
 
   defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
@@ -203,21 +163,15 @@ defmodule LLMProxy.HTTP.Routes.Messages do
     SSEWriter.write_named_event(conn, "error", error_event)
   end
 
-  defp native_span(provider, model, operation, trace_id, fun) do
-    Telemetry.with_provider_span(provider.name(), model, operation, fun, %{
-      "llm_proxy.trace_id" => trace_id
-    })
-  end
-
   defp tracking_opts(provider, trace_id) do
     %{provider: provider.name(), metadata: %{"trace_id" => trace_id}}
   end
 
-  defp mark_rate_limited_if_needed(429, %{token: token}) when not is_nil(token) do
+  defp mark_rate_limited_if_needed(%Result{status: 429, token: token}) when not is_nil(token) do
     RateLimit.mark_rate_limited(token)
   end
 
-  defp mark_rate_limited_if_needed(_, _), do: :ok
+  defp mark_rate_limited_if_needed(_result), do: :ok
 
   defp error_type(429), do: "rate_limit_error"
   defp error_type(401), do: "authentication_error"

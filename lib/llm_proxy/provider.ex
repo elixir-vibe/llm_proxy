@@ -97,6 +97,19 @@ defmodule LLMProxy.Provider do
     end
   end
 
+  @spec call_native(Request.t(), Actor.t() | map() | String.t(), keyword()) ::
+          {:ok, Result.t()} | {:error, call_error()}
+  def call_native(%Request{} = request, actor_or_key, opts \\ []) do
+    execute_native(request, actor_or_key, :call_native, opts)
+  end
+
+  @spec stream_native(Request.t(), Actor.t() | map() | String.t(), keyword()) ::
+          {:ok, Result.t()} | {:error, call_error()}
+  def stream_native(%Request{} = request, actor_or_key, opts \\ []) do
+    request = %{request | stream: true, body: Map.put(request.body, "stream", true)}
+    execute_native(request, actor_or_key, :stream_native, opts)
+  end
+
   @spec chat(String.t() | list() | ReqLLM.Context.t(), keyword()) ::
           {:ok, Response.t()} | {:error, call_error() | {:request, Request.Error.t()}}
   def chat(messages, opts \\ []) do
@@ -283,6 +296,65 @@ defmodule LLMProxy.Provider do
       %{"llm_proxy.trace_id" => trace_id}
     )
   end
+
+  defp execute_native(%Request{} = request, actor_or_key, function, opts) do
+    route = Keyword.get(opts, :route, request.protocol)
+
+    with {:ok, actor} <- normalize_actor(actor_or_key),
+         {:ok, api_key} <- fetch_api_key(actor),
+         :ok <- check_quota(actor, api_key),
+         {:ok, request} <- guard_before_request(request, actor, api_key, route),
+         :ok <- AccessControl.check_model_access(api_key, request.model),
+         {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
+           Registry.resolve_attempts(request.model) do
+      Logger.debug(
+        "Provider native #{function} from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
+      )
+
+      UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
+        Request.user_text(request)
+      end)
+
+      call_native_provider(provider, upstream_model, attempts, request, api_key, function, opts)
+    else
+      :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
+      {:error, {:missing_api_key, _}} = error -> error
+      {:error, {:invalid_api_key, _}} = error -> error
+      {:error, {:guardrail, _reason}} = error -> error
+      {:error, reason} when is_binary(reason) -> {:error, {:permission, reason}}
+    end
+  end
+
+  defp call_native_provider(provider, upstream_model, attempts, request, api_key, function, opts) do
+    trace_id = Keyword.get(opts, :trace_id) || LLMProxy.Trace.new_id()
+    api_name = Keyword.get(opts, :api_name, native_api_name(request.protocol))
+
+    result =
+      Telemetry.with_provider_span(
+        provider.name(),
+        upstream_model,
+        function,
+        fn -> invoke_native(function, attempts, request, api_key.id, api_name) end,
+        %{"llm_proxy.trace_id" => trace_id}
+      )
+
+    case result do
+      {:ok, %Result{} = result} -> {:ok, result}
+      {:error, %Result{} = result} -> {:error, {:provider, result}}
+    end
+  end
+
+  defp invoke_native(:call_native, attempts, request, user_id, api_name) do
+    Caller.call_native_attempts(attempts, request, user_id, api_name)
+  end
+
+  defp invoke_native(:stream_native, attempts, request, user_id, api_name) do
+    Caller.stream_native_attempts(attempts, request, user_id, api_name)
+  end
+
+  defp native_api_name(:anthropic_messages), do: "Messages API"
+  defp native_api_name(:openai_responses), do: "Responses API"
+  defp native_api_name(_protocol), do: "native API"
 
   defp stream_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
     start = System.monotonic_time(:millisecond)

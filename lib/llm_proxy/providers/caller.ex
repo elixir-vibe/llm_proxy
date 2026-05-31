@@ -38,6 +38,20 @@ defmodule LLMProxy.Providers.Caller do
     attempts |> Enum.map(&Attempt.new/1) |> try_stream(body, user_id, nil)
   end
 
+  def call_native_attempts(attempts, %Request{} = request, user_id, api_name)
+      when is_list(attempts) do
+    attempts
+    |> Enum.map(&Attempt.new/1)
+    |> try_native(:call_native, request, user_id, api_name, nil)
+  end
+
+  def stream_native_attempts(attempts, %Request{} = request, user_id, api_name)
+      when is_list(attempts) do
+    attempts
+    |> Enum.map(&Attempt.new/1)
+    |> try_native(:stream_native, request, user_id, api_name, nil)
+  end
+
   defp build_attempts(provider, model) do
     primary = Attempt.new({provider, model})
     fallbacks = Registry.get_fallbacks(model)
@@ -179,6 +193,126 @@ defmodule LLMProxy.Providers.Caller do
 
   defp handle_stream_result({:error, _result} = error, _attempt, _rest, _body, _user_id),
     do: error
+
+  defp try_native([], _function, _request, _user_id, _api_name, nil) do
+    {:error, Result.error("No healthy deployments available", 503, nil)}
+  end
+
+  defp try_native([], _function, _request, _user_id, _api_name, last_error), do: last_error
+
+  defp try_native([%Attempt{} = attempt | rest], function, request, user_id, api_name, last_error) do
+    cond do
+      not CircuitBreaker.available?(attempt) ->
+        try_native(rest, function, request, user_id, api_name, last_error)
+
+      not function_exported?(attempt.provider, function, 2) ->
+        error = unsupported_native_error(attempt, api_name)
+        try_native(rest, function, request, user_id, api_name, error)
+
+      true ->
+        event = native_event(function)
+        Telemetry.emit([:routing, event, :start], attempt)
+
+        attempt
+        |> invoke(function, [Request.native_body(%{request | model: attempt.model}), user_id])
+        |> handle_native_result(attempt, rest, function, request, user_id, api_name)
+    end
+  end
+
+  defp handle_native_result(
+         {:ok, result},
+         attempt,
+         rest,
+         _function,
+         _request,
+         _user_id,
+         _api_name
+       ) do
+    CircuitBreaker.success(attempt)
+    Telemetry.emit([:routing, :native_attempt, :stop], attempt)
+
+    if rest != [] do
+      Logger.info("Fallback to #{attempt.provider.name()}/#{attempt.model} succeeded (native)")
+    end
+
+    Result.with_attempt({:ok, result}, attempt.provider, attempt.model)
+  end
+
+  defp handle_native_result(
+         {:error, %Result{status: 429}} = error,
+         attempt,
+         rest,
+         function,
+         request,
+         user_id,
+         api_name
+       ) do
+    handle_retryable_native_error(error, attempt, rest, function, request, user_id, api_name)
+  end
+
+  defp handle_native_result(
+         {:error, %Result{status: status}} = error,
+         attempt,
+         rest,
+         function,
+         request,
+         user_id,
+         api_name
+       )
+       when status in @retryable_statuses do
+    handle_retryable_native_error(error, attempt, rest, function, request, user_id, api_name)
+  end
+
+  defp handle_native_result(
+         {:error, %Result{} = result},
+         attempt,
+         _rest,
+         _function,
+         _request,
+         _user_id,
+         _api_name
+       ) do
+    Result.with_attempt({:error, result}, attempt.provider, attempt.model)
+  end
+
+  defp handle_retryable_native_error(
+         {:error, %Result{status: status}} = error,
+         attempt,
+         rest,
+         function,
+         request,
+         user_id,
+         api_name
+       ) do
+    CircuitBreaker.failure(attempt, retry_after(error))
+    Telemetry.emit([:routing, :native_attempt, :exception], attempt, %{status: status})
+
+    Logger.warning(
+      "#{attempt.provider.name()}/#{attempt.model} returned #{status}, trying fallback (native)"
+    )
+
+    try_native(
+      rest,
+      function,
+      request,
+      user_id,
+      api_name,
+      Result.with_attempt(error, attempt.provider, attempt.model)
+    )
+  end
+
+  defp unsupported_native_error(attempt, api_name) do
+    {:error,
+     Result.error(
+       "Model '#{attempt.model}' does not support #{api_name}",
+       400,
+       nil
+     )}
+    |> Result.with_attempt(attempt.provider, attempt.model)
+  end
+
+  defp native_event(:stream_native), do: :native_stream_attempt
+  defp native_event(:call_native), do: :native_attempt
 
   defp retry_after({:error, %Result{retry_after_ms: retry_after_ms}}), do: retry_after_ms
 

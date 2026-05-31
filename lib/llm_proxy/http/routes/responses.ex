@@ -5,13 +5,13 @@ defmodule LLMProxy.HTTP.Routes.Responses do
   require Logger
 
   alias LLMProxy.Accounting.UsageTracking
-  alias LLMProxy.Auth.AccessControl
-  alias LLMProxy.HTTP.Routes.Helpers
+  alias LLMProxy.Actor
+  alias LLMProxy.HTTP.Routes.{Helpers, NativeErrors, NativeResults}
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.Providers.{Registry, Result}
+  alias LLMProxy.Provider
+  alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.{Event, SSEWriter}
-  alias LLMProxy.Telemetry
   alias LLMProxy.TokenPool.RateLimit
   alias LLMProxy.Trace
   alias LLMProxy.Usage
@@ -35,27 +35,16 @@ defmodule LLMProxy.HTTP.Routes.Responses do
     body = conn.body_params
     model = body["model"]
 
-    with {:ok, request} <- Request.parse(:openai_responses, body),
-         :ok <- AccessControl.check_model_access(api_key, model),
-         provider when not is_nil(provider) <- Registry.get_provider(model) do
-      Logger.debug(
-        "Responses request from #{api_key.name} model=#{model} stream=#{responses_stream?(request)}"
-      )
+    case Request.parse(:openai_responses, body) do
+      {:ok, request} ->
+        Logger.debug(
+          "Responses request from #{api_key.name} model=#{model} stream=#{responses_stream?(request)}"
+        )
 
-      UsageTracking.log_user_message(api_key, model, "responses", fn ->
-        Request.user_text(request)
-      end)
-
-      dispatch_provider(conn, provider, normalize_stream(request), api_key, model, trace_id)
-    else
-      nil ->
-        send_error(conn, 404, "not_found_error", "Model '#{model}' not found")
+        dispatch_provider(conn, normalize_stream(request), api_key, trace_id)
 
       {:error, %Request.Error{} = error} ->
         send_error(conn, 400, error.code, error.message)
-
-      {:error, reason} ->
-        send_error(conn, 403, "permission_error", reason)
     end
   end
 
@@ -66,64 +55,53 @@ defmodule LLMProxy.HTTP.Routes.Responses do
 
   defp responses_stream?(%Request{} = request), do: normalize_stream(request).stream
 
-  defp dispatch_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
-    cond do
-      request.stream == true and function_exported?(provider, :stream_native, 2) ->
-        stream_native_provider(conn, provider, request, api_key, model, trace_id)
+  defp dispatch_provider(conn, %Request{stream: true} = request, api_key, trace_id) do
+    case Provider.stream_native(request, Actor.from_api_key(api_key),
+           route: :responses,
+           trace_id: trace_id,
+           api_name: "Responses API"
+         ) do
+      {:ok, %Result{} = result} ->
+        NativeResults.handle(conn, result, api_key, trace_id, native_handlers())
 
-      request.stream == true ->
-        unsupported_api(conn, model)
-
-      function_exported?(provider, :call_native, 2) ->
-        call_native_provider(conn, provider, request, api_key, model, trace_id)
-
-      true ->
-        unsupported_api(conn, model)
+      {:error, reason} ->
+        handle_provider_error(conn, reason)
     end
   end
 
-  defp unsupported_api(conn, model) do
-    send_error(
+  defp dispatch_provider(conn, %Request{} = request, api_key, trace_id) do
+    case Provider.call_native(request, Actor.from_api_key(api_key),
+           route: :responses,
+           trace_id: trace_id,
+           api_name: "Responses API"
+         ) do
+      {:ok, %Result{} = result} ->
+        NativeResults.handle(conn, result, api_key, trace_id, native_handlers())
+
+      {:error, reason} ->
+        handle_provider_error(conn, reason)
+    end
+  end
+
+  defp native_handlers do
+    %{non_stream: &handle_non_stream/6, stream: &handle_stream/7}
+  end
+
+  defp handle_provider_error(conn, reason) do
+    NativeErrors.send(
       conn,
-      400,
-      "invalid_request_error",
-      "Model '#{model}' does not support Responses API"
+      reason,
+      &send_error/4,
+      fn _status -> "api_error" end,
+      &mark_rate_limited_if_needed/1
     )
   end
 
-  defp stream_native_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
-    case native_span(provider, model, :responses_stream, trace_id, fn ->
-           provider.stream_native(Request.native_body(request), api_key.id)
-         end) do
-      {:ok, %Result{stream: stream_enum, token: token}} ->
-        handle_stream(conn, provider, stream_enum, api_key, model, token, trace_id)
-
-      {:error, result} ->
-        handle_provider_error(conn, provider, result)
-    end
+  defp mark_rate_limited_if_needed(%Result{status: 429, token: token}) when not is_nil(token) do
+    RateLimit.mark_rate_limited(token)
   end
 
-  defp call_native_provider(conn, provider, %Request{} = request, api_key, model, trace_id) do
-    case native_span(provider, model, :responses_call, trace_id, fn ->
-           provider.call_native(Request.native_body(request), api_key.id)
-         end) do
-      {:ok, %Result{response: response}} when not is_nil(response) ->
-        handle_non_stream(conn, provider, response, api_key, model, trace_id)
-
-      {:ok, %Result{stream: stream_enum, token: token}} when not is_nil(stream_enum) ->
-        handle_stream(conn, provider, stream_enum, api_key, model, token, trace_id)
-
-      {:error, result} ->
-        handle_provider_error(conn, provider, result)
-    end
-  end
-
-  defp handle_provider_error(conn, provider, %Result{error: error, status: status} = result) do
-    token = Map.get(result, :token)
-    if status == 429 && token, do: RateLimit.mark_rate_limited(token)
-    Logger.error("#{provider.name()} error (#{status}): #{error}")
-    send_error(conn, status, "api_error", error)
-  end
+  defp mark_rate_limited_if_needed(_result), do: :ok
 
   defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
     usage = extract_usage(response)
@@ -186,12 +164,6 @@ defmodule LLMProxy.HTTP.Routes.Responses do
   defp extract_usage(response) do
     usage = response["usage"] || %{}
     Usage.from_responses(usage)
-  end
-
-  defp native_span(provider, model, operation, trace_id, fun) do
-    Telemetry.with_provider_span(provider.name(), model, operation, fun, %{
-      "llm_proxy.trace_id" => trace_id
-    })
   end
 
   defp tracking_opts(provider, trace_id) do
