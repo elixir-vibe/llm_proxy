@@ -8,8 +8,6 @@ defmodule LLMProxy.Storage do
 
   import Ecto.Query
 
-  @four_hours_ms 4 * 60 * 60 * 1000
-  @one_week_ms 7 * 24 * 60 * 60 * 1000
   @min_tokens_for_ratio_check 50_000
 
   # --- API Keys ---
@@ -186,8 +184,8 @@ defmodule LLMProxy.Storage do
   defp get_budget_spend(%{budget_period: period} = key) when period in ["4h", "week"] do
     window_ms =
       case period do
-        "4h" -> @four_hours_ms
-        "week" -> @one_week_ms
+        "4h" -> LLMProxy.Config.usage_window_4h_ms()
+        "week" -> LLMProxy.Config.usage_window_week_ms()
       end
 
     result =
@@ -209,7 +207,7 @@ defmodule LLMProxy.Storage do
   defp check_4h_token_quota(%{quota_4h_input: nil, quota_4h_output: nil}), do: :ok
 
   defp check_4h_token_quota(key) do
-    usage = get_usage_in_window(key.id, @four_hours_ms)
+    usage = get_usage_in_window(key.id, LLMProxy.Config.usage_window_4h_ms())
 
     cond do
       key.quota_4h_input && usage.input >= key.quota_4h_input ->
@@ -226,7 +224,7 @@ defmodule LLMProxy.Storage do
   defp check_week_token_quota(%{quota_week_input: nil, quota_week_output: nil}), do: :ok
 
   defp check_week_token_quota(key) do
-    usage = get_usage_in_window(key.id, @one_week_ms)
+    usage = get_usage_in_window(key.id, LLMProxy.Config.usage_window_week_ms())
 
     cond do
       key.quota_week_input && usage.input >= key.quota_week_input ->
@@ -243,7 +241,7 @@ defmodule LLMProxy.Storage do
   defp check_4h_message_quota(%{quota_4h_messages: nil}), do: :ok
 
   defp check_4h_message_quota(key) do
-    count = get_message_count_in_window(key.id, @four_hours_ms)
+    count = get_message_count_in_window(key.id, LLMProxy.Config.usage_window_4h_ms())
 
     if count >= key.quota_4h_messages do
       {:error, "4h message quota exceeded (#{count}/#{key.quota_4h_messages})"}
@@ -255,7 +253,7 @@ defmodule LLMProxy.Storage do
   defp check_week_message_quota(%{quota_week_messages: nil}), do: :ok
 
   defp check_week_message_quota(key) do
-    count = get_message_count_in_window(key.id, @one_week_ms)
+    count = get_message_count_in_window(key.id, LLMProxy.Config.usage_window_week_ms())
 
     if count >= key.quota_week_messages do
       {:error, "Weekly message quota exceeded (#{count}/#{key.quota_week_messages})"}
@@ -267,7 +265,7 @@ defmodule LLMProxy.Storage do
   defp check_cache_ratio(%{min_cache_ratio: nil}), do: :ok
 
   defp check_cache_ratio(key) do
-    {ratio, total} = get_cache_ratio_in_window(key.id, @four_hours_ms)
+    {ratio, total} = get_cache_ratio_in_window(key.id, LLMProxy.Config.usage_window_4h_ms())
 
     if total >= @min_tokens_for_ratio_check and ratio < key.min_cache_ratio do
       pct = Float.round(ratio * 100, 1)
@@ -314,7 +312,7 @@ defmodule LLMProxy.Storage do
   end
 
   defp check_service_4h(key_id, service, %{"4h" => limit}) when is_integer(limit) do
-    usage = get_service_usage_in_window(key_id, service, @four_hours_ms)
+    usage = get_service_usage_in_window(key_id, service, LLMProxy.Config.usage_window_4h_ms())
 
     if usage >= limit do
       {:error, "#{service} 4h quota exceeded (#{usage}/#{limit} requests)"}
@@ -326,7 +324,7 @@ defmodule LLMProxy.Storage do
   defp check_service_4h(_, _, _), do: :ok
 
   defp check_service_week(key_id, service, %{"week" => limit}) when is_integer(limit) do
-    usage = get_service_usage_in_window(key_id, service, @one_week_ms)
+    usage = get_service_usage_in_window(key_id, service, LLMProxy.Config.usage_window_week_ms())
 
     if usage >= limit do
       {:error, "#{service} weekly quota exceeded (#{usage}/#{limit} requests)"}

@@ -65,7 +65,7 @@ defmodule LLMProxy.Providers.Anthropic do
       HTTP.new(
         url: "#{base_url(token)}/messages",
         headers: headers(token),
-        receive_timeout: 600_000
+        receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
       )
 
     case Req.post(req, json: body) do
@@ -86,7 +86,7 @@ defmodule LLMProxy.Providers.Anthropic do
         url: "#{base_url(token)}/messages",
         headers: headers(token),
         into: :self,
-        receive_timeout: 600_000
+        receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
       )
 
     case Req.post(req, json: body) do

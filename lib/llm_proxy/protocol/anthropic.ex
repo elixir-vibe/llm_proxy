@@ -36,7 +36,7 @@ defmodule LLMProxy.Protocol.Anthropic do
     base = %{
       "model" => request.model,
       "messages" => Enum.map(messages, &message_to_anthropic/1),
-      "max_tokens" => request.max_tokens || 4096
+      "max_tokens" => request.max_tokens || LLMProxy.Config.anthropic_max_tokens()
     }
 
     base

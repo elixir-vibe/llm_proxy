@@ -8,9 +8,6 @@ defmodule LLMProxy.Routes.Keys do
   alias LLMProxy.Routes.Keys.Params
   alias LLMProxy.Storage
 
-  @four_hours_ms 4 * 60 * 60 * 1000
-  @one_week_ms 7 * 24 * 60 * 60 * 1000
-
   plug(:route_auth)
   plug(:match)
   plug(:dispatch)
@@ -20,11 +17,17 @@ defmodule LLMProxy.Routes.Keys do
   get "/usage" do
     api_key = conn.assigns.api_key
 
-    usage_4h = Storage.get_usage_in_window(api_key.id, @four_hours_ms)
-    usage_week = Storage.get_usage_in_window(api_key.id, @one_week_ms)
-    messages_4h = Storage.get_message_count_in_window(api_key.id, @four_hours_ms)
-    messages_week = Storage.get_message_count_in_window(api_key.id, @one_week_ms)
-    {cache_ratio_4h, _total} = Storage.get_cache_ratio_in_window(api_key.id, @four_hours_ms)
+    usage_4h = Storage.get_usage_in_window(api_key.id, LLMProxy.Config.usage_window_4h_ms())
+    usage_week = Storage.get_usage_in_window(api_key.id, LLMProxy.Config.usage_window_week_ms())
+
+    messages_4h =
+      Storage.get_message_count_in_window(api_key.id, LLMProxy.Config.usage_window_4h_ms())
+
+    messages_week =
+      Storage.get_message_count_in_window(api_key.id, LLMProxy.Config.usage_window_week_ms())
+
+    {cache_ratio_4h, _total} =
+      Storage.get_cache_ratio_in_window(api_key.id, LLMProxy.Config.usage_window_4h_ms())
 
     send_json(conn, 200, %{
       name: api_key.name,
@@ -170,11 +173,17 @@ defmodule LLMProxy.Routes.Keys do
   # --- Private helpers ---
 
   defp key_with_usage(key) do
-    usage_4h = Storage.get_usage_in_window(key.id, @four_hours_ms)
-    usage_week = Storage.get_usage_in_window(key.id, @one_week_ms)
-    messages_4h = Storage.get_message_count_in_window(key.id, @four_hours_ms)
-    messages_week = Storage.get_message_count_in_window(key.id, @one_week_ms)
-    {cache_ratio_4h, _total} = Storage.get_cache_ratio_in_window(key.id, @four_hours_ms)
+    usage_4h = Storage.get_usage_in_window(key.id, LLMProxy.Config.usage_window_4h_ms())
+    usage_week = Storage.get_usage_in_window(key.id, LLMProxy.Config.usage_window_week_ms())
+
+    messages_4h =
+      Storage.get_message_count_in_window(key.id, LLMProxy.Config.usage_window_4h_ms())
+
+    messages_week =
+      Storage.get_message_count_in_window(key.id, LLMProxy.Config.usage_window_week_ms())
+
+    {cache_ratio_4h, _total} =
+      Storage.get_cache_ratio_in_window(key.id, LLMProxy.Config.usage_window_4h_ms())
 
     %{
       id: key.id,

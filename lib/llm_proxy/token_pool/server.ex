@@ -14,8 +14,6 @@ defmodule LLMProxy.TokenPool.Server do
 
   import Ecto.Query
 
-  @cooldown_ms 4 * 60 * 60 * 1000
-
   defmodule State do
     @moduledoc false
     defstruct cooldowns: %{}
@@ -33,7 +31,7 @@ defmodule LLMProxy.TokenPool.Server do
     GenServer.call(__MODULE__, {:pick_token_by_kind, provider, kind, user_id})
   end
 
-  def mark_rate_limited(token, cooldown_ms \\ @cooldown_ms)
+  def mark_rate_limited(token, cooldown_ms \\ LLMProxy.Config.token_cooldown_ms())
 
   def mark_rate_limited(%ProviderToken{id: id}, cooldown_ms) do
     GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})

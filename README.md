@@ -266,6 +266,18 @@ Environment variables can be loaded from `.env` through Dotenvy.
 | `LLM_FALLBACKS` | JSON map of model fallback chains |
 | `LLM_MAX_RETRIES` | Number of fallback models to try, default `1` |
 
+Runtime defaults can also be overridden from Elixir config:
+
+```elixir
+config :llm_proxy,
+  token_cooldown_ms: :timer.hours(4),
+  deployment_failure_threshold: 3,
+  deployment_cooldown_ms: :timer.seconds(30),
+  provider_receive_timeout_ms: :timer.minutes(10),
+  remote_timeout_ms: :timer.seconds(30),
+  anthropic_max_tokens: 4096
+```
+
 HTTP generation routes use Phoenix/Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.
 
 ## Setup

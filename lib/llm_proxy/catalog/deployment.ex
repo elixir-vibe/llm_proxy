@@ -7,8 +7,8 @@ defmodule LLMProxy.Catalog.Deployment do
     order: 1,
     token_pool: nil,
     timeout_ms: nil,
-    failure_threshold: 3,
-    cooldown_ms: 30_000,
+    failure_threshold: nil,
+    cooldown_ms: nil,
     weight: 1,
     metadata: %{}
   ]
@@ -35,8 +35,15 @@ defmodule LLMProxy.Catalog.Deployment do
       order: get(attrs, :order, "order", 1),
       token_pool: get(attrs, :token_pool, "token_pool", nil),
       timeout_ms: get(attrs, :timeout_ms, "timeout_ms", nil),
-      failure_threshold: get(attrs, :failure_threshold, "failure_threshold", 3),
-      cooldown_ms: get(attrs, :cooldown_ms, "cooldown_ms", 30_000),
+      failure_threshold:
+        get(
+          attrs,
+          :failure_threshold,
+          "failure_threshold",
+          LLMProxy.Config.deployment_failure_threshold()
+        ),
+      cooldown_ms:
+        get(attrs, :cooldown_ms, "cooldown_ms", LLMProxy.Config.deployment_cooldown_ms()),
       weight: get(attrs, :weight, "weight", 1),
       metadata: get(attrs, :metadata, "metadata", %{})
     }

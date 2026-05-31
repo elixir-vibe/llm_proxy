@@ -32,12 +32,12 @@ defmodule LLMProxy.Limits do
   }
 
   @window_ms %{
-    minute: 60_000,
-    hour: 60 * 60_000,
-    four_hours: 4 * 60 * 60_000,
-    day: 24 * 60 * 60_000,
-    week: 7 * 24 * 60 * 60_000,
-    month: 30 * 24 * 60 * 60_000
+    minute: :timer.minutes(1),
+    hour: :timer.hours(1),
+    four_hours: :timer.hours(4),
+    day: :timer.hours(24),
+    week: :timer.hours(24 * 7),
+    month: :timer.hours(24 * 30)
   }
 
   @spec check(map()) :: :ok | {:error, String.t()}

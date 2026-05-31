@@ -3,15 +3,12 @@ defmodule LLMProxy.Routing.Attempt do
 
   alias LLMProxy.Catalog.Deployment
 
-  @default_failure_threshold 3
-  @default_cooldown_ms 30_000
-
   defstruct [
     :provider,
     :model,
     timeout_ms: nil,
-    failure_threshold: @default_failure_threshold,
-    cooldown_ms: @default_cooldown_ms,
+    failure_threshold: nil,
+    cooldown_ms: nil,
     metadata: %{}
   ]
 
@@ -39,7 +36,12 @@ defmodule LLMProxy.Routing.Attempt do
   end
 
   def new({provider, model}) do
-    %__MODULE__{provider: provider, model: model}
+    %__MODULE__{
+      provider: provider,
+      model: model,
+      failure_threshold: LLMProxy.Config.deployment_failure_threshold(),
+      cooldown_ms: LLMProxy.Config.deployment_cooldown_ms()
+    }
   end
 
   @spec key(t()) :: {String.t(), String.t()}

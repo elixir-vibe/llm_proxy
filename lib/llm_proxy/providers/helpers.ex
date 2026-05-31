@@ -24,7 +24,11 @@ defmodule LLMProxy.Providers.Helpers do
       headers = opts.headers_fn.(token)
 
       req =
-        HTTP.new(url: "#{base_url}/chat/completions", headers: headers, receive_timeout: 600_000)
+        HTTP.new(
+          url: "#{base_url}/chat/completions",
+          headers: headers,
+          receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
+        )
 
       case Req.post(req, json: body) do
         {:ok, %{status: 200, body: response}} ->
@@ -50,7 +54,7 @@ defmodule LLMProxy.Providers.Helpers do
           url: "#{base_url}/chat/completions",
           headers: headers,
           into: :self,
-          receive_timeout: 600_000
+          receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
         )
 
       case Req.post(req, json: stream_body) do
@@ -95,7 +99,8 @@ defmodule LLMProxy.Providers.Helpers do
     retry_after_ms = retry_after_ms(headers)
 
     if status == 429,
-      do: TokenPool.mark_rate_limited(token, retry_after_ms || default_cooldown_ms())
+      do:
+        TokenPool.mark_rate_limited(token, retry_after_ms || LLMProxy.Config.token_cooldown_ms())
 
     error_result(extract_error(body), status, token, retry_after_ms: retry_after_ms)
   end
@@ -128,8 +133,6 @@ defmodule LLMProxy.Providers.Helpers do
       _other -> nil
     end
   end
-
-  defp default_cooldown_ms, do: 4 * 60 * 60 * 1000
 
   def extract_error(%{"error" => %{"message" => msg}}), do: msg
   def extract_error(%{"error" => msg}) when is_binary(msg), do: msg
