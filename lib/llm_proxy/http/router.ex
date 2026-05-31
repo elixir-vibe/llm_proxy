@@ -5,6 +5,7 @@ defmodule LLMProxy.HTTP.Router do
 
   alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.HTTP.Routes.Helpers
+  alias LLMProxy.HTTP.RouteSpec
 
   plug(:match)
   plug(:dispatch)
@@ -13,17 +14,9 @@ defmodule LLMProxy.HTTP.Router do
     Helpers.send_json(conn, 200, %{status: "ok", version: "0.1.0"})
   end
 
-  forward("/v1/models", to: LLMProxy.HTTP.Routes.Models)
-  forward("/models", to: LLMProxy.HTTP.Routes.Models)
-  forward("/keys", to: LLMProxy.HTTP.Routes.Keys)
-  forward("/tokens", to: LLMProxy.HTTP.Routes.Tokens)
-  forward("/stats", to: LLMProxy.HTTP.Routes.Stats)
-  forward("/v1/chat", to: LLMProxy.HTTP.Routes.Chat)
-  forward("/chat", to: LLMProxy.HTTP.Routes.Chat)
-  forward("/v1/messages", to: LLMProxy.HTTP.Routes.Messages)
-  forward("/v1/responses", to: LLMProxy.HTTP.Routes.Responses)
-  forward("/v1/moderations", to: LLMProxy.HTTP.Routes.Moderations)
-  forward("/moderations", to: LLMProxy.HTTP.Routes.Moderations)
+  for {path, plug} <- RouteSpec.routes() do
+    forward(path, to: plug)
+  end
 
   match _ do
     case Dynamic.dispatch(conn) do
