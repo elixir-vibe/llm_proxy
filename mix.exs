@@ -53,6 +53,7 @@ defmodule LLMProxy.MixProject do
       {:llm_db, "~> 2026.3"},
       {:dotenvy, "~> 1.1"},
       {:jason, "~> 1.4"},
+      {:volt, "~> 0.14"},
 
       # OpenTelemetry
       {:opentelemetry_api, "~> 1.5"},
@@ -78,10 +79,14 @@ defmodule LLMProxy.MixProject do
       setup: ["deps.get", "fetch_models", "ecto.setup"],
       "ecto.setup": ["ecto.create", "ecto.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
+      "assets.build": ["volt.build --tailwind"],
+      "assets.deploy": ["volt.build --tailwind", "phx.digest"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",
+        "volt.js.check",
+        "assets.build",
         "test",
         "credo --strict",
         "dialyzer",

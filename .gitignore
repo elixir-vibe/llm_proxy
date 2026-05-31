@@ -21,6 +21,8 @@ llm_proxy-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+/priv/static/assets/
+/priv/static/cache_manifest.json
 *.db
 *.db-shm
 *.db-wal

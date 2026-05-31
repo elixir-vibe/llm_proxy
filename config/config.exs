@@ -18,4 +18,24 @@ config :opentelemetry_exporter,
   otlp_protocol: :http_protobuf,
   otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
 
+config :volt,
+  entry: "assets/js/app.ts",
+  outdir: "priv/static/assets",
+  root: "assets",
+  sources: ["**/*.{js,ts}"],
+  target: :es2020,
+  minify: config_env() == :prod,
+  sourcemap: :hidden,
+  tailwind: [
+    css: "assets/css/app.css",
+    sources: [
+      %{base: "lib/", pattern: "**/*.{ex,heex}"},
+      %{base: "assets/", pattern: "**/*.{js,ts}"}
+    ]
+  ]
+
+config :volt, :format,
+  semi: false,
+  single_quote: true
+
 import_config "#{config_env()}.exs"

@@ -10,6 +10,7 @@ defmodule LLMProxy.Web.LayoutsTest do
 
     assert html =~ "LLM Proxy Admin"
     assert html =~ "Hello"
-    assert html =~ "phoenix_live_view.js"
+    assert html =~ "/assets/css/app"
+    assert html =~ "/assets/js/app"
   end
 end

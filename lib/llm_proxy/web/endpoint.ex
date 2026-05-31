@@ -7,21 +7,21 @@ defmodule LLMProxy.Web.Endpoint do
     signing_salt: "llm_proxy_admin"
   ]
 
+  @code_reloading Application.compile_env(:llm_proxy, __MODULE__)[:code_reloader] == true
+
   socket("/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]])
 
   plug(Plug.Static,
     at: "/",
-    from: :phoenix,
-    gzip: false,
+    from: :llm_proxy,
+    gzip: not @code_reloading,
     only: ~w(assets)
   )
 
-  plug(Plug.Static,
-    at: "/",
-    from: :phoenix_live_view,
-    gzip: false,
-    only: ~w(assets)
-  )
+  if @code_reloading do
+    plug(Phoenix.CodeReloader)
+    plug(Volt.DevServer, root: "assets")
+  end
 
   plug(Plug.RequestId, assign_as: :request_id)
   plug(Plug.Telemetry, event_prefix: [:phoenix, :endpoint])

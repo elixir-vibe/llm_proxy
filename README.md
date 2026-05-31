@@ -301,8 +301,9 @@ mix run --no-halt
 
 ```bash
 mix test
-mix ci
-mix format
+mix assets.build  # Build Volt/Tailwind assets
+mix ci            # Compile, JS lint/build, test, Credo, Dialyzer, ExDNA, Reach
+mix format        # Format Elixir and assets
 ```
 
 Test files mirror source structure under `test/llm_proxy/**`.
