@@ -4,7 +4,7 @@ defmodule LLMProxy.Providers.OpenRouter do
   @behaviour LLMProxy.Providers.Behaviour
 
   alias LLMProxy.Protocol.OpenAI, as: OpenAIProtocol
-  alias LLMProxy.Providers.Helpers
+  alias LLMProxy.Providers.OpenAICompatible
 
   @impl true
   def name, do: "openrouter"
@@ -16,10 +16,10 @@ defmodule LLMProxy.Providers.OpenRouter do
   def models, do: LLMProxy.ModelDB.provider_model_ids(:openrouter)
 
   @impl true
-  def call(body, user_id), do: Helpers.openai_call("openrouter", body, user_id, opts())
+  def call(body, user_id), do: OpenAICompatible.call("openrouter", body, user_id, opts())
 
   @impl true
-  def stream(body, user_id), do: Helpers.openai_stream("openrouter", body, user_id, opts())
+  def stream(body, user_id), do: OpenAICompatible.stream("openrouter", body, user_id, opts())
 
   @impl true
   def extract_usage(response), do: OpenAIProtocol.extract_usage(response)

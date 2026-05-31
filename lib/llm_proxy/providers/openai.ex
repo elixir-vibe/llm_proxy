@@ -3,7 +3,7 @@ defmodule LLMProxy.Providers.OpenAI do
 
   @behaviour LLMProxy.Providers.Behaviour
 
-  alias LLMProxy.Providers.Helpers
+  alias LLMProxy.Providers.OpenAICompatible
 
   @impl true
   def name, do: "openai"
@@ -15,13 +15,13 @@ defmodule LLMProxy.Providers.OpenAI do
   def models, do: LLMProxy.ModelDB.provider_model_ids(:openai)
 
   @impl true
-  def call(body, user_id), do: Helpers.openai_call("openai", body, user_id, opts())
+  def call(body, user_id), do: OpenAICompatible.call("openai", body, user_id, opts())
 
   @impl true
-  def stream(body, user_id), do: Helpers.openai_stream("openai", body, user_id, opts())
+  def stream(body, user_id), do: OpenAICompatible.stream("openai", body, user_id, opts())
 
   @impl true
-  def extract_usage(response), do: Helpers.extract_openai_usage(response)
+  def extract_usage(response), do: OpenAICompatible.extract_usage(response)
 
   @impl true
   def to_openai_response(response, model), do: Map.put(response, "model", model)

@@ -5,8 +5,7 @@ defmodule LLMProxy.Providers.Anthropic do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol
-  alias LLMProxy.Providers.Helpers
-  alias LLMProxy.Providers.Result
+  alias LLMProxy.Providers.{Errors, HTTPJSON, Result, SSE, TokenAccess}
   alias LLMProxy.Stream.Event
 
   @impl true
@@ -20,28 +19,28 @@ defmodule LLMProxy.Providers.Anthropic do
 
   @impl true
   def call(body, user_id) do
-    with {:ok, token} <- Helpers.pick_token("anthropic", user_id) do
+    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
       do_call(body, token)
     end
   end
 
   @impl true
   def stream(body, user_id) do
-    with {:ok, token} <- Helpers.pick_token("anthropic", user_id) do
+    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
       body |> Map.put("stream", true) |> do_stream(token)
     end
   end
 
   @impl true
   def call_native(body, user_id) do
-    with {:ok, token} <- Helpers.pick_token("anthropic", user_id) do
+    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
       do_call(body, token)
     end
   end
 
   @impl true
   def stream_native(body, user_id) do
-    with {:ok, token} <- Helpers.pick_token("anthropic", user_id) do
+    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
       body |> Map.put("stream", true) |> do_stream(token)
     end
   end
@@ -64,16 +63,7 @@ defmodule LLMProxy.Providers.Anthropic do
         receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
       )
 
-    case Req.post(req, json: body) do
-      {:ok, %{status: 200, body: response}} ->
-        {:ok, Result.response(response, token)}
-
-      {:ok, response} ->
-        Helpers.handle_error_response(token, response)
-
-      {:error, exception} ->
-        Helpers.handle_exception(exception)
-    end
+    HTTPJSON.post(req, body, token)
   end
 
   defp do_stream(body, token) do
@@ -89,17 +79,17 @@ defmodule LLMProxy.Providers.Anthropic do
       {:ok, %{status: 200} = resp} ->
         stream =
           resp.body
-          |> Helpers.parse_sse_events()
+          |> SSE.parse_events()
           |> Stream.map(&to_stream_event/1)
           |> Stream.reject(&is_nil/1)
 
         {:ok, Result.stream(stream, token)}
 
       {:ok, response} ->
-        Helpers.handle_error_response(token, response)
+        Errors.handle_response(token, response)
 
       {:error, exception} ->
-        Helpers.handle_exception(exception)
+        Errors.handle_exception(exception)
     end
   end
 
