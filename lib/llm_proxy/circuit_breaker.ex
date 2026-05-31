@@ -6,10 +6,15 @@ defmodule LLMProxy.CircuitBreaker do
   alias LLMProxy.Routing.Attempt
   alias LLMProxy.Telemetry
 
-  defstruct state: :closed, failures: 0, opened_at: nil
+  defstruct state: :closed, failures: 0, opened_at: nil, cooldown_ms: nil
 
   @type state :: :closed | :open | :half_open
-  @type t :: %__MODULE__{state: state(), failures: non_neg_integer(), opened_at: integer() | nil}
+  @type t :: %__MODULE__{
+          state: state(),
+          failures: non_neg_integer(),
+          opened_at: integer() | nil,
+          cooldown_ms: non_neg_integer() | nil
+        }
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts),
@@ -21,8 +26,10 @@ defmodule LLMProxy.CircuitBreaker do
   @spec success(Attempt.t()) :: :ok
   def success(%Attempt{} = attempt), do: GenServer.cast(__MODULE__, {:success, attempt})
 
-  @spec failure(Attempt.t()) :: :ok
-  def failure(%Attempt{} = attempt), do: GenServer.cast(__MODULE__, {:failure, attempt})
+  @spec failure(Attempt.t(), non_neg_integer() | nil) :: :ok
+  def failure(%Attempt{} = attempt, cooldown_ms \\ nil) do
+    GenServer.cast(__MODULE__, {:failure, attempt, cooldown_ms})
+  end
 
   @spec status(Attempt.t()) :: t()
   def status(%Attempt{} = attempt),
@@ -73,7 +80,7 @@ defmodule LLMProxy.CircuitBreaker do
     {:noreply, Map.put(breakers, key, %__MODULE__{})}
   end
 
-  def handle_cast({:failure, attempt}, breakers) do
+  def handle_cast({:failure, attempt, cooldown_ms}, breakers) do
     key = Attempt.key(attempt)
     breaker = Map.get(breakers, key, %__MODULE__{})
     failures = breaker.failures + 1
@@ -81,7 +88,13 @@ defmodule LLMProxy.CircuitBreaker do
     breaker =
       if failures >= attempt.failure_threshold do
         Telemetry.emit([:circuit, :open], attempt, %{failures: failures})
-        %__MODULE__{state: :open, failures: failures, opened_at: now_ms()}
+
+        %__MODULE__{
+          state: :open,
+          failures: failures,
+          opened_at: now_ms(),
+          cooldown_ms: cooldown_ms
+        }
       else
         %{breaker | failures: failures}
       end
@@ -89,9 +102,12 @@ defmodule LLMProxy.CircuitBreaker do
     {:noreply, Map.put(breakers, key, breaker)}
   end
 
-  defp cooldown_elapsed?(%__MODULE__{opened_at: opened_at}, %Attempt{cooldown_ms: cooldown_ms})
+  defp cooldown_elapsed?(
+         %__MODULE__{opened_at: opened_at, cooldown_ms: breaker_cooldown},
+         %Attempt{cooldown_ms: attempt_cooldown}
+       )
        when is_integer(opened_at) do
-    now_ms() - opened_at >= cooldown_ms
+    now_ms() - opened_at >= (breaker_cooldown || attempt_cooldown)
   end
 
   defp cooldown_elapsed?(_breaker, _attempt), do: true

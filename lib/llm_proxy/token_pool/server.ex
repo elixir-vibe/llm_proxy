@@ -33,8 +33,10 @@ defmodule LLMProxy.TokenPool.Server do
     GenServer.call(__MODULE__, {:pick_token_by_kind, provider, kind, user_id})
   end
 
-  def mark_rate_limited(%ProviderToken{id: id}) do
-    GenServer.cast(__MODULE__, {:mark_rate_limited, id})
+  def mark_rate_limited(token, cooldown_ms \\ @cooldown_ms)
+
+  def mark_rate_limited(%ProviderToken{id: id}, cooldown_ms) do
+    GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
   end
 
   def clear_rate_limits do
@@ -64,9 +66,9 @@ defmodule LLMProxy.TokenPool.Server do
   end
 
   @impl true
-  def handle_cast({:mark_rate_limited, token_id}, state) do
+  def handle_cast({:mark_rate_limited, token_id, cooldown_ms}, state) do
     cooldowns =
-      Map.put(state.cooldowns, token_id, System.monotonic_time(:millisecond) + @cooldown_ms)
+      Map.put(state.cooldowns, token_id, System.monotonic_time(:millisecond) + cooldown_ms)
 
     {:noreply, %{state | cooldowns: cooldowns}}
   end

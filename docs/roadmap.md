@@ -103,11 +103,8 @@ Implemented:
 - open/half-open/closed breaker state
 - failure threshold per deployment
 - cooldown duration
+- retry-after handling for token and deployment cooldowns
 - observable breaker events
-
-Future target:
-
-- retry-after handling
 
 ### 5. Caching
 

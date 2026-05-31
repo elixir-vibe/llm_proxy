@@ -72,8 +72,8 @@ defmodule LLMProxy.Providers.Anthropic do
       {:ok, %{status: 200, body: response}} ->
         {:ok, Result.response(response, token)}
 
-      {:ok, %{status: status, body: resp_body}} ->
-        Helpers.handle_error_response(token, status, resp_body)
+      {:ok, response} ->
+        Helpers.handle_error_response(token, response)
 
       {:error, exception} ->
         Helpers.handle_exception(exception)
@@ -99,8 +99,8 @@ defmodule LLMProxy.Providers.Anthropic do
 
         {:ok, Result.stream(stream, token)}
 
-      {:ok, %{status: status, body: resp_body}} ->
-        Helpers.handle_error_response(token, status, resp_body)
+      {:ok, response} ->
+        Helpers.handle_error_response(token, response)
 
       {:error, exception} ->
         Helpers.handle_exception(exception)

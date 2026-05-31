@@ -30,8 +30,8 @@ defmodule LLMProxy.Providers.Helpers do
         {:ok, %{status: 200, body: response}} ->
           {:ok, Result.response(response, token)}
 
-        {:ok, %{status: status, body: resp_body}} ->
-          handle_error_response(token, status, resp_body)
+        {:ok, response} ->
+          handle_error_response(token, response)
 
         {:error, exception} ->
           handle_exception(exception)
@@ -63,8 +63,8 @@ defmodule LLMProxy.Providers.Helpers do
 
           {:ok, Result.stream(stream, token)}
 
-        {:ok, %{status: status, body: resp_body}} ->
-          handle_error_response(token, status, resp_body)
+        {:ok, response} ->
+          handle_error_response(token, response)
 
         {:error, exception} ->
           handle_exception(exception)
@@ -91,6 +91,15 @@ defmodule LLMProxy.Providers.Helpers do
     end)
   end
 
+  def handle_error_response(token, %{status: status, body: body, headers: headers}) do
+    retry_after_ms = retry_after_ms(headers)
+
+    if status == 429,
+      do: TokenPool.mark_rate_limited(token, retry_after_ms || default_cooldown_ms())
+
+    error_result(extract_error(body), status, token, retry_after_ms: retry_after_ms)
+  end
+
   def handle_error_response(token, status, body) do
     if status == 429, do: TokenPool.mark_rate_limited(token)
     error_result(extract_error(body), status, token)
@@ -100,9 +109,27 @@ defmodule LLMProxy.Providers.Helpers do
     error_result(Exception.message(exception), 502, nil)
   end
 
-  def error_result(error, status, token) do
-    {:error, Result.error(error, status, token)}
+  def error_result(error, status, token, opts \\ []) do
+    {:error, Result.error(error, status, token, opts)}
   end
+
+  def retry_after_ms(headers) do
+    headers
+    |> Map.get("retry-after", [])
+    |> List.first()
+    |> parse_retry_after()
+  end
+
+  defp parse_retry_after(nil), do: nil
+
+  defp parse_retry_after(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {seconds, ""} when seconds >= 0 -> seconds * 1_000
+      _other -> nil
+    end
+  end
+
+  defp default_cooldown_ms, do: 4 * 60 * 60 * 1000
 
   def extract_error(%{"error" => %{"message" => msg}}), do: msg
   def extract_error(%{"error" => msg}) when is_binary(msg), do: msg

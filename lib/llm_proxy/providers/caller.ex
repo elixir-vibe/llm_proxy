@@ -77,7 +77,7 @@ defmodule LLMProxy.Providers.Caller do
 
   defp handle_call_result({:error, %Result{status: status}} = error, attempt, rest, body, user_id)
        when status in @retryable_statuses do
-    CircuitBreaker.failure(attempt)
+    CircuitBreaker.failure(attempt, retry_after(error))
     Telemetry.emit([:routing, :attempt, :exception], attempt, %{status: status})
 
     Logger.warning(
@@ -88,7 +88,7 @@ defmodule LLMProxy.Providers.Caller do
   end
 
   defp handle_call_result({:error, %Result{status: 429}} = error, attempt, rest, body, user_id) do
-    CircuitBreaker.failure(attempt)
+    CircuitBreaker.failure(attempt, retry_after(error))
     Telemetry.emit([:routing, :attempt, :exception], attempt, %{status: 429})
     Logger.warning("#{attempt.provider.name()}/#{attempt.model} rate-limited, trying fallback")
     try_call(rest, body, user_id, error)
@@ -152,7 +152,7 @@ defmodule LLMProxy.Providers.Caller do
          user_id
        )
        when status in @retryable_statuses do
-    CircuitBreaker.failure(attempt)
+    CircuitBreaker.failure(attempt, retry_after(error))
     Telemetry.emit([:routing, :stream_attempt, :exception], attempt, %{status: status})
 
     Logger.warning(
@@ -163,7 +163,7 @@ defmodule LLMProxy.Providers.Caller do
   end
 
   defp handle_stream_result({:error, %Result{status: 429}} = error, attempt, rest, body, user_id) do
-    CircuitBreaker.failure(attempt)
+    CircuitBreaker.failure(attempt, retry_after(error))
     Telemetry.emit([:routing, :stream_attempt, :exception], attempt, %{status: 429})
 
     Logger.warning(
@@ -175,6 +175,8 @@ defmodule LLMProxy.Providers.Caller do
 
   defp handle_stream_result({:error, _result} = error, _attempt, _rest, _body, _user_id),
     do: error
+
+  defp retry_after({:error, %Result{retry_after_ms: retry_after_ms}}), do: retry_after_ms
 
   defp invoke(%Attempt{timeout_ms: nil} = attempt, function, args) do
     apply(attempt.provider, function, args)

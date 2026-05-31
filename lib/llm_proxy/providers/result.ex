@@ -6,6 +6,7 @@ defmodule LLMProxy.Providers.Result do
             error: nil,
             status: nil,
             token: nil,
+            retry_after_ms: nil,
             provider: nil,
             model: nil
 
@@ -15,6 +16,7 @@ defmodule LLMProxy.Providers.Result do
           error: String.t() | nil,
           status: pos_integer() | nil,
           token: map() | nil,
+          retry_after_ms: non_neg_integer() | nil,
           provider: module() | nil,
           model: String.t() | nil
         }
@@ -25,8 +27,10 @@ defmodule LLMProxy.Providers.Result do
   @spec stream(Enumerable.t(), map() | nil) :: t()
   def stream(stream, token), do: %__MODULE__{stream: stream, token: token}
 
-  @spec error(String.t(), pos_integer(), map() | nil) :: t()
-  def error(error, status, token), do: %__MODULE__{error: error, status: status, token: token}
+  @spec error(String.t(), pos_integer(), map() | nil, keyword()) :: t()
+  def error(error, status, token, opts \\ []) do
+    %__MODULE__{error: error, status: status, token: token, retry_after_ms: opts[:retry_after_ms]}
+  end
 
   @spec with_attempt({:ok, t()} | {:error, t()}, module(), String.t()) ::
           {:ok, t()} | {:error, t()}

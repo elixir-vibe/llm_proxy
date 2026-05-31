@@ -1,8 +1,10 @@
 defmodule LLMProxy.Providers.CallerTest do
   use ExUnit.Case, async: true
 
+  alias LLMProxy.CircuitBreaker
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Caller, Result}
+  alias LLMProxy.Routing.Attempt
   alias LLMProxy.Stream.Event
 
   defmodule SuccessProvider do
@@ -21,6 +23,16 @@ defmodule LLMProxy.Providers.CallerTest do
     def name, do: "limited"
     def call(_body, _user_id), do: {:error, Result.error("rate limited", 429, nil)}
     def stream(_body, _user_id), do: {:error, Result.error("rate limited", 429, nil)}
+  end
+
+  defmodule RetryAfterProvider do
+    def name, do: "retry-after"
+
+    def call(_body, _user_id),
+      do: {:error, Result.error("rate limited", 429, nil, retry_after_ms: 123)}
+
+    def stream(_body, _user_id),
+      do: {:error, Result.error("rate limited", 429, nil, retry_after_ms: 123)}
   end
 
   defmodule AuthErrorProvider do
@@ -56,7 +68,13 @@ defmodule LLMProxy.Providers.CallerTest do
 
   setup do
     LLMProxy.Providers.Registry.register(FallbackProvider)
-    on_exit(fn -> Application.delete_env(:llm_proxy, :fallbacks) end)
+    CircuitBreaker.reset()
+
+    on_exit(fn ->
+      Application.delete_env(:llm_proxy, :fallbacks)
+      CircuitBreaker.reset()
+    end)
+
     :ok
   end
 
@@ -112,6 +130,21 @@ defmodule LLMProxy.Providers.CallerTest do
                 model: "fallback-model"
               }} =
                Caller.call(RateLimitedProvider, request("m"), "user", "m")
+    end
+
+    test "uses retry-after as circuit breaker cooldown" do
+      Application.put_env(:llm_proxy, :fallbacks, %{"m" => ["fallback-model"]})
+
+      attempt = %Attempt{provider: RetryAfterProvider, model: "m", failure_threshold: 1}
+
+      assert {:ok, %Result{provider: FallbackProvider}} =
+               Caller.call_attempts(
+                 [attempt, {FallbackProvider, "fallback-model"}],
+                 request("m"),
+                 "user"
+               )
+
+      assert %CircuitBreaker{state: :open, cooldown_ms: 123} = CircuitBreaker.status(attempt)
     end
   end
 

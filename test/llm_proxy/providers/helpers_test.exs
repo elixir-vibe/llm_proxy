@@ -56,6 +56,17 @@ defmodule LLMProxy.Providers.HelpersTest do
     end
   end
 
+  describe "retry_after_ms/1" do
+    test "parses retry-after seconds" do
+      assert Helpers.retry_after_ms(%{"retry-after" => ["3"]}) == 3_000
+    end
+
+    test "ignores unsupported retry-after values" do
+      assert Helpers.retry_after_ms(%{"retry-after" => ["Wed, 21 Oct 2015 07:28:00 GMT"]}) == nil
+      assert Helpers.retry_after_ms(%{}) == nil
+    end
+  end
+
   describe "extract_error/1" do
     test "extracts nested error message" do
       body = %{"error" => %{"message" => "Rate limit exceeded"}}
