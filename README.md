@@ -21,7 +21,7 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 - **Usage tracking** for input/output/cache tokens and estimated cost
 - **Quota enforcement** with per-key token/message/cache controls
 - **API key and provider token management**
-- **Admin LiveView UI** for keys, tokens, usage, traces, messages, and models
+- **Optional Admin LiveView UI** for keys, tokens, usage, traces, messages, and models
 
 ## Architecture
 
@@ -325,6 +325,28 @@ config :llm_proxy,
 ```
 
 HTTP generation routes use Phoenix/Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.
+
+## Optional admin UI
+
+The bundled Phoenix LiveView admin UI is optional. Downstream library users that only mount HTTP routes or call `LLMProxy.Provider` do not need Phoenix, LiveView, Plug.Cowboy, or Volt dependencies.
+
+Standalone/admin UI usage requires the web stack:
+
+```elixir
+{:llm_proxy, "~> ..."},
+{:phoenix, "~> 1.8"},
+{:phoenix_html, "~> 4.3"},
+{:phoenix_live_view, "~> 1.1"},
+{:plug_cowboy, "~> 2.7"},
+{:volt, "~> 0.14"}
+```
+
+Disable the bundled endpoint even when web deps are present:
+
+```elixir
+config :llm_proxy,
+  web: false
+```
 
 ## Setup
 

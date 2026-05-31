@@ -23,7 +23,7 @@ LLMProxy
 ├── Catalog                  # public model aliases and deployments
 ├── ReqLLM                   # ReqLLM adapters/helpers
 ├── Stream                   # transport-neutral stream event/SSE helpers
-├── Web                      # bundled Phoenix admin UI
+├── Web                      # optional bundled Phoenix admin UI
 └── Schemas / Storage        # persistence boundary
 ```
 
@@ -34,4 +34,5 @@ Rules of thumb:
 - Provider deployment selection belongs under `LLMProxy.Providers.Routing`, not HTTP routing.
 - Adapter behaviours use singular module names (`Cache`); runtime dispatch belongs in explicit submodules (`Cache.Runtime`).
 - `LLMProxy.Storage` is a facade over `config :llm_proxy, storage: ...`; the default `LLMProxy.Storage.Ecto` implementation goes through `LLMProxy.Storage.Repo`, which delegates to `config :llm_proxy, repo: MyApp.Repo`. DB-specific SQL and migrations branch on the configured repo's `__adapter__/0`, and database adapters remain host-provided/optional.
+- The bundled Phoenix admin UI is optional and conditionally compiled when Phoenix/LiveView/Volt are available; set `config :llm_proxy, web: false` to skip supervising the endpoint.
 - Provider-specific defaults live in nested provider config (`config :llm_proxy, providers: ...`).

@@ -32,10 +32,8 @@ defmodule LLMProxy.Application do
         [
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
-          LLMProxy.TokenPool.Server,
-          {Phoenix.PubSub, name: LLMProxy.PubSub},
-          LLMProxy.Web.Endpoint
-        ]
+          LLMProxy.TokenPool.Server
+        ] ++ web_children()
 
     opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]
     {:ok, pid} = Supervisor.start_link(children, opts)
@@ -48,6 +46,14 @@ defmodule LLMProxy.Application do
 
   defp bundled_repo_children do
     if LLMProxy.Storage.Repo.bundled?(), do: [LLMProxy.Repo], else: []
+  end
+
+  defp web_children do
+    if LLMProxy.Config.web_enabled?() and Code.ensure_loaded?(LLMProxy.Web.Endpoint) do
+      [{Phoenix.PubSub, name: LLMProxy.PubSub}, LLMProxy.Web.Endpoint]
+    else
+      []
+    end
   end
 
   defp setup_opentelemetry do

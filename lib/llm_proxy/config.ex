@@ -36,6 +36,7 @@ defmodule LLMProxy.Config do
 
   def repo, do: Application.get_env(:llm_proxy, :repo, LLMProxy.Repo)
   def storage, do: Application.get_env(:llm_proxy, :storage, LLMProxy.Storage.Ecto)
+  def web_enabled?, do: Application.get_env(:llm_proxy, :web, true)
   def public_url, do: Application.get_env(:llm_proxy, :public_url, "")
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
   def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)
