@@ -1,4 +1,4 @@
-defmodule LLMProxy.Providers.HTTPJSON do
+defmodule LLMProxy.Providers.ResponseHandler do
   @moduledoc false
 
   alias LLMProxy.Providers.{Errors, Result}

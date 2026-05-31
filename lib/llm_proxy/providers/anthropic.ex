@@ -5,7 +5,7 @@ defmodule LLMProxy.Providers.Anthropic do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol
-  alias LLMProxy.Providers.{Errors, HTTPJSON, Result, SSE, TokenAccess}
+  alias LLMProxy.Providers.{Errors, ResponseHandler, Result, SSE, TokenAccess}
   alias LLMProxy.Stream.Event
 
   @impl true
@@ -63,7 +63,7 @@ defmodule LLMProxy.Providers.Anthropic do
         receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
       )
 
-    HTTPJSON.post(req, body, token)
+    ResponseHandler.post(req, body, token)
   end
 
   defp do_stream(body, token) do

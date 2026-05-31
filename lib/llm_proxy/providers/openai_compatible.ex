@@ -3,13 +3,13 @@ defmodule LLMProxy.Providers.OpenAICompatible do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol.OpenAI
-  alias LLMProxy.Providers.{Errors, HTTPJSON, OpenAIStream, Result, SSE, TokenAccess}
+  alias LLMProxy.Providers.{Errors, OpenAIStream, ResponseHandler, Result, SSE, TokenAccess}
 
   def call(provider_name, body, user_id, opts) do
     with {:ok, token} <- TokenAccess.pick_token(provider_name, user_id) do
       req = request(token, opts, into: nil)
 
-      HTTPJSON.post(req, body, token)
+      ResponseHandler.post(req, body, token)
     end
   end
 
