@@ -34,6 +34,7 @@ defmodule LLMProxy.Config do
   @usage_window_4h_ms :timer.hours(4)
   @usage_window_week_ms :timer.hours(24 * 7)
 
+  def repo, do: Application.get_env(:llm_proxy, :repo, LLMProxy.Repo)
   def public_url, do: Application.get_env(:llm_proxy, :public_url, "")
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
   def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)

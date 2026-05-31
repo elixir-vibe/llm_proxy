@@ -33,4 +33,5 @@ Rules of thumb:
 - Phoenix embedding helpers live under `LLMProxy.Phoenix`; the root `LLMProxy.Router` is only a public facade.
 - Provider deployment selection belongs under `LLMProxy.Providers.Routing`, not HTTP routing.
 - Adapter behaviours use singular module names (`Cache`); runtime dispatch belongs in explicit submodules (`Cache.Runtime`).
+- Storage code goes through `LLMProxy.Storage.Repo`, which delegates to `config :llm_proxy, repo: MyApp.Repo`; DB-specific SQL branches on the configured repo's `__adapter__/0`.
 - Provider-specific defaults live in nested provider config (`config :llm_proxy, providers: ...`).

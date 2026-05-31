@@ -4,8 +4,8 @@ defmodule LLMProxy.Limits do
   import Ecto.Query
 
   alias LLMProxy.Limit
-  alias LLMProxy.Repo
   alias LLMProxy.Schemas.UsageLog
+  alias LLMProxy.Storage.Repo
 
   @metric_aliases %{
     "cost_usd" => :cost_usd,

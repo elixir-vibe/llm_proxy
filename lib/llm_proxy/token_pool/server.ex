@@ -8,8 +8,8 @@ defmodule LLMProxy.TokenPool.Server do
 
   use GenServer
 
-  alias LLMProxy.Repo
   alias LLMProxy.Schemas.ProviderToken
+  alias LLMProxy.Storage.Repo
   alias LLMProxy.TokenPool.Picker
 
   import Ecto.Query

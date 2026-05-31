@@ -3,7 +3,7 @@ defmodule LLMProxy.Storage do
   Context functions for all database operations: keys, usage, quotas, tokens.
   """
 
-  alias LLMProxy.Repo
+  alias LLMProxy.Storage.{Repo, SQL}
 
   alias LLMProxy.Schemas.{
     ApiKey,
@@ -609,11 +609,10 @@ defmodule LLMProxy.Storage do
   end
 
   def find_trace_by_request_id(request_id) when is_binary(request_id) do
-    from(t in Trace,
-      where: fragment("json_extract(?, '$.trace_id') = ?", t.metadata, ^request_id),
-      order_by: [desc: t.timestamp],
-      limit: 1
-    )
+    Trace
+    |> trace_request_id_query(request_id, SQL.supported_adapter!())
+    |> order_by([t], desc: t.timestamp)
+    |> limit(1)
     |> Repo.one()
   end
 
@@ -636,6 +635,22 @@ defmodule LLMProxy.Storage do
 
   defp trace_request_id(%Trace{metadata: %{"trace_id" => request_id}}), do: request_id
   defp trace_request_id(_trace), do: nil
+
+  defp trace_request_id_query(query, request_id, :sqlite) do
+    where(query, [t], fragment("json_extract(?, '$.trace_id') = ?", t.metadata, ^request_id))
+  end
+
+  defp trace_request_id_query(query, request_id, :postgres) do
+    where(query, [t], fragment("?->>'trace_id' = ?", t.metadata, ^request_id))
+  end
+
+  defp trace_request_id_query(query, request_id, :mysql) do
+    where(
+      query,
+      [t],
+      fragment("JSON_UNQUOTE(JSON_EXTRACT(?, '$.trace_id')) = ?", t.metadata, ^request_id)
+    )
+  end
 
   defp feedback_for(query, trace_id) when is_integer(trace_id),
     do: where(query, [f], f.trace_id == ^trace_id)
@@ -677,40 +692,42 @@ defmodule LLMProxy.Storage do
     start_dt = DateTime.new!(start_date, ~T[00:00:00], "Etc/UTC")
     end_dt = DateTime.new!(Date.add(end_date, 1), ~T[00:00:00], "Etc/UTC")
 
-    dated_usage =
-      from(u in UsageLog,
-        where: u.timestamp >= ^start_dt and u.timestamp < ^end_dt,
-        select: %{
-          id: u.id,
-          key_id: u.key_id,
-          date: fragment("date(?)", u.timestamp),
-          input_tokens: u.input_tokens,
-          output_tokens: u.output_tokens,
-          cost_usd: u.cost_usd,
-          duration_ms: u.duration_ms
-        }
-      )
-
-    query =
-      from(u in subquery(dated_usage),
-        group_by: u.date,
-        select: %{
-          date: u.date,
-          requests: count(u.id),
-          input_tokens: coalesce(sum(u.input_tokens), 0),
-          output_tokens: coalesce(sum(u.output_tokens), 0),
-          cost_usd: coalesce(sum(u.cost_usd), 0.0),
-          avg_duration_ms: avg(u.duration_ms)
-        },
-        order_by: u.date
-      )
-
-    query = daily_filter_key(query, opts[:key_id])
-    Repo.all(query)
+    UsageLog
+    |> where([u], u.timestamp >= ^start_dt and u.timestamp < ^end_dt)
+    |> daily_filter_key(opts[:key_id])
+    |> select([u], %{
+      id: u.id,
+      timestamp: u.timestamp,
+      input_tokens: u.input_tokens,
+      output_tokens: u.output_tokens,
+      cost_usd: u.cost_usd,
+      duration_ms: u.duration_ms
+    })
+    |> Repo.all()
+    |> Enum.group_by(&usage_date(&1.timestamp))
+    |> Enum.map(&daily_entry/1)
+    |> Enum.sort_by(& &1.date, Date)
   end
 
   defp daily_filter_key(query, nil), do: query
   defp daily_filter_key(query, key_id), do: where(query, [u], u.key_id == ^key_id)
+
+  defp usage_date(%DateTime{} = timestamp), do: DateTime.to_date(timestamp)
+  defp usage_date(%NaiveDateTime{} = timestamp), do: NaiveDateTime.to_date(timestamp)
+
+  defp daily_entry({date, rows}) do
+    request_count = length(rows)
+    duration_sum = rows |> Enum.map(&(&1.duration_ms || 0)) |> Enum.sum()
+
+    %{
+      date: date,
+      requests: request_count,
+      input_tokens: Enum.sum(Enum.map(rows, &(&1.input_tokens || 0))),
+      output_tokens: Enum.sum(Enum.map(rows, &(&1.output_tokens || 0))),
+      cost_usd: Enum.sum(Enum.map(rows, &(&1.cost_usd || 0.0))),
+      avg_duration_ms: if(request_count > 0, do: duration_sum / request_count, else: nil)
+    }
+  end
 
   defp parse_date(nil), do: nil
   defp parse_date(""), do: nil
