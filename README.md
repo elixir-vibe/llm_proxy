@@ -129,6 +129,15 @@ config :llm_proxy,
 
 LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, and MySQL-compatible Ecto adapters. PostgreSQL/MySQL adapter dependencies should come from the host app.
 
+The public `LLMProxy.Storage` module is a facade. The default implementation is `LLMProxy.Storage.Ecto`, and advanced hosts can provide a custom storage adapter:
+
+```elixir
+config :llm_proxy,
+  storage: MyApp.LLMProxyStorage
+```
+
+Custom storage modules implement `LLMProxy.Storage.Adapter`.
+
 To install the storage schema in a host repo, create a migration that delegates to LLMProxy:
 
 ```elixir
