@@ -13,8 +13,8 @@ defmodule LLMProxy.Providers.Caller do
   alias LLMProxy.Config
   alias LLMProxy.Protocol
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.ProviderRouting.Attempt
   alias LLMProxy.Providers.{Registry, Result}
-  alias LLMProxy.Routing.Attempt
   alias LLMProxy.Telemetry
 
   @retryable_statuses [500, 502, 503, 504, 529]
@@ -101,7 +101,10 @@ defmodule LLMProxy.Providers.Caller do
 
     case provider_protocol(provider) do
       :anthropic ->
-        Protocol.Anthropic.request_body(request)
+        Protocol.Anthropic.request_body(
+          request,
+          max_tokens: LLMProxy.Config.provider_conversion_default("anthropic", :max_tokens)
+        )
 
       :openai ->
         Protocol.OpenAI.request_body(request)

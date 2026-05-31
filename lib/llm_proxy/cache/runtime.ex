@@ -1,10 +1,10 @@
-defmodule LLMProxy.Caches do
+defmodule LLMProxy.Cache.Runtime do
   @moduledoc false
 
   alias LLMProxy.Cache.{Key, Policy}
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.ProviderRouting.Attempt
   alias LLMProxy.Response
-  alias LLMProxy.Routing.Attempt
 
   @spec key(Request.t(), [Attempt.t()]) :: String.t()
   def key(%Request{} = request, attempts), do: Key.build(request, attempts)
@@ -23,17 +23,22 @@ defmodule LLMProxy.Caches do
     end
   end
 
-  @spec put(String.t(), Response.t(), LLMProxy.Cache.context()) :: :ok
-  def put(key, %Response{cacheable: true} = response, context) when is_binary(key) do
-    context = put_policy(context, response)
+  @spec put(String.t(), Request.t(), Response.t(), LLMProxy.Cache.context()) :: :ok
+  def put(key, %Request{} = request, %Response{cacheable: true} = response, context)
+      when is_binary(key) do
+    if enabled?(request, context) do
+      context = put_policy(context, response)
 
-    case adapter() do
-      nil -> ignore()
-      module -> put_response(module, key, response, context)
+      case adapter() do
+        nil -> :ok
+        module -> put_response(module, key, response, context)
+      end
+    else
+      :ok
     end
   end
 
-  def put(_key, %Response{}, _context), do: :ok
+  def put(_key, %Request{}, %Response{}, _context), do: :ok
 
   @spec enabled?(Request.t(), LLMProxy.Cache.context()) :: boolean()
   def enabled?(%Request{stream: true}, _context), do: false
@@ -65,6 +70,4 @@ defmodule LLMProxy.Caches do
   defp adapter do
     Application.get_env(:llm_proxy, :cache)
   end
-
-  defp ignore, do: :ok
 end

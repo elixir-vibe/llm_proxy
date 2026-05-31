@@ -1,4 +1,4 @@
-defmodule LLMProxy.Routes.Tokens.Params do
+defmodule LLMProxy.HTTP.Routes.Tokens.Params do
   @moduledoc false
 
   defmodule Create do

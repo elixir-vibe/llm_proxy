@@ -1,7 +1,7 @@
-defmodule LLMProxy.Routes.StatsTest do
+defmodule LLMProxy.HTTP.Routes.StatsTest do
   use ExUnit.Case
 
-  alias LLMProxy.Routes.Stats
+  alias LLMProxy.HTTP.Routes.Stats
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 

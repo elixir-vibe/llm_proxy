@@ -275,7 +275,16 @@ config :llm_proxy,
   deployment_cooldown_ms: :timer.seconds(30),
   provider_receive_timeout_ms: :timer.minutes(10),
   remote_timeout_ms: :timer.seconds(30),
-  anthropic_max_tokens: 4096
+  providers: %{
+    "anthropic" => %{
+      base_url: "https://api.anthropic.com/v1",
+      api_version: "2023-06-01",
+      beta: "fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14",
+      conversion_defaults: %{max_tokens: 4096}
+    },
+    "openai" => %{base_url: "https://api.openai.com/v1"},
+    "openrouter" => %{base_url: "https://openrouter.ai/api/v1"}
+  }
 ```
 
 HTTP generation routes use Phoenix/Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.

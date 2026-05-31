@@ -1,7 +1,7 @@
-defmodule LLMProxy.Routes.KeysTest do
+defmodule LLMProxy.HTTP.Routes.KeysTest do
   use ExUnit.Case
 
-  alias LLMProxy.Routes.Keys
+  alias LLMProxy.HTTP.Routes.Keys
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 

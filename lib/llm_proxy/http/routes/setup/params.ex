@@ -1,4 +1,4 @@
-defmodule LLMProxy.Routes.Setup.Params do
+defmodule LLMProxy.HTTP.Routes.Setup.Params do
   @moduledoc false
 
   defmodule Auth do

@@ -1,10 +1,10 @@
-defmodule LLMProxy.Routes.Setup do
+defmodule LLMProxy.HTTP.Routes.Setup do
   @moduledoc false
   use Plug.Router
 
   alias LLMProxy.Config
+  alias LLMProxy.HTTP.Routes.Setup.Params
   alias LLMProxy.Providers.Registry
-  alias LLMProxy.Routes.Setup.Params
   alias LLMProxy.Storage
 
   plug(:match)

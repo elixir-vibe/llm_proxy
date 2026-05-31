@@ -14,11 +14,14 @@ defmodule LLMProxy.Providers.OpenRouterHTTPTest do
     TestSupport.clear_provider_tokens()
     TokenPool.clear_rate_limits()
     Application.put_env(:llm_proxy, :req_plug, {ReqTest, OpenRouterStub})
-    Application.put_env(:llm_proxy, :public_url, "https://proxy.example")
+
+    Application.put_env(:llm_proxy, :providers, %{
+      "openrouter" => %{http_referer: "https://proxy.example"}
+    })
 
     on_exit(fn ->
       Application.delete_env(:llm_proxy, :req_plug)
-      Application.delete_env(:llm_proxy, :public_url)
+      Application.delete_env(:llm_proxy, :providers)
     end)
   end
 

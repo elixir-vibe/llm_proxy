@@ -8,7 +8,7 @@ defmodule LLMProxy.Router do
 
   use Plug.Router
 
-  alias LLMProxy.Routes.Dynamic
+  alias LLMProxy.HTTP.Routes.Dynamic
 
   defmacro __using__(opts \\ []) do
     opts = Macro.expand(opts, __CALLER__)
@@ -48,18 +48,17 @@ defmodule LLMProxy.Router do
   end
 
   # Forward to sub-routers
-  forward("/v1/models", to: LLMProxy.Routes.Models)
-  forward("/models", to: LLMProxy.Routes.Models)
-  forward("/keys", to: LLMProxy.Routes.Keys)
-  forward("/tokens", to: LLMProxy.Routes.Tokens)
-  forward("/stats", to: LLMProxy.Routes.Stats)
-  forward("/admin", to: LLMProxy.Routes.Stats)
-  forward("/v1/chat", to: LLMProxy.Routes.Chat)
-  forward("/chat", to: LLMProxy.Routes.Chat)
-  forward("/v1/messages", to: LLMProxy.Routes.Messages)
-  forward("/v1/responses", to: LLMProxy.Routes.Responses)
-  forward("/v1/moderations", to: LLMProxy.Routes.Moderations)
-  forward("/moderations", to: LLMProxy.Routes.Moderations)
+  forward("/v1/models", to: LLMProxy.HTTP.Routes.Models)
+  forward("/models", to: LLMProxy.HTTP.Routes.Models)
+  forward("/keys", to: LLMProxy.HTTP.Routes.Keys)
+  forward("/tokens", to: LLMProxy.HTTP.Routes.Tokens)
+  forward("/stats", to: LLMProxy.HTTP.Routes.Stats)
+  forward("/v1/chat", to: LLMProxy.HTTP.Routes.Chat)
+  forward("/chat", to: LLMProxy.HTTP.Routes.Chat)
+  forward("/v1/messages", to: LLMProxy.HTTP.Routes.Messages)
+  forward("/v1/responses", to: LLMProxy.HTTP.Routes.Responses)
+  forward("/v1/moderations", to: LLMProxy.HTTP.Routes.Moderations)
+  forward("/moderations", to: LLMProxy.HTTP.Routes.Moderations)
   # Dynamic routes registered by optional packages
 
   match _ do
@@ -92,14 +91,14 @@ defmodule LLMProxy.Router do
   defp maybe_add_core(routes, path, true) do
     routes ++
       [
-        route(path, "/v1/models", LLMProxy.Routes.Models),
-        route(path, "/models", LLMProxy.Routes.Models),
-        route(path, "/v1/chat", LLMProxy.Routes.Chat),
-        route(path, "/chat", LLMProxy.Routes.Chat),
-        route(path, "/v1/messages", LLMProxy.Routes.Messages),
-        route(path, "/v1/responses", LLMProxy.Routes.Responses),
-        route(path, "/v1/moderations", LLMProxy.Routes.Moderations),
-        route(path, "/moderations", LLMProxy.Routes.Moderations)
+        route(path, "/v1/models", LLMProxy.HTTP.Routes.Models),
+        route(path, "/models", LLMProxy.HTTP.Routes.Models),
+        route(path, "/v1/chat", LLMProxy.HTTP.Routes.Chat),
+        route(path, "/chat", LLMProxy.HTTP.Routes.Chat),
+        route(path, "/v1/messages", LLMProxy.HTTP.Routes.Messages),
+        route(path, "/v1/responses", LLMProxy.HTTP.Routes.Responses),
+        route(path, "/v1/moderations", LLMProxy.HTTP.Routes.Moderations),
+        route(path, "/moderations", LLMProxy.HTTP.Routes.Moderations)
       ]
   end
 
@@ -108,17 +107,16 @@ defmodule LLMProxy.Router do
   defp maybe_add_admin(routes, path, true) do
     routes ++
       [
-        route(path, "/keys", LLMProxy.Routes.Keys),
-        route(path, "/tokens", LLMProxy.Routes.Tokens),
-        route(path, "/stats", LLMProxy.Routes.Stats),
-        route(path, "/admin", LLMProxy.Routes.Stats)
+        route(path, "/keys", LLMProxy.HTTP.Routes.Keys),
+        route(path, "/tokens", LLMProxy.HTTP.Routes.Tokens),
+        route(path, "/stats", LLMProxy.HTTP.Routes.Stats)
       ]
   end
 
   defp maybe_add_setup(routes, _path, false), do: routes
 
   defp maybe_add_setup(routes, path, true),
-    do: routes ++ [route(path, "/setup", LLMProxy.Routes.Setup)]
+    do: routes ++ [route(path, "/setup", LLMProxy.HTTP.Routes.Setup)]
 
   defp route(path, suffix, plug) do
     route_path = path |> String.trim_trailing("/") |> Kernel.<>(suffix)

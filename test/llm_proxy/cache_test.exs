@@ -93,17 +93,22 @@ defmodule LLMProxy.CacheTest do
     assert Provider.calls() == 1
   end
 
-  test "per-request metadata can bypass cache" do
+  test "per-request metadata can bypass cache without populating it" do
     {:ok, key, _raw_key} = Storage.create_key("cache-bypass-user")
 
-    opts = [model: "cache-model", metadata: %{"no_cache" => true}, api_key: key]
+    bypass_opts = [model: "cache-model", metadata: %{"no_cache" => true}, api_key: key]
+    cached_opts = [model: "cache-model", api_key: key]
 
-    assert {:ok, first} = LLMProxy.chat("hello", opts)
+    assert {:ok, first} = LLMProxy.chat("hello", bypass_opts)
     refute first.cache_hit
 
-    assert {:ok, second} = LLMProxy.chat("hello", opts)
+    assert {:ok, second} = LLMProxy.chat("hello", bypass_opts)
     refute second.cache_hit
     assert Provider.calls() == 2
+
+    assert {:ok, third} = LLMProxy.chat("hello", cached_opts)
+    refute third.cache_hit
+    assert Provider.calls() == 3
   end
 
   test "cache policy can set ttl context for adapters" do

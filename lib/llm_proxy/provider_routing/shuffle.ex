@@ -1,4 +1,4 @@
-defmodule LLMProxy.Routing.Shuffle do
+defmodule LLMProxy.ProviderRouting.Shuffle do
   @moduledoc false
 
   @spec order([term()]) :: [term()]

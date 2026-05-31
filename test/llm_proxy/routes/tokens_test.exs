@@ -1,7 +1,7 @@
-defmodule LLMProxy.Routes.TokensTest do
+defmodule LLMProxy.HTTP.Routes.TokensTest do
   use ExUnit.Case
 
-  alias LLMProxy.Routes.Tokens
+  alias LLMProxy.HTTP.Routes.Tokens
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 

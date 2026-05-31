@@ -6,8 +6,6 @@ defmodule LLMProxy.Providers.OpenRouter do
   alias LLMProxy.Protocol.OpenAI, as: OpenAIProtocol
   alias LLMProxy.Providers.Helpers
 
-  @default_base_url "https://openrouter.ai/api/v1"
-
   @impl true
   def name, do: "openrouter"
 
@@ -34,12 +32,12 @@ defmodule LLMProxy.Providers.OpenRouter do
   defp headers(token) do
     [
       {"authorization", "Bearer #{token.token}"},
-      {"http-referer", LLMProxy.Config.public_url()},
-      {"x-title", "LLM Proxy"},
+      {"http-referer", LLMProxy.Config.provider_value("openrouter", :http_referer)},
+      {"x-title", LLMProxy.Config.provider_value("openrouter", :title)},
       {"content-type", "application/json"}
     ]
   end
 
   defp base_url(%{proxy: proxy}) when is_binary(proxy) and proxy != "", do: proxy
-  defp base_url(_token), do: @default_base_url
+  defp base_url(_token), do: LLMProxy.Config.provider_value("openrouter", :base_url)
 end

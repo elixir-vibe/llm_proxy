@@ -3,8 +3,8 @@ defmodule LLMProxy.ProviderResilienceTest do
 
   alias LLMProxy.Catalog
   alias LLMProxy.CircuitBreaker
+  alias LLMProxy.ProviderRouting.Attempt
   alias LLMProxy.Providers.{Registry, Result}
-  alias LLMProxy.Routing.Attempt
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 

@@ -1,17 +1,20 @@
-defmodule LLMProxy.Routes.Messages do
+defmodule LLMProxy.HTTP.Routes.Messages do
   @moduledoc false
   use Plug.Router
 
   require Logger
 
+  alias LLMProxy.AccessControl
+  alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
-  alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.{Event, SSEWriter}
   alias LLMProxy.Telemetry
+  alias LLMProxy.TokenRateLimit
   alias LLMProxy.Trace
   alias LLMProxy.Usage
+  alias LLMProxy.UsageTracking
 
   plug(Auth)
   plug(QuotaCheck)
@@ -33,13 +36,16 @@ defmodule LLMProxy.Routes.Messages do
     model = body["model"]
 
     with {:ok, request} <- Request.parse(:anthropic_messages, body),
-         :ok <- Helpers.check_model_access(api_key, model),
+         :ok <- AccessControl.check_model_access(api_key, model),
          provider when not is_nil(provider) <- Registry.get_provider(model) do
       Logger.debug(
         "Messages request from #{api_key.name} model=#{model} stream=#{request.stream || false}"
       )
 
-      Helpers.log_user_message(api_key, model, "messages", fn -> Request.user_text(request) end)
+      UsageTracking.log_user_message(api_key, model, "messages", fn ->
+        Request.user_text(request)
+      end)
+
       dispatch_provider(conn, provider, request, api_key, model, trace_id)
     else
       nil ->
@@ -120,14 +126,14 @@ defmodule LLMProxy.Routes.Messages do
 
   defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
     usage = provider.extract_usage(response)
-    Helpers.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
+    UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
     Helpers.send_json(conn, 200, response)
   end
 
   defp handle_stream(conn, provider, stream, api_key, model, token, trace_id) do
     conn = SSEWriter.start_sse(conn)
     {conn, usage} = pipe_stream(conn, provider, stream, token)
-    Helpers.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
+    UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
     conn
   end
 
@@ -183,7 +189,7 @@ defmodule LLMProxy.Routes.Messages do
     is_rate_limit =
       String.contains?(error_msg, "429") || String.contains?(error_msg, "rate_limit")
 
-    if is_rate_limit && token, do: Helpers.mark_rate_limited(token)
+    if is_rate_limit && token, do: TokenRateLimit.mark_rate_limited(token)
     Logger.error("Stream error: #{error_msg}")
 
     error_event = %{
@@ -208,7 +214,7 @@ defmodule LLMProxy.Routes.Messages do
   end
 
   defp mark_rate_limited_if_needed(429, %{token: token}) when not is_nil(token) do
-    Helpers.mark_rate_limited(token)
+    TokenRateLimit.mark_rate_limited(token)
   end
 
   defp mark_rate_limited_if_needed(_, _), do: :ok

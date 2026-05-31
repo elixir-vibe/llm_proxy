@@ -26,8 +26,7 @@ defmodule LLMProxy.TestSupport do
       Plug.Parsers.init(
         parsers: [:json],
         pass: ["*/*"],
-        json_decoder: Jason,
-        body_reader: {LLMProxy.CacheBodyReader, :read_body, []}
+        json_decoder: Jason
       )
 
     Plug.Parsers.call(conn, parsers)

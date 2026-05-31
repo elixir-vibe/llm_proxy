@@ -1,4 +1,4 @@
-defmodule LLMProxy.Routing.Attempt do
+defmodule LLMProxy.ProviderRouting.Attempt do
   @moduledoc false
 
   alias LLMProxy.Catalog.Deployment

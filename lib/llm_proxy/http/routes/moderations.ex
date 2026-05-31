@@ -1,12 +1,12 @@
-defmodule LLMProxy.Routes.Moderations do
+defmodule LLMProxy.HTTP.Routes.Moderations do
   @moduledoc false
   use Plug.Router
 
   require Logger
 
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.Routes.Moderations.Params
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
-  alias LLMProxy.Routes.Moderations.Params
   alias LLMProxy.Telemetry
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Trace

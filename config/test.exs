@@ -14,9 +14,11 @@ config :llm_proxy, LLMProxy.Repo,
 
 config :llm_proxy,
   master_key: System.get_env("MASTER_KEY", "test-master-key"),
-  openrouter_api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
-  openai_api_keys: System.get_env("OPENAI_API_KEYS", ""),
-  anthropic_api_keys: System.get_env("ANTHROPIC_API_KEYS", "")
+  providers: %{
+    "anthropic" => %{api_keys: System.get_env("ANTHROPIC_API_KEYS", "")},
+    "openai" => %{api_keys: System.get_env("OPENAI_API_KEYS", "")},
+    "openrouter" => %{api_keys: System.get_env("OPENROUTER_API_KEYS", "")}
+  }
 
 config :llm_proxy, LLMProxy.Web.Endpoint,
   http: [port: 4002],

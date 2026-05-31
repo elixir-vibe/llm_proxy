@@ -1,17 +1,20 @@
-defmodule LLMProxy.Routes.Responses do
+defmodule LLMProxy.HTTP.Routes.Responses do
   @moduledoc false
   use Plug.Router
 
   require Logger
 
+  alias LLMProxy.AccessControl
+  alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
-  alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.{Event, SSEWriter}
   alias LLMProxy.Telemetry
+  alias LLMProxy.TokenRateLimit
   alias LLMProxy.Trace
   alias LLMProxy.Usage
+  alias LLMProxy.UsageTracking
 
   plug(Auth)
   plug(QuotaCheck)
@@ -33,13 +36,16 @@ defmodule LLMProxy.Routes.Responses do
     model = body["model"]
 
     with {:ok, request} <- Request.parse(:openai_responses, body),
-         :ok <- Helpers.check_model_access(api_key, model),
+         :ok <- AccessControl.check_model_access(api_key, model),
          provider when not is_nil(provider) <- Registry.get_provider(model) do
       Logger.debug(
         "Responses request from #{api_key.name} model=#{model} stream=#{responses_stream?(request)}"
       )
 
-      Helpers.log_user_message(api_key, model, "responses", fn -> Request.user_text(request) end)
+      UsageTracking.log_user_message(api_key, model, "responses", fn ->
+        Request.user_text(request)
+      end)
+
       dispatch_provider(conn, provider, normalize_stream(request), api_key, model, trace_id)
     else
       nil ->
@@ -114,14 +120,14 @@ defmodule LLMProxy.Routes.Responses do
 
   defp handle_provider_error(conn, provider, %Result{error: error, status: status} = result) do
     token = Map.get(result, :token)
-    if status == 429 && token, do: Helpers.mark_rate_limited(token)
+    if status == 429 && token, do: TokenRateLimit.mark_rate_limited(token)
     Logger.error("#{provider.name()} error (#{status}): #{error}")
     send_error(conn, status, "api_error", error)
   end
 
   defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
     usage = extract_usage(response)
-    Helpers.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
+    UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
     Helpers.send_json(conn, 200, response)
   end
 
@@ -143,7 +149,9 @@ defmodule LLMProxy.Routes.Responses do
         e in [RuntimeError, Jason.DecodeError, Protocol.UndefinedError] ->
           error_msg = Exception.message(e)
           Logger.error("Stream error: #{error_msg}")
-          if String.contains?(error_msg, "429") && token, do: Helpers.mark_rate_limited(token)
+
+          if String.contains?(error_msg, "429") && token,
+            do: TokenRateLimit.mark_rate_limited(token)
 
           error_event =
             Jason.encode!(%{type: "error", error: %{type: "api_error", message: error_msg}})
@@ -153,7 +161,7 @@ defmodule LLMProxy.Routes.Responses do
       end
 
     Plug.Conn.chunk(conn, "data: [DONE]\n\n")
-    Helpers.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
+    UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
     conn
   end
 

@@ -29,8 +29,7 @@ defmodule LLMProxy.Web.Endpoint do
   plug(Plug.Parsers,
     parsers: [:urlencoded, :json],
     pass: ["*/*"],
-    json_decoder: Jason,
-    body_reader: {LLMProxy.CacheBodyReader, :read_body, []}
+    json_decoder: Jason
   )
 
   plug(Plug.Session, @session_options)

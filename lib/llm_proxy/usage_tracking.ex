@@ -1,13 +1,10 @@
-defmodule LLMProxy.Routes.Helpers do
+defmodule LLMProxy.UsageTracking do
   @moduledoc false
-
-  import Plug.Conn
 
   require Logger
 
   alias LLMProxy.Pricing
   alias LLMProxy.Storage
-  alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Usage
 
   @spec track_usage(map(), String.t(), Usage.t(), map()) :: :ok | term()
@@ -41,10 +38,10 @@ defmodule LLMProxy.Routes.Helpers do
       timestamp: DateTime.utc_now()
     })
 
-    duration_str = if opts[:duration_ms], do: " #{opts[:duration_ms]}ms", else: ""
+    duration = if opts[:duration_ms], do: " #{opts[:duration_ms]}ms", else: ""
 
     Logger.info(
-      "Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens} cost=$#{Float.round(cost_usd, 6)}#{duration_str}"
+      "Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens} cost=$#{Float.round(cost_usd, 6)}#{duration}"
     )
   end
 
@@ -72,27 +69,18 @@ defmodule LLMProxy.Routes.Helpers do
     end
   end
 
-  def check_model_access(%{id: "master"}, _model), do: :ok
-  def check_model_access(api_key, model), do: Storage.check_model_access(api_key, model)
-
-  def mark_rate_limited(token) do
-    TokenPool.mark_rate_limited(token)
-    Logger.warning("Token #{token.id} marked as rate-limited")
-  end
-
   def log_user_message(api_key, model, route, extractor) when is_function(extractor, 0) do
     case extractor.() do
       "" ->
         :ok
 
-      msg ->
-        Storage.log_message(%{key_id: api_key.id, model: model, route: route, user_message: msg})
+      message ->
+        Storage.log_message(%{
+          key_id: api_key.id,
+          model: model,
+          route: route,
+          user_message: message
+        })
     end
-  end
-
-  def send_json(conn, status, body) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(body))
   end
 end

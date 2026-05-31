@@ -1,4 +1,4 @@
-defmodule LLMProxy.Routes.Models do
+defmodule LLMProxy.HTTP.Routes.Models do
   @moduledoc false
 
   use Plug.Router

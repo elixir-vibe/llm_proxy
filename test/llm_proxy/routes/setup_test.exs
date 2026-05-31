@@ -1,8 +1,8 @@
-defmodule LLMProxy.Routes.SetupTest do
+defmodule LLMProxy.HTTP.Routes.SetupTest do
   use ExUnit.Case
 
+  alias LLMProxy.HTTP.Routes.Setup
   alias LLMProxy.Providers.Registry
-  alias LLMProxy.Routes.Setup
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 

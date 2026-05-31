@@ -6,7 +6,7 @@ defmodule LLMProxy.Providers.Registry do
   Model→provider lookup is O(1).
   """
 
-  alias LLMProxy.Routing.Attempt
+  alias LLMProxy.ProviderRouting.Attempt
 
   @registry_key :llm_proxy_providers
   @model_index_key :llm_proxy_model_index

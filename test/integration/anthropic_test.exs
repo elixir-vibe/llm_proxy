@@ -17,7 +17,10 @@ defmodule LLMProxy.Integration.AnthropicTest do
 
   @model "claude-3-5-haiku-20241022"
 
-  @api_key Application.compile_env(:llm_proxy, :anthropic_api_keys, "")
+  @api_key :llm_proxy
+           |> Application.compile_env(:providers, %{})
+           |> get_in(["anthropic", :api_keys])
+           |> to_string()
            |> String.split(",", trim: true)
            |> List.first()
 

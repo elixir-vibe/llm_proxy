@@ -29,14 +29,14 @@ defmodule LLMProxy.Protocol.Anthropic do
 
   # --- OpenAI → Anthropic ---
 
-  @spec request_body(Request.t()) :: map()
-  def request_body(%Request{} = request) do
+  @spec request_body(Request.t(), keyword()) :: map()
+  def request_body(%Request{} = request, opts \\ []) do
     {system_messages, messages} = Enum.split_with(request.messages, &(&1.role == :system))
 
     base = %{
       "model" => request.model,
       "messages" => Enum.map(messages, &message_to_anthropic/1),
-      "max_tokens" => request.max_tokens || LLMProxy.Config.anthropic_max_tokens()
+      "max_tokens" => request.max_tokens || conversion_max_tokens(opts)
     }
 
     base
@@ -48,6 +48,12 @@ defmodule LLMProxy.Protocol.Anthropic do
     |> maybe_put("metadata", request.metadata)
     |> maybe_put("stop_sequences", request.stop)
     |> maybe_put("tool_choice", request.tool_choice)
+  end
+
+  defp conversion_max_tokens(opts) do
+    Keyword.get_lazy(opts, :max_tokens, fn ->
+      LLMProxy.Config.provider_conversion_default("anthropic", :max_tokens)
+    end)
   end
 
   defp message_to_anthropic(%Message{role: :user, content: content}) do

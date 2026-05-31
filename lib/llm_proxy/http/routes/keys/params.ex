@@ -1,4 +1,4 @@
-defmodule LLMProxy.Routes.Keys.Params do
+defmodule LLMProxy.HTTP.Routes.Keys.Params do
   @moduledoc false
 
   @quota_fields %{

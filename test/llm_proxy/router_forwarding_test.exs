@@ -51,14 +51,21 @@ defmodule LLMProxy.RouterForwardingTest do
     assert Jason.decode!(conn.resp_body)["name"] == "router-user"
   end
 
-  test "forwards stats admin alias" do
+  test "forwards stats routes without claiming the admin UI path" do
     conn =
-      Plug.Test.conn(:get, "/admin")
+      Plug.Test.conn(:get, "/stats")
       |> TestSupport.put_bearer("master-key")
       |> Router.call(@opts)
 
     assert conn.status == 200
     assert Map.has_key?(Jason.decode!(conn.resp_body), "total_keys")
+
+    admin_conn =
+      Plug.Test.conn(:get, "/admin")
+      |> TestSupport.put_bearer("master-key")
+      |> Router.call(@opts)
+
+    assert admin_conn.status == 404
   end
 
   test "forwards chat routes" do

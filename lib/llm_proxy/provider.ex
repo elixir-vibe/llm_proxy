@@ -12,17 +12,18 @@ defmodule LLMProxy.Provider do
 
   require Logger
 
+  alias LLMProxy.AccessControl
   alias LLMProxy.Actor
-  alias LLMProxy.Caches
+  alias LLMProxy.Cache.Runtime, as: CacheRuntime
   alias LLMProxy.Guardrails
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.ProviderRouting.Attempt
   alias LLMProxy.Providers.{Caller, Registry, Result}
   alias LLMProxy.ReqLLM.Model
   alias LLMProxy.ReqLLM.ResponseAdapter
   alias LLMProxy.Response
-  alias LLMProxy.Routes.Helpers
-  alias LLMProxy.Routing.Attempt
   alias LLMProxy.Telemetry
+  alias LLMProxy.UsageTracking
 
   @type call_error ::
           {:request, Request.Error.t()}
@@ -42,14 +43,14 @@ defmodule LLMProxy.Provider do
          {:ok, api_key} <- fetch_api_key(actor),
          :ok <- check_quota(actor, api_key),
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
-         :ok <- Helpers.check_model_access(api_key, request.model),
+         :ok <- AccessControl.check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request.model) do
       Logger.debug(
         "Provider request from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
 
-      Helpers.log_user_message(api_key, request.model, to_string(route), fn ->
+      UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
         Request.user_text(request)
       end)
 
@@ -205,7 +206,7 @@ defmodule LLMProxy.Provider do
     start = System.monotonic_time(:millisecond)
 
     trace_id = Keyword.get(opts, :trace_id) || LLMProxy.Trace.new_id()
-    cache_key = Caches.key(request, attempts)
+    cache_key = CacheRuntime.key(request, attempts)
 
     context =
       guard_context(request, actor, api_key, route, %{
@@ -227,8 +228,8 @@ defmodule LLMProxy.Provider do
   end
 
   defp cache_get(cache_key, request, context) do
-    if Caches.enabled?(request, context) do
-      case Caches.get(cache_key, context) do
+    if CacheRuntime.enabled?(request, context) do
+      case CacheRuntime.get(cache_key, context) do
         {:hit, %Response{} = response} ->
           {:hit, %{response | request: request, trace_id: context.trace_id, cache_hit: true}}
 
@@ -262,7 +263,7 @@ defmodule LLMProxy.Provider do
     duration_ms = System.monotonic_time(:millisecond) - start
     usage = used_provider.extract_usage(provider_body)
 
-    cache_policy = Caches.policy(request, context)
+    cache_policy = CacheRuntime.policy(request, context)
 
     response = %Response{
       body: used_provider.to_openai_response(provider_body, used_model),
@@ -279,7 +280,7 @@ defmodule LLMProxy.Provider do
 
     case Guardrails.after_response(response, context) do
       {:ok, response} ->
-        Caches.put(cache_key, response, context)
+        CacheRuntime.put(cache_key, request, response, context)
         track_provider_response(api_key, used_model, request, response, duration_ms, opts)
         {:ok, response}
 
@@ -298,9 +299,9 @@ defmodule LLMProxy.Provider do
       }
       |> Map.merge(Map.new(Keyword.get(opts, :usage_metadata, [])))
 
-    Helpers.track_usage(api_key, model, response.usage, tracking_opts)
+    UsageTracking.track_usage(api_key, model, response.usage, tracking_opts)
 
-    Helpers.maybe_record_trace(
+    UsageTracking.maybe_record_trace(
       api_key,
       model,
       request.body,

@@ -1,20 +1,22 @@
-defmodule LLMProxy.Routes.Chat do
+defmodule LLMProxy.HTTP.Routes.Chat do
   @moduledoc false
   use Plug.Router
 
   require Logger
 
+  alias LLMProxy.AccessControl
   alias LLMProxy.Actor
   alias LLMProxy.Guardrails
+  alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.{OpenAI, Request}
   alias LLMProxy.Provider
   alias LLMProxy.Providers.{Caller, Registry, Result}
-  alias LLMProxy.Routes.Helpers
   alias LLMProxy.Stream.{Event, SSEWriter}
   alias LLMProxy.Telemetry
   alias LLMProxy.Trace
   alias LLMProxy.Usage
+  alias LLMProxy.UsageTracking
 
   plug(Auth)
   plug(QuotaCheck)
@@ -36,7 +38,7 @@ defmodule LLMProxy.Routes.Chat do
 
     with {:ok, request} <- Request.parse(:openai_chat, body),
          model <- request.model,
-         :ok <- Helpers.check_model_access(api_key, model),
+         :ok <- AccessControl.check_model_access(api_key, model),
          provider when not is_nil(provider) <- Registry.get_provider(model) do
       Logger.debug("Request from #{api_key.name} model=#{model} provider=#{provider.name()}")
       meta = %{tags: request.tags, metadata: request.metadata}
@@ -100,7 +102,10 @@ defmodule LLMProxy.Routes.Chat do
   end
 
   defp do_handle_stream(conn, provider, api_key, %Request{} = request, model, meta, request_id) do
-    Helpers.log_user_message(api_key, request.model, "chat", fn -> Request.user_text(request) end)
+    UsageTracking.log_user_message(api_key, request.model, "chat", fn ->
+      Request.user_text(request)
+    end)
+
     start = System.monotonic_time(:millisecond)
 
     case Telemetry.with_provider_span(
@@ -145,7 +150,7 @@ defmodule LLMProxy.Routes.Chat do
         metadata: Map.put(meta.metadata || %{}, "trace_id", request_id)
       })
 
-    Helpers.track_usage(api_key, used_model, usage, opts)
+    UsageTracking.track_usage(api_key, used_model, usage, opts)
     conn
   end
 

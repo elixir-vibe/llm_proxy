@@ -9,10 +9,6 @@ defmodule LLMProxy.Providers.Anthropic do
   alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.Event
 
-  @default_base_url "https://api.anthropic.com/v1"
-  @api_version "2023-06-01"
-  @beta "fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
-
   @impl true
   def name, do: "anthropic"
 
@@ -112,15 +108,15 @@ defmodule LLMProxy.Providers.Anthropic do
   defp headers(token) do
     [
       {"x-api-key", token.token},
-      {"anthropic-version", @api_version},
-      {"anthropic-beta", @beta},
+      {"anthropic-version", LLMProxy.Config.provider_value("anthropic", :api_version)},
+      {"anthropic-beta", LLMProxy.Config.provider_value("anthropic", :beta)},
       {"content-type", "application/json"},
       {"accept", "application/json"}
     ]
   end
 
   defp base_url(%{proxy: proxy}) when is_binary(proxy) and proxy != "", do: proxy
-  defp base_url(_token), do: @default_base_url
+  defp base_url(_token), do: LLMProxy.Config.provider_value("anthropic", :base_url)
 
   # Streaming
 

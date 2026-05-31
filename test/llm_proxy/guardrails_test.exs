@@ -1,8 +1,8 @@
 defmodule LLMProxy.GuardrailsTest do
   use ExUnit.Case
 
+  alias LLMProxy.HTTP.Routes.Chat
   alias LLMProxy.Providers.{Registry, Result}
-  alias LLMProxy.Routes.Chat
   alias LLMProxy.Storage
   alias LLMProxy.Stream.Event
   alias LLMProxy.TestSupport

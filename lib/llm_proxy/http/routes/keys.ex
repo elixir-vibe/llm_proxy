@@ -1,11 +1,11 @@
-defmodule LLMProxy.Routes.Keys do
+defmodule LLMProxy.HTTP.Routes.Keys do
   @moduledoc false
   use Plug.Router
 
   require Logger
 
+  alias LLMProxy.HTTP.Routes.Keys.Params
   alias LLMProxy.Plugs.{Auth, MasterKey}
-  alias LLMProxy.Routes.Keys.Params
   alias LLMProxy.Storage
 
   plug(:route_auth)

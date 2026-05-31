@@ -3,7 +3,7 @@ defmodule LLMProxy.CircuitBreaker do
 
   use GenServer
 
-  alias LLMProxy.Routing.Attempt
+  alias LLMProxy.ProviderRouting.Attempt
   alias LLMProxy.Telemetry
 
   defstruct state: :closed, failures: 0, opened_at: nil, cooldown_ms: nil

@@ -16,7 +16,10 @@ defmodule LLMProxy.Integration.OpenRouterTest do
 
   @model "openai/gpt-4o-mini"
 
-  @api_key Application.compile_env(:llm_proxy, :openrouter_api_keys, "")
+  @api_key :llm_proxy
+           |> Application.compile_env(:providers, %{})
+           |> get_in(["openrouter", :api_keys])
+           |> to_string()
            |> String.split(",", trim: true)
            |> List.first()
 

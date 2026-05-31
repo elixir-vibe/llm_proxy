@@ -1,8 +1,8 @@
-defmodule LLMProxy.Routes.ResponsesTest do
+defmodule LLMProxy.HTTP.Routes.ResponsesTest do
   use ExUnit.Case
 
+  alias LLMProxy.HTTP.Routes.Responses
   alias LLMProxy.Providers.{Registry, Result}
-  alias LLMProxy.Routes.Responses
   alias LLMProxy.Storage
   alias LLMProxy.Stream.Event
   alias LLMProxy.TestSupport

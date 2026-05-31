@@ -1,9 +1,9 @@
-defmodule LLMProxy.Routes.Tokens do
+defmodule LLMProxy.HTTP.Routes.Tokens do
   @moduledoc false
   use Plug.Router
 
+  alias LLMProxy.HTTP.Routes.Tokens.Params
   alias LLMProxy.Plugs.MasterKey
-  alias LLMProxy.Routes.Tokens.Params
   alias LLMProxy.Storage
   alias LLMProxy.TokenPool.Server, as: TokenPool
 

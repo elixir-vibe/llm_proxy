@@ -5,8 +5,6 @@ defmodule LLMProxy.Providers.OpenAI do
 
   alias LLMProxy.Providers.Helpers
 
-  @default_base_url "https://api.openai.com/v1"
-
   @impl true
   def name, do: "openai"
 
@@ -40,5 +38,5 @@ defmodule LLMProxy.Providers.OpenAI do
   end
 
   defp base_url(%{proxy: proxy}) when is_binary(proxy) and proxy != "", do: proxy
-  defp base_url(_token), do: @default_base_url
+  defp base_url(_token), do: LLMProxy.Config.provider_value("openai", :base_url)
 end

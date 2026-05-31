@@ -1,12 +1,14 @@
-defmodule LLMProxy.Routes.HelpersTest do
+defmodule LLMProxy.HTTP.Routes.HelpersTest do
   use ExUnit.Case
 
   import Plug.Test
 
-  alias LLMProxy.Routes.Helpers
+  alias LLMProxy.AccessControl
+  alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias LLMProxy.Usage
+  alias LLMProxy.UsageTracking
 
   setup do
     TestSupport.checkout_repo()
@@ -17,7 +19,7 @@ defmodule LLMProxy.Routes.HelpersTest do
     {:ok, key, _} = Storage.create_key("tracked")
 
     usage = Usage.new(1000, 500)
-    Helpers.track_usage(key, "gpt-4o", usage, %{duration_ms: 42, provider: "openai"})
+    UsageTracking.track_usage(key, "gpt-4o", usage, %{duration_ms: 42, provider: "openai"})
 
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 1000
@@ -32,7 +34,7 @@ defmodule LLMProxy.Routes.HelpersTest do
   test "maybe_record_trace/6 stores traces when enabled" do
     {:ok, key, _} = Storage.create_key("traceable", %{trace_requests: true})
 
-    Helpers.maybe_record_trace(
+    UsageTracking.maybe_record_trace(
       key,
       "gpt-4o",
       %{"input" => "hello"},
@@ -48,16 +50,16 @@ defmodule LLMProxy.Routes.HelpersTest do
   end
 
   test "check_model_access/2 permits the master key" do
-    assert :ok == Helpers.check_model_access(%{id: "master"}, "any-model")
+    assert :ok == AccessControl.check_model_access(%{id: "master"}, "any-model")
   end
 
   test "log_user_message/4 skips empty messages and stores non-empty ones" do
     {:ok, key, _} = Storage.create_key("logger")
 
-    assert :ok == Helpers.log_user_message(key, "gpt-4o", "chat", fn -> "" end)
+    assert :ok == UsageTracking.log_user_message(key, "gpt-4o", "chat", fn -> "" end)
     assert Storage.get_messages(%{per_page: 10}) == []
 
-    Helpers.log_user_message(key, "gpt-4o", "chat", fn -> "hello" end)
+    UsageTracking.log_user_message(key, "gpt-4o", "chat", fn -> "hello" end)
 
     [message] = Storage.get_messages(%{per_page: 10})
     assert message.user_message == "hello"

@@ -4,7 +4,7 @@ defmodule LLMProxy.Catalog do
   """
 
   alias LLMProxy.Catalog.Model
-  alias LLMProxy.Routing.{LowestCost, Ordered, RoundRobin, Shuffle, WeightedShuffle}
+  alias LLMProxy.ProviderRouting.{LowestCost, Ordered, RoundRobin, Shuffle, WeightedShuffle}
 
   @catalog_key :llm_proxy_catalog
 

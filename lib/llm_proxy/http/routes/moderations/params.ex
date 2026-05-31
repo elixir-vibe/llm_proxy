@@ -1,4 +1,4 @@
-defmodule LLMProxy.Routes.Moderations.Params do
+defmodule LLMProxy.HTTP.Routes.Moderations.Params do
   @moduledoc false
 
   @default_model "omni-moderation-latest"

@@ -1,7 +1,7 @@
-defmodule LLMProxy.Routes.ModerationsTest do
+defmodule LLMProxy.HTTP.Routes.ModerationsTest do
   use ExUnit.Case
 
-  alias LLMProxy.Routes.Moderations
+  alias LLMProxy.HTTP.Routes.Moderations
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias LLMProxy.TokenPool.Server, as: TokenPool

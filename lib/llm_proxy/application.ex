@@ -5,8 +5,8 @@ defmodule LLMProxy.Application do
 
   require Logger
 
+  alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.Providers.Registry
-  alias LLMProxy.Routes.Dynamic
 
   @impl true
   def start(_type, _args) do
@@ -22,15 +22,15 @@ defmodule LLMProxy.Application do
     ReqLLM.Providers.register(LLMProxy.Provider)
     ReqLLM.Providers.register(LLMProxy.RemoteProvider)
 
-    Dynamic.register("/v1/messages", LLMProxy.Routes.Messages)
-    Dynamic.register("/messages", LLMProxy.Routes.Messages)
-    Dynamic.register("/v1/responses", LLMProxy.Routes.Responses)
-    Dynamic.register("/responses", LLMProxy.Routes.Responses)
+    Dynamic.register("/v1/messages", LLMProxy.HTTP.Routes.Messages)
+    Dynamic.register("/messages", LLMProxy.HTTP.Routes.Messages)
+    Dynamic.register("/v1/responses", LLMProxy.HTTP.Routes.Responses)
+    Dynamic.register("/responses", LLMProxy.HTTP.Routes.Responses)
 
     children = [
       LLMProxy.Repo,
       LLMProxy.CircuitBreaker,
-      LLMProxy.Routing.RoundRobin,
+      LLMProxy.ProviderRouting.RoundRobin,
       LLMProxy.TokenPool.Server,
       {Phoenix.PubSub, name: LLMProxy.PubSub},
       LLMProxy.Web.Endpoint
@@ -52,19 +52,16 @@ defmodule LLMProxy.Application do
 
   defp seed_tokens_from_env do
     entries =
-      [
-        {"openrouter", "api-key", :openrouter_api_keys},
-        {"openai", "api-key", :openai_api_keys},
-        {"anthropic", "api-key", :anthropic_api_keys}
-      ]
-      |> Enum.map(fn {provider, kind, config_key} ->
+      ["openrouter", "openai", "anthropic"]
+      |> Enum.map(fn provider ->
         tokens =
-          Application.get_env(:llm_proxy, config_key, "")
+          provider
+          |> LLMProxy.Config.provider_value(:api_keys, "")
           |> String.split(",", trim: true)
           |> Enum.map(&String.trim/1)
           |> Enum.reject(&(&1 == ""))
 
-        %{provider: provider, kind: kind, tokens: tokens}
+        %{provider: provider, kind: "api-key", tokens: tokens}
       end)
       |> Enum.reject(fn e -> e.tokens == [] end)
 

@@ -3,8 +3,8 @@ defmodule LLMProxy.Providers.CallerTest do
 
   alias LLMProxy.CircuitBreaker
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.ProviderRouting.Attempt
   alias LLMProxy.Providers.{Caller, Result}
-  alias LLMProxy.Routing.Attempt
   alias LLMProxy.Stream.Event
 
   defmodule SuccessProvider do

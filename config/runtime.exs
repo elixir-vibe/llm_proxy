@@ -27,12 +27,19 @@ if config_env() in [:dev, :prod] do
       json -> Jason.decode!(json)
     end
 
+  public_url = System.get_env("PUBLIC_URL", "")
+
   config :llm_proxy,
     master_key: System.get_env("MASTER_KEY"),
-    public_url: System.get_env("PUBLIC_URL", ""),
-    openrouter_api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
-    openai_api_keys: System.get_env("OPENAI_API_KEYS", ""),
-    anthropic_api_keys: System.get_env("ANTHROPIC_API_KEYS", ""),
+    public_url: public_url,
+    providers: %{
+      "anthropic" => %{api_keys: System.get_env("ANTHROPIC_API_KEYS", "")},
+      "openai" => %{api_keys: System.get_env("OPENAI_API_KEYS", "")},
+      "openrouter" => %{
+        api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
+        http_referer: public_url
+      }
+    },
     fallbacks: fallbacks,
     max_retries: String.to_integer(System.get_env("LLM_MAX_RETRIES", "1"))
 end
