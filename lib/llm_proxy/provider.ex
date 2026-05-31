@@ -23,7 +23,9 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.ReqLLM.Model
   alias LLMProxy.ReqLLM.ResponseAdapter
   alias LLMProxy.Response
+  alias LLMProxy.Stream.Event
   alias LLMProxy.Telemetry
+  alias LLMProxy.Usage
 
   @type call_error ::
           {:request, Request.Error.t()}
@@ -55,6 +57,37 @@ defmodule LLMProxy.Provider do
       end)
 
       call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
+    else
+      :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
+      {:error, {:missing_api_key, _}} = error -> error
+      {:error, {:invalid_api_key, _}} = error -> error
+      {:error, {:guardrail, _reason}} = error -> error
+      {:error, reason} when is_binary(reason) -> {:error, {:permission, reason}}
+    end
+  end
+
+  @spec stream(Request.t(), Actor.t() | map() | String.t(), keyword()) ::
+          {:ok, Result.t()} | {:error, call_error()}
+  def stream(%Request{} = request, actor_or_key, opts \\ []) do
+    route = Keyword.get(opts, :route, request.protocol)
+    request = %{request | stream: true, body: Map.put(request.body, "stream", true)}
+
+    with {:ok, actor} <- normalize_actor(actor_or_key),
+         {:ok, api_key} <- fetch_api_key(actor),
+         :ok <- check_quota(actor, api_key),
+         {:ok, request} <- guard_before_request(request, actor, api_key, route),
+         :ok <- AccessControl.check_model_access(api_key, request.model),
+         {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
+           Registry.resolve_attempts(request.model) do
+      Logger.debug(
+        "Provider stream from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
+      )
+
+      UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
+        Request.user_text(request)
+      end)
+
+      stream_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
     else
       :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
       {:error, {:missing_api_key, _}} = error -> error
@@ -251,6 +284,85 @@ defmodule LLMProxy.Provider do
     )
   end
 
+  defp stream_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
+    start = System.monotonic_time(:millisecond)
+    trace_id = Keyword.get(opts, :trace_id) || LLMProxy.Trace.new_id()
+
+    context =
+      guard_context(request, actor, api_key, route, %{
+        provider: provider,
+        model: upstream_model,
+        trace_id: trace_id
+      })
+
+    case stream_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
+      {:ok, %Result{stream: stream, provider: used_provider, model: used_model} = result} ->
+        context = %{context | provider: used_provider, model: used_model}
+        stream = track_stream(stream, used_model, request, api_key, context, start, opts)
+        {:ok, %{result | stream: stream}}
+
+      {:error, %Result{} = result} ->
+        {:error, {:provider, result}}
+    end
+  end
+
+  defp stream_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
+    Telemetry.with_provider_span(
+      provider.name(),
+      upstream_model,
+      :stream,
+      fn -> Caller.stream_attempts(attempts, request, api_key.id) end,
+      %{"llm_proxy.trace_id" => trace_id}
+    )
+  end
+
+  defp track_stream(stream, model, request, api_key, context, start, opts) do
+    Stream.transform(
+      stream,
+      fn -> {Usage.zero(), nil} end,
+      fn %Event{} = event, {usage, ttft_ms} ->
+        case Guardrails.on_stream_event(event, context) do
+          {:ok, nil} ->
+            {[], {usage, ttft_ms}}
+
+          {:ok, %Event{} = event} ->
+            usage = merge_stream_usage(usage, event)
+            ttft_ms = ttft_ms || System.monotonic_time(:millisecond) - start
+            {[event], {usage, ttft_ms}}
+
+          {:error, _reason} ->
+            {:halt, {usage, ttft_ms}}
+        end
+      end,
+      fn {usage, ttft_ms} = acc ->
+        duration_ms = System.monotonic_time(:millisecond) - start
+        track_stream_response(api_key, model, request, usage, duration_ms, ttft_ms, context, opts)
+        {[], acc}
+      end,
+      fn _acc -> :ok end
+    )
+  end
+
+  defp merge_stream_usage(usage, %Event{usage: event_usage}) when not is_nil(event_usage) do
+    Usage.merge_max(usage, event_usage)
+  end
+
+  defp merge_stream_usage(usage, _event), do: usage
+
+  defp track_stream_response(api_key, model, request, usage, duration_ms, ttft_ms, context, opts) do
+    usage_metadata = Map.new(Keyword.get(opts, :usage_metadata, []))
+
+    tracking_opts = %{
+      duration_ms: duration_ms,
+      ttft_ms: ttft_ms,
+      provider: context.provider.name(),
+      tags: Map.get(usage_metadata, :tags, request.tags),
+      metadata: tracking_metadata(request, usage_metadata, context.trace_id)
+    }
+
+    UsageTracking.track_usage(api_key, model, usage, tracking_opts)
+  end
+
   defp handle_provider_result(
          %Result{response: provider_body, provider: used_provider, model: used_model},
          request,
@@ -290,14 +402,14 @@ defmodule LLMProxy.Provider do
   end
 
   defp track_provider_response(api_key, model, request, response, duration_ms, opts) do
-    tracking_opts =
-      %{
-        duration_ms: duration_ms,
-        provider: response.provider.name(),
-        tags: request.tags,
-        metadata: Map.put(request.metadata || %{}, "trace_id", response.trace_id)
-      }
-      |> Map.merge(Map.new(Keyword.get(opts, :usage_metadata, [])))
+    usage_metadata = Map.new(Keyword.get(opts, :usage_metadata, []))
+
+    tracking_opts = %{
+      duration_ms: duration_ms,
+      provider: response.provider.name(),
+      tags: Map.get(usage_metadata, :tags, request.tags),
+      metadata: tracking_metadata(request, usage_metadata, response.trace_id)
+    }
 
     UsageTracking.track_usage(api_key, model, response.usage, tracking_opts)
 
@@ -309,6 +421,13 @@ defmodule LLMProxy.Provider do
       response.usage,
       tracking_opts
     )
+  end
+
+  defp tracking_metadata(request, usage_metadata, trace_id) do
+    request.metadata
+    |> Kernel.||(%{})
+    |> Map.merge(Map.get(usage_metadata, :metadata) || %{})
+    |> Map.put("trace_id", trace_id)
   end
 
   defp run_req_llm(req_request) do

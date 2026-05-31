@@ -1,8 +1,10 @@
 defmodule LLMProxy.ProviderTest do
   use ExUnit.Case
 
+  alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
+  alias LLMProxy.Stream.Event
   alias LLMProxy.TestSupport
 
   defmodule Provider do
@@ -24,6 +26,19 @@ defmodule LLMProxy.ProviderTest do
          },
          nil
        )}
+    end
+
+    def stream(%{"model" => "req-llm-provider-model", "stream" => true}, _user_id) do
+      stream = [
+        Event.new(%{"choices" => [%{"delta" => %{"content" => "hello"}}]},
+          usage: LLMProxy.Usage.new(4, 0)
+        ),
+        Event.new(%{"choices" => [%{"delta" => %{"content" => " stream"}}]},
+          usage: LLMProxy.Usage.new(4, 3)
+        )
+      ]
+
+      {:ok, Result.stream(stream, nil)}
     end
 
     def extract_usage(response) do
@@ -50,6 +65,27 @@ defmodule LLMProxy.ProviderTest do
     assert response.body["model"] == "req-llm-provider-model"
     assert response.usage.input_tokens == 4
     assert response.usage.output_tokens == 3
+
+    [updated_key] = Storage.list_keys()
+    assert updated_key.input_tokens == 4
+    assert updated_key.output_tokens == 3
+  end
+
+  test "Provider.stream returns guarded streams and records usage after consumption" do
+    {:ok, key, _raw_key} = Storage.create_key("local-stream-user")
+
+    request = %Request{
+      protocol: :openai_chat,
+      model: "req-llm-provider-model",
+      stream: true,
+      body: %{"model" => "req-llm-provider-model", "messages" => []},
+      messages: []
+    }
+
+    assert {:ok, %Result{stream: stream}} =
+             LLMProxy.Provider.stream(request, key, route: :chat, trace_id: "trace-stream")
+
+    assert [%Event{}, %Event{}] = Enum.to_list(stream)
 
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 4
