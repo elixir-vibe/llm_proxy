@@ -656,6 +656,14 @@ defmodule LLMProxy.Storage.Ecto do
     )
   end
 
+  defp trace_request_id_query(query, request_id, :quackdb) do
+    where(
+      query,
+      [t],
+      fragment("json_extract_string(?, '$.trace_id') = ?", t.metadata, ^request_id)
+    )
+  end
+
   defp feedback_for(query, trace_id) when is_integer(trace_id),
     do: where(query, [f], f.trace_id == ^trace_id)
 

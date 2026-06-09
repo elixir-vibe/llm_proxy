@@ -11,6 +11,10 @@ defmodule LLMProxy.Storage.SQLTest do
     def __adapter__, do: Ecto.Adapters.MyXQL
   end
 
+  defmodule QuackDBRepo do
+    def __adapter__, do: Ecto.Adapters.QuackDB
+  end
+
   setup do
     original = Application.get_env(:llm_proxy, :repo)
 
@@ -32,5 +36,8 @@ defmodule LLMProxy.Storage.SQLTest do
 
     Application.put_env(:llm_proxy, :repo, LLMProxy.Repo)
     assert SQL.adapter() == :sqlite
+
+    Application.put_env(:llm_proxy, :repo, QuackDBRepo)
+    assert SQL.adapter() == :quackdb
   end
 end

@@ -4,8 +4,6 @@ defmodule Mix.Tasks.FetchModels do
 
   use Mix.Task
 
-  require Logger
-
   @models_dev_url "https://models.dev/api.json"
   @openrouter_url "https://openrouter.ai/api/v1/models"
   @priv_dir "priv/models"

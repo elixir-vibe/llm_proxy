@@ -8,8 +8,15 @@ defmodule LLMProxy.Storage.SQL do
       Ecto.Adapters.Postgres -> :postgres
       Ecto.Adapters.SQLite3 -> :sqlite
       Ecto.Adapters.MyXQL -> :mysql
+      Ecto.Adapters.QuackDB -> quackdb_adapter()
       other -> {:unsupported, other}
     end
+  end
+
+  defp quackdb_adapter do
+    if Code.ensure_loaded?(Ecto.Adapters.QuackDB),
+      do: :quackdb,
+      else: {:unsupported, Ecto.Adapters.QuackDB}
   end
 
   def supported_adapter! do

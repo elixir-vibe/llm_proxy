@@ -127,7 +127,7 @@ config :llm_proxy,
   repo: MyApp.Repo
 ```
 
-LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, and MySQL-compatible Ecto adapters. PostgreSQL/MySQL adapter dependencies should come from the host app.
+LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, MySQL-compatible, and QuackDB/DuckDB Ecto adapters. PostgreSQL/MySQL/QuackDB adapter dependencies should come from the host app.
 
 The public `LLMProxy.Storage` module is a facade. The default implementation is `LLMProxy.Storage.Ecto`, and advanced hosts can provide a custom storage adapter:
 
