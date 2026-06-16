@@ -70,12 +70,22 @@ defmodule LLMProxy.SafeRPCTest do
     assert read.spec != nil
   end
 
-  test "calls LLMProxy.Admin Incant service over a SafeRPC socket" do
+  test "discovers and calls LLMProxy.Admin through the Incant service client" do
     socket = socket_path("admin")
     {:ok, server} = AdminServer.start_link(socket: socket)
 
+    bindings = %{
+      llm_proxy: %{
+        socket: socket,
+        modules: [LLMProxy, LLMProxy.Admin]
+      }
+    }
+
+    assert {:ok, [%Incant.Service.Client{module: LLMProxy.Admin} = client]} =
+             Incant.Service.discover(bindings)
+
     assert {:ok, %Incant.Admin.Contract{service: :llm_proxy}} =
-             SafeRPC.call(socket, {LLMProxy.Admin, :describe}, %Incant.Service.Describe{})
+             Incant.Service.describe(client)
 
     GenServer.stop(server)
   end
