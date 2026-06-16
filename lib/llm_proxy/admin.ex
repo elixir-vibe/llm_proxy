@@ -6,12 +6,15 @@ defmodule LLMProxy.Admin do
   `Incant.Admin.describe/1` and later exposed over SafeRPC.
   """
 
-  use Incant.Admin, service: :llm_proxy, version: "1"
+  use Incant.Admin,
+    service: :llm_proxy,
+    version: "1",
+    repo: LLMProxy.Repo
 
-  resource(LLMProxy.Admin.Resources.ApiKey)
-  resource(LLMProxy.Admin.Resources.ProviderToken)
-  resource(LLMProxy.Admin.Resources.Trace)
-  resource(LLMProxy.Admin.Resources.Message)
+  expose(LLMProxy.Schemas.ApiKey)
+  expose(LLMProxy.Schemas.ProviderToken)
+  expose(LLMProxy.Schemas.Trace, readonly: true)
+  expose(LLMProxy.Schemas.MessageLog, as: :message, readonly: true)
 
   dashboard(LLMProxy.Admin.Dashboards.Operations)
 end
