@@ -10,7 +10,7 @@ defmodule LLMProxy.Admin.Resources.Message do
     column(:key_id)
     column(:model)
     column(:route)
-    column(:user_message, label: "Message")
+    column(:user_message, label: "Message", sensitive: true)
 
     filter(:model, :text)
     filter(:route, :text)
