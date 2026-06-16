@@ -9,7 +9,8 @@ defmodule LLMProxy.Admin do
   use Incant.Admin,
     service: :llm_proxy,
     version: "1",
-    repo: LLMProxy.Repo
+    repo: LLMProxy.Repo,
+    policy: LLMProxy.Admin.Policy
 
   expose(LLMProxy.Schemas.ApiKey)
   expose(LLMProxy.Schemas.ProviderToken)
