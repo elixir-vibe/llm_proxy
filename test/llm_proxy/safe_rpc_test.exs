@@ -20,16 +20,15 @@ defmodule LLMProxy.SafeRPCTest do
     :ok
   end
 
-  test "describes API and control operations" do
+  test "describes LLMProxy module operations" do
     descriptor = LLMProxy.__safe_rpc_descriptor__()
 
     assert %SafeRPC.Descriptor{service: :llm_proxy, version: "1", module: LLMProxy} = descriptor
-    assert [:api, :control] = descriptor.surfaces |> Map.keys() |> Enum.sort()
-    assert %{models: models, chat: chat} = descriptor.surfaces.api.ops
+    assert %{ops: ops} = Map.fetch!(descriptor.modules, LLMProxy)
+    assert %{models: models, chat: chat, status: status} = ops
     assert models.docs == "List available models."
     assert models.spec != nil
     assert chat.docs == "Run a chat completion through LLMProxy."
-    assert %{status: status} = descriptor.surfaces.control.ops
     assert status.docs == "Return service status."
   end
 
@@ -47,11 +46,11 @@ defmodule LLMProxy.SafeRPCTest do
     socket = socket_path("describe")
     {:ok, server} = Server.start_link(socket: socket)
 
-    assert {:ok, %SafeRPC.Descriptor{service: :llm_proxy, surfaces: surfaces}} =
+    assert {:ok, %SafeRPC.Descriptor{service: :llm_proxy, modules: modules}} =
              SafeRPC.describe(socket)
 
-    assert Map.has_key?(surfaces.api.ops, :models)
-    assert Map.has_key?(surfaces.control.ops, :status)
+    assert Map.has_key?(modules[LLMProxy].ops, :models)
+    assert Map.has_key?(modules[LLMProxy].ops, :status)
 
     GenServer.stop(server)
   end
@@ -62,8 +61,9 @@ defmodule LLMProxy.SafeRPCTest do
     assert %SafeRPC.Descriptor{service: :llm_proxy, version: "1", module: LLMProxy.Admin} =
              descriptor
 
-    assert %{incant_describe: describe, incant_index: index, incant_read: read} =
-             descriptor.surfaces.control.ops
+    assert %{ops: ops} = Map.fetch!(descriptor.modules, LLMProxy.Admin)
+
+    assert %{incant_describe: describe, incant_index: index, incant_read: read} = ops
 
     assert describe.docs == "Describe this Incant admin surface."
     assert index.spec != nil

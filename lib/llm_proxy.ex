@@ -3,7 +3,7 @@ defmodule LLMProxy do
   OpenAI-compatible proxy for LLM APIs with usage tracking and per-user quotas.
   """
 
-  use SafeRPC, service: :llm_proxy, version: "1", surface: :api
+  use SafeRPC, service: :llm_proxy, version: "1"
 
   alias LLMProxy.{Catalog, Provider, Response}
   alias LLMProxy.Protocol.Request
@@ -28,7 +28,7 @@ defmodule LLMProxy do
     Provider.call(request, meta[:actor] || meta[:api_key], route: :safe_rpc)
   end
 
-  @rpc surface: :control
+  @rpc true
   @doc "Return service status."
   @spec status(map(), map(), term()) :: {:ok, map()}
   def status(_payload, _meta, _state) do
