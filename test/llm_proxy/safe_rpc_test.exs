@@ -1,6 +1,8 @@
 defmodule LLMProxy.SafeRPCTest do
   use ExUnit.Case, async: true
 
+  alias Incant.Service.{Entry, RegistryServer}
+
   defmodule Server do
     use SafeRPC.Adapter.Server, service: LLMProxy
   end
@@ -87,6 +89,14 @@ defmodule LLMProxy.SafeRPCTest do
     assert {:ok, %Incant.Admin.Contract{service: :llm_proxy}} =
              Incant.Service.describe(client)
 
+    {:ok, registry} = RegistryServer.start_link(bindings: bindings)
+
+    assert [%Entry{key: :llm_proxy, contract: contract}] =
+             RegistryServer.list_entries(registry)
+
+    assert %Incant.Admin.Contract{service: :llm_proxy} = contract
+
+    GenServer.stop(registry)
     GenServer.stop(server)
   end
 
