@@ -33,11 +33,11 @@ defmodule LLMProxy.SafeRPCTest do
   end
 
   test "runs non-secret API and control operations directly" do
-    assert {:ok, models} = LLMProxy.call(:models, %{}, %{}, [])
+    assert {:ok, models} = LLMProxy.call({LLMProxy, :models}, %{}, %{}, [])
     assert [%{id: "rpc-test-model", object: "model"}] = models
 
     assert {:ok, %{service: :llm_proxy, version: version, models: 1}} =
-             LLMProxy.call(:status, %{}, %{}, [])
+             LLMProxy.call({LLMProxy, :status}, %{}, %{}, [])
 
     assert is_binary(version)
   end
@@ -63,7 +63,7 @@ defmodule LLMProxy.SafeRPCTest do
 
     assert %{ops: ops} = Map.fetch!(descriptor.modules, LLMProxy.Admin)
 
-    assert %{incant_describe: describe, incant_index: index, incant_read: read} = ops
+    assert %{describe: describe, index: index, read: read} = ops
 
     assert describe.docs == "Describe this Incant admin surface."
     assert index.spec != nil
@@ -75,7 +75,7 @@ defmodule LLMProxy.SafeRPCTest do
     {:ok, server} = AdminServer.start_link(socket: socket)
 
     assert {:ok, %Incant.Admin.Contract{service: :llm_proxy}} =
-             SafeRPC.call(socket, :incant_describe, %Incant.Service.Describe{})
+             SafeRPC.call(socket, {LLMProxy.Admin, :describe}, %Incant.Service.Describe{})
 
     GenServer.stop(server)
   end
@@ -84,8 +84,8 @@ defmodule LLMProxy.SafeRPCTest do
     socket = socket_path("models")
     {:ok, server} = Server.start_link(socket: socket)
 
-    assert {:ok, [%{id: "rpc-test-model"}]} = SafeRPC.call(socket, :models)
-    assert {:ok, %{service: :llm_proxy, models: 1}} = SafeRPC.call(socket, :status)
+    assert {:ok, [%{id: "rpc-test-model"}]} = SafeRPC.call(socket, {LLMProxy, :models})
+    assert {:ok, %{service: :llm_proxy, models: 1}} = SafeRPC.call(socket, {LLMProxy, :status})
 
     GenServer.stop(server)
   end

@@ -514,7 +514,7 @@ defmodule LLMProxy.Provider do
           call(request, actor || api_key, route: :req_llm)
 
         socket_or_client ->
-          SafeRPC.call(socket_or_client, :chat, request,
+          SafeRPC.call(socket_or_client, {LLMProxy, :chat}, request,
             meta: req_llm_safe_rpc_meta(actor, api_key),
             timeout: Keyword.get(opts, :safe_rpc_timeout, LLMProxy.Config.remote_timeout_ms())
           )

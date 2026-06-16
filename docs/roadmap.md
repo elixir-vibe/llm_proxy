@@ -167,7 +167,7 @@ SafeRPC is the remote BEAM communication layer for LLMProxy.
 
 ```elixir
 {:ok, request} = LLMProxy.Provider.chat_request(messages, model: "fast")
-SafeRPC.call(socket, :chat, request, meta: %{api_key: raw_key})
+SafeRPC.call(socket, {LLMProxy, :chat}, request, meta: %{api_key: raw_key})
 ```
 
 ## Near-term order

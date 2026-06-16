@@ -79,7 +79,7 @@ Remote BEAM consumers should use SafeRPC with ordinary LLMProxy request structs:
 ```elixir
 {:ok, descriptor} = SafeRPC.describe(socket)
 {:ok, request} = LLMProxy.Provider.chat_request("Hello", model: "fast")
-{:ok, response} = SafeRPC.call(socket, :chat, request, meta: %{api_key: raw_llm_proxy_key})
+{:ok, response} = SafeRPC.call(socket, {LLMProxy, :chat}, request, meta: %{api_key: raw_llm_proxy_key})
 ```
 
 ## Phoenix embedding
