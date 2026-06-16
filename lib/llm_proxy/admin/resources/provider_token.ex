@@ -5,8 +5,6 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     schema: LLMProxy.Schemas.ProviderToken,
     title: "Provider Tokens"
 
-  index(&__MODULE__.rows/1)
-
   table density: :compact do
     column(:provider, link: true)
     column(:kind)
@@ -24,5 +22,5 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     action(:remove, confirm: true, destructive: true)
   end
 
-  def rows(params), do: LLMProxy.Storage.list_tokens(params)
+  def index(params, _context), do: LLMProxy.Storage.list_tokens(params)
 end

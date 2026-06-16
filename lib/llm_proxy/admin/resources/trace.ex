@@ -5,8 +5,6 @@ defmodule LLMProxy.Admin.Resources.Trace do
     schema: LLMProxy.Schemas.Trace,
     title: "Traces"
 
-  index(&__MODULE__.rows/1)
-
   table density: :compact do
     column(:timestamp, link: true, format: :datetime)
     column(:key_id)
@@ -26,5 +24,5 @@ defmodule LLMProxy.Admin.Resources.Trace do
     action(:open_feedback)
   end
 
-  def rows(params), do: LLMProxy.Storage.get_traces(params)
+  def index(params, _context), do: LLMProxy.Storage.get_traces(params)
 end

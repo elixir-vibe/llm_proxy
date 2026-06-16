@@ -5,8 +5,6 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
     schema: LLMProxy.Schemas.ApiKey,
     title: "API Keys"
 
-  index(&__MODULE__.rows/1)
-
   table density: :compact do
     column(:name, link: true)
     column(:total_spend_usd, label: "Spend", format: :money)
@@ -23,5 +21,5 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
     action(:delete, confirm: true, destructive: true)
   end
 
-  def rows(params), do: LLMProxy.Storage.list_keys(params)
+  def index(params, _context), do: LLMProxy.Storage.list_keys(params)
 end
