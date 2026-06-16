@@ -1,7 +1,7 @@
 defmodule LLMProxy.SafeRPCTest do
   use ExUnit.Case, async: true
 
-  alias Incant.Service.{Entry, RegistryServer, Session}
+  alias Incant.Service.{Entry, RegistryServer}
 
   defmodule Server do
     use SafeRPC.Adapter.Server, service: LLMProxy
@@ -96,8 +96,8 @@ defmodule LLMProxy.SafeRPCTest do
 
     assert %Incant.Admin.Contract{service: :llm_proxy} = contract
 
-    session = Session.new(List.first(RegistryServer.list_entries(registry)))
-    assert [_resource | _] = Session.list_surfaces(session, kind: :resource)
+    session = Incant.Service.Session.new(List.first(RegistryServer.list_entries(registry)))
+    assert [_resource | _] = Incant.Session.list_surfaces(session, kind: :resource)
 
     GenServer.stop(registry)
     GenServer.stop(server)
