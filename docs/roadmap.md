@@ -163,30 +163,12 @@ Future targets:
 
 ### 8. Remote BEAM calls
 
-SafeRPC is the preferred remote BEAM communication layer for LLMProxy.
+SafeRPC is the remote BEAM communication layer for LLMProxy.
 
 ```elixir
-SafeRPC.call(socket, :chat, %LLMProxy.ChatRequest{
-  model: "fast",
-  messages: messages,
-  api_key: raw_key
-})
+{:ok, request} = LLMProxy.Provider.chat_request(messages, model: "fast")
+SafeRPC.call(socket, :chat, request, meta: %{api_key: raw_key})
 ```
-
-The older distributed-Erlang wrapper remains for compatibility but should not be the primary remote API.
-
-ReqLLM can call remote nodes via the legacy provider id `:llm_proxy_remote`:
-
-```elixir
-ReqLLM.Generation.generate_text(
-  %{provider: :llm_proxy_remote, id: "fast", model: "fast"},
-  "Hello",
-  node: :proxy@host,
-  api_key: raw_key
-)
-```
-
-First version uses `:erpc.call/4`. Streaming can follow with a process-backed protocol.
 
 ## Near-term order
 

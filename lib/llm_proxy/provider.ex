@@ -508,7 +508,19 @@ defmodule LLMProxy.Provider do
     actor = Keyword.get(opts, :llm_proxy_actor) || Keyword.get(opts, :actor)
     api_key = Keyword.get(opts, :llm_proxy_api_key) || Keyword.get(opts, :api_key)
 
-    case call(request, actor || api_key, route: :req_llm) do
+    result =
+      case Keyword.get(opts, :safe_rpc) || Keyword.get(opts, :llm_proxy_socket) do
+        nil ->
+          call(request, actor || api_key, route: :req_llm)
+
+        socket_or_client ->
+          SafeRPC.call(socket_or_client, :chat, request,
+            meta: req_llm_safe_rpc_meta(actor, api_key),
+            timeout: Keyword.get(opts, :safe_rpc_timeout, LLMProxy.Config.remote_timeout_ms())
+          )
+      end
+
+    case result do
       {:ok, response} ->
         req_llm_response = ResponseAdapter.from_response(response)
         Req.Request.halt(req_request, Req.Response.new(status: 200, body: req_llm_response))
@@ -519,5 +531,11 @@ defmodule LLMProxy.Provider do
           Req.Response.new(status: ResponseAdapter.error_status(reason), body: inspect(reason))
         )
     end
+  end
+
+  defp req_llm_safe_rpc_meta(actor, api_key) do
+    %{}
+    |> put_if_present(:actor, actor)
+    |> put_if_present(:api_key, api_key)
   end
 end

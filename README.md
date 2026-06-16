@@ -7,7 +7,7 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 ## What it provides
 
 - **In-process Elixir API** via `LLMProxy.Provider` and `LLMProxy.chat/2`
-- **ReqLLM providers** registered as `:llm_proxy` and `:llm_proxy_remote`
+- **ReqLLM provider** registered as `:llm_proxy`
 - **Phoenix/Plug HTTP API** for OpenAI-compatible clients
 - **OpenAI Chat Completions** (`/v1/chat/completions`) with streaming support
 - **Anthropic Messages** (`/v1/messages`) with streaming support
@@ -78,13 +78,8 @@ Remote BEAM consumers should use SafeRPC with ordinary LLMProxy request structs:
 
 ```elixir
 {:ok, descriptor} = SafeRPC.describe(socket)
-
-{:ok, response} =
-  SafeRPC.call(socket, :chat, %LLMProxy.ChatRequest{
-    model: "fast",
-    messages: "Hello",
-    api_key: raw_llm_proxy_key
-  })
+{:ok, request} = LLMProxy.Provider.chat_request("Hello", model: "fast")
+{:ok, response} = SafeRPC.call(socket, :chat, request, meta: %{api_key: raw_llm_proxy_key})
 ```
 
 ## Phoenix embedding
