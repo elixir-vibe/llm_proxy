@@ -5,7 +5,7 @@ defmodule LLMProxy.Admin.Resources.Message do
     schema: LLMProxy.Schemas.MessageLog,
     title: "Messages"
 
-  data(&__MODULE__.rows/1)
+  index(&__MODULE__.rows/1)
 
   table density: :compact do
     column(:timestamp, link: true, format: :datetime)

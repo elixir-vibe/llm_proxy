@@ -5,7 +5,7 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     schema: LLMProxy.Schemas.ProviderToken,
     title: "Provider Tokens"
 
-  data(&__MODULE__.rows/1)
+  index(&__MODULE__.rows/1)
 
   table density: :compact do
     column(:provider, link: true)

@@ -5,7 +5,7 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
     schema: LLMProxy.Schemas.ApiKey,
     title: "API Keys"
 
-  data(&__MODULE__.rows/1)
+  index(&__MODULE__.rows/1)
 
   table density: :compact do
     column(:name, link: true)

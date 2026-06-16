@@ -5,7 +5,7 @@ defmodule LLMProxy.Admin.Resources.Trace do
     schema: LLMProxy.Schemas.Trace,
     title: "Traces"
 
-  data(&__MODULE__.rows/1)
+  index(&__MODULE__.rows/1)
 
   table density: :compact do
     column(:timestamp, link: true, format: :datetime)
