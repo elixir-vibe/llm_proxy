@@ -10,7 +10,8 @@ defmodule LLMProxy.Admin do
     service: :llm_proxy,
     version: "1",
     repo: LLMProxy.Repo,
-    policy: LLMProxy.Admin.Policy
+    policy: LLMProxy.Admin.Policy,
+    rpc: true
 
   expose(LLMProxy.Schemas.ApiKey)
   expose(LLMProxy.Schemas.ProviderToken)

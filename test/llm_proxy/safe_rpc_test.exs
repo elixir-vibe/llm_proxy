@@ -5,6 +5,10 @@ defmodule LLMProxy.SafeRPCTest do
     use SafeRPC.Adapter.Server, service: LLMProxy
   end
 
+  defmodule AdminServer do
+    use SafeRPC.Adapter.Server, service: LLMProxy.Admin
+  end
+
   setup do
     LLMProxy.Catalog.load([
       %{
@@ -25,9 +29,8 @@ defmodule LLMProxy.SafeRPCTest do
     assert models.docs == "List available models."
     assert models.spec != nil
     assert chat.docs == "Run a chat completion through LLMProxy."
-    assert %{status: status, incant_describe: incant_describe} = descriptor.surfaces.control.ops
+    assert %{status: status} = descriptor.surfaces.control.ops
     assert status.docs == "Return service status."
-    assert incant_describe.docs == "Describe LLMProxy's Incant admin surface."
   end
 
   test "runs non-secret API and control operations directly" do
@@ -38,9 +41,6 @@ defmodule LLMProxy.SafeRPCTest do
              LLMProxy.call(:status, %{}, %{}, [])
 
     assert is_binary(version)
-
-    assert {:ok, %Incant.Admin.Contract{service: :llm_proxy}} =
-             LLMProxy.call(:incant_describe, %{}, %{}, [])
   end
 
   test "describes LLMProxy over a SafeRPC socket" do
@@ -51,7 +51,31 @@ defmodule LLMProxy.SafeRPCTest do
              SafeRPC.describe(socket)
 
     assert Map.has_key?(surfaces.api.ops, :models)
-    assert Map.has_key?(surfaces.control.ops, :incant_describe)
+    assert Map.has_key?(surfaces.control.ops, :status)
+
+    GenServer.stop(server)
+  end
+
+  test "LLMProxy.Admin exposes Incant service operations with rpc: true" do
+    descriptor = LLMProxy.Admin.__safe_rpc_descriptor__()
+
+    assert %SafeRPC.Descriptor{service: :llm_proxy, version: "1", module: LLMProxy.Admin} =
+             descriptor
+
+    assert %{incant_describe: describe, incant_index: index, incant_read: read} =
+             descriptor.surfaces.control.ops
+
+    assert describe.docs == "Describe this Incant admin surface."
+    assert index.spec != nil
+    assert read.spec != nil
+  end
+
+  test "calls LLMProxy.Admin Incant service over a SafeRPC socket" do
+    socket = socket_path("admin")
+    {:ok, server} = AdminServer.start_link(socket: socket)
+
+    assert {:ok, %Incant.Admin.Contract{service: :llm_proxy}} =
+             SafeRPC.call(socket, :incant_describe, %Incant.Service.Describe{})
 
     GenServer.stop(server)
   end
