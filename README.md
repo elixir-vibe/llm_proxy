@@ -74,26 +74,17 @@ model = %{
 ReqLLM.Response.text(response)
 ```
 
-Remote BEAM provider over distributed Erlang:
+Remote BEAM consumers should use SafeRPC with ordinary LLMProxy request structs:
 
 ```elixir
-model = %{
-  provider: :llm_proxy_remote,
-  id: "fast",
-  model: "fast"
-}
+{:ok, descriptor} = SafeRPC.describe(socket)
 
 {:ok, response} =
-  ReqLLM.Generation.generate_text(model, "Hello",
-    node: :"proxy@host",
+  SafeRPC.call(socket, :chat, %LLMProxy.ChatRequest{
+    model: "fast",
+    messages: "Hello",
     api_key: raw_llm_proxy_key
-  )
-```
-
-The lower-level remote API is also available:
-
-```elixir
-LLMProxy.Remote.chat(:"proxy@host", "Hello", model: "fast", api_key: raw_key)
+  })
 ```
 
 ## Phoenix embedding

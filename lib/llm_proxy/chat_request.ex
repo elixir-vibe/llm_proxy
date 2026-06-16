@@ -1,5 +1,5 @@
-defmodule LLMProxy.RPC.Chat do
-  @moduledoc "SafeRPC request for an LLMProxy chat completion."
+defmodule LLMProxy.ChatRequest do
+  @moduledoc "Request for an LLMProxy chat completion."
 
   @type t :: %__MODULE__{
           messages: String.t() | list() | ReqLLM.Context.t(),

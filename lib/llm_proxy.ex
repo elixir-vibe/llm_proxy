@@ -5,8 +5,7 @@ defmodule LLMProxy do
 
   use SafeRPC, service: :llm_proxy, version: "1", surface: :api
 
-  alias LLMProxy.{Catalog, Provider, Response}
-  alias LLMProxy.RPC.Chat
+  alias LLMProxy.{Catalog, ChatRequest, Provider, Response}
 
   @doc """
   Calls the proxy in-process using ReqLLM messages or a plain prompt.
@@ -23,11 +22,11 @@ defmodule LLMProxy do
 
   @rpc true
   @doc "Run a chat completion through LLMProxy."
-  @spec chat(Chat.t(), map(), term()) :: {:ok, Response.t()} | {:error, term()}
-  def chat(%Chat{messages: nil}, _meta, _state),
+  @spec chat(ChatRequest.t(), map(), term()) :: {:ok, Response.t()} | {:error, term()}
+  def chat(%ChatRequest{messages: nil}, _meta, _state),
     do: {:error, {:missing_required_field, :messages}}
 
-  def chat(%Chat{} = request, meta, _state) when is_map(meta) do
+  def chat(%ChatRequest{} = request, meta, _state) when is_map(meta) do
     Provider.chat(request.messages, rpc_chat_opts(request, meta))
   end
 
@@ -43,7 +42,7 @@ defmodule LLMProxy do
      }}
   end
 
-  defp rpc_chat_opts(%Chat{} = request, meta) do
+  defp rpc_chat_opts(%ChatRequest{} = request, meta) do
     %{}
     |> put_option(:model, request.model)
     |> put_option(:api_key, request.api_key || meta[:api_key])

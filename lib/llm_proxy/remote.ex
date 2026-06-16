@@ -1,9 +1,10 @@
 defmodule LLMProxy.Remote do
   @moduledoc """
-  Distributed Erlang wrapper around `LLMProxy.Provider`.
+  Legacy distributed-Erlang wrapper around `LLMProxy.Provider`.
 
-  This module keeps `LLMProxy.Provider` as the execution boundary while allowing
-  clients on another BEAM node to call it through `:erpc`.
+  Remote Elixir consumers should prefer SafeRPC and typed LLMProxy request
+  structs such as `LLMProxy.ChatRequest`. This module remains for compatibility
+  with the older `:erpc` path.
   """
 
   alias LLMProxy.Actor
