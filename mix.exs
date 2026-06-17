@@ -9,6 +9,7 @@ defmodule LLMProxy.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      releases: releases(),
       dialyzer: [plt_add_apps: [:mix]],
       test_coverage: [
         summary: [threshold: 85],
@@ -74,6 +75,14 @@ defmodule LLMProxy.MixProject do
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:reach, "~> 2.6", only: [:dev, :test], runtime: false}
+    ]
+  end
+
+  defp releases do
+    [
+      llm_proxy: [
+        applications: [llm_proxy: :permanent]
+      ]
     ]
   end
 

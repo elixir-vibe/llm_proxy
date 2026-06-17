@@ -352,6 +352,16 @@ mix format        # Format Elixir and assets
 
 Test files mirror source structure under `test/llm_proxy/**`.
 
+## Release artifact
+
+LLMProxy can package the built-in Mix release as a tarball plus BEAM-native ETF manifest for HostKit-managed deployments:
+
+```bash
+MIX_ENV=prod mix llm_proxy.release_artifact
+```
+
+The task uses `mix release`, creates `_build/prod/artifacts/llm_proxy-<version>.tar.gz`, and writes `_build/prod/artifacts/llm_proxy.etf`. It does not SSH to servers or manage systemd/Caddy.
+
 ## Direction
 
 LLMProxy intentionally focuses on a smaller surface than LiteLLM or Portkey:
