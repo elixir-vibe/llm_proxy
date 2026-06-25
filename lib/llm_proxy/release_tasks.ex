@@ -15,9 +15,19 @@ defmodule LLMProxy.ReleaseTasks do
     with_quackdb_server(fn ->
       {:ok, _result, _apps} =
         Ecto.Migrator.with_repo(repo, fn started_repo ->
-          Ecto.Migrator.run(started_repo, migration_source, :up, all: true)
+          migrations = Ecto.Migrator.run(started_repo, migration_source, :up, all: true)
+          checkpoint_if_quackdb(started_repo)
+          migrations
         end)
     end)
+
+    :ok
+  end
+
+  defp checkpoint_if_quackdb(repo) do
+    if LLMProxy.Storage.Repo.adapter() == Ecto.Adapters.QuackDB do
+      repo.query!("CHECKPOINT")
+    end
 
     :ok
   end
