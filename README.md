@@ -98,7 +98,9 @@ defmodule MyAppWeb.Router do
 end
 ```
 
-Storage defaults to the bundled SQLite repo for standalone use. SQLite is an optional dependency for downstream apps; add it when you want LLMProxy to run standalone:
+Dev/test storage defaults to the bundled SQLite repo. Standalone production releases use the bundled QuackDB/DuckDB repo and supervise a local Quack server.
+
+SQLite remains an optional dependency for downstream apps that want a lightweight embedded repo in non-production hosts:
 
 ```elixir
 {:llm_proxy, "~> ..."},
@@ -112,7 +114,7 @@ config :llm_proxy,
   repo: MyApp.Repo
 ```
 
-LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, MySQL-compatible, and QuackDB/DuckDB Ecto adapters. PostgreSQL/MySQL/QuackDB adapter dependencies should come from the host app.
+LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, MySQL-compatible, and QuackDB/DuckDB Ecto adapters. PostgreSQL/MySQL adapter dependencies should come from the host app.
 
 The public `LLMProxy.Storage` module is a facade. The default implementation is `LLMProxy.Storage.Ecto`, and advanced hosts can provide a custom storage adapter:
 

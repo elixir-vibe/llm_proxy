@@ -18,7 +18,7 @@ defmodule LLMProxy.Storage.Repo do
     repo
   end
 
-  def bundled?, do: configured() == LLMProxy.Repo
+  def bundled?, do: configured() in [LLMProxy.Repo, LLMProxy.QuackRepo]
 
   def adapter, do: configured().__adapter__()
   def config, do: configured().config()

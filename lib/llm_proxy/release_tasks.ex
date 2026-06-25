@@ -10,13 +10,33 @@ defmodule LLMProxy.ReleaseTasks do
   @spec migrate() :: :ok
   def migrate do
     repo = LLMProxy.Config.repo()
-    migration_source = Ecto.Migrator.migrations_path(repo)
+    migration_source = Application.app_dir(:llm_proxy, "priv/repo/migrations")
 
-    {:ok, _result, _apps} =
-      Ecto.Migrator.with_repo(repo, fn started_repo ->
-        Ecto.Migrator.run(started_repo, migration_source, :up, all: true)
-      end)
+    with_quackdb_server(fn ->
+      {:ok, _result, _apps} =
+        Ecto.Migrator.with_repo(repo, fn started_repo ->
+          Ecto.Migrator.run(started_repo, migration_source, :up, all: true)
+        end)
+    end)
 
     :ok
+  end
+
+  defp with_quackdb_server(fun) do
+    if LLMProxy.Storage.Repo.adapter() == Ecto.Adapters.QuackDB do
+      case QuackDB.Server.start_link(LLMProxy.Config.quackdb_server_options()) do
+        {:ok, pid} ->
+          try do
+            fun.()
+          after
+            if Process.alive?(pid), do: GenServer.stop(pid)
+          end
+
+        {:error, _reason} ->
+          fun.()
+      end
+    else
+      fun.()
+    end
   end
 end

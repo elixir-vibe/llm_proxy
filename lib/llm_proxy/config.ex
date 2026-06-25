@@ -36,6 +36,11 @@ defmodule LLMProxy.Config do
 
   def repo, do: Application.get_env(:llm_proxy, :repo, LLMProxy.Repo)
   def storage, do: Application.get_env(:llm_proxy, :storage, LLMProxy.Storage.Ecto)
+
+  def quackdb_server_options do
+    Application.get_env(:llm_proxy, :quackdb_server, [])
+  end
+
   def http_enabled?, do: Application.get_env(:llm_proxy, :http_enabled, true)
 
   def http_port do

@@ -21,9 +21,12 @@ config :release_kit, :artifact,
   port: 4101,
   health_path: "/health",
   env_clear: %{
-    "DATABASE_PATH" => "/var/lib/toys/llm-proxy/main.db",
+    "DATABASE_PATH" => "/var/lib/toys/llm-proxy/main.duckdb",
     "PORT" => "4101",
     "PUBLIC_URL" => "https://llm.elixir.toys",
+    "QUACKDB_BINARY_CACHE_DIR" => "/var/lib/toys/llm-proxy/duckdb-bin",
+    "QUACKDB_ENDPOINT" => "quack:localhost:9494",
+    "QUACKDB_URI" => "http://127.0.0.1:9494",
     "RELEASE_DISTRIBUTION" => "none"
   },
   env_secret: [

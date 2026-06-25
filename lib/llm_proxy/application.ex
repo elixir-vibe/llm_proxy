@@ -27,7 +27,7 @@ defmodule LLMProxy.Application do
     Dynamic.register("/responses", LLMProxy.HTTP.Routes.Responses)
 
     children =
-      bundled_repo_children() ++
+      storage_children() ++
         [
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
@@ -43,8 +43,20 @@ defmodule LLMProxy.Application do
     {:ok, pid}
   end
 
-  defp bundled_repo_children do
-    if LLMProxy.Storage.Repo.bundled?(), do: [LLMProxy.Repo], else: []
+  defp storage_children do
+    if LLMProxy.Storage.Repo.bundled?() do
+      quackdb_server_children() ++ [LLMProxy.Storage.Repo.configured()]
+    else
+      []
+    end
+  end
+
+  defp quackdb_server_children do
+    if LLMProxy.Storage.Repo.adapter() == Ecto.Adapters.QuackDB do
+      [{QuackDB.Server, LLMProxy.Config.quackdb_server_options()}]
+    else
+      []
+    end
   end
 
   defp http_children do

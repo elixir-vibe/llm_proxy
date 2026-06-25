@@ -9,10 +9,25 @@ if config_env() in [:dev, :prod] do
 end
 
 if config_env() == :prod do
-  config :llm_proxy, LLMProxy.Repo, database: System.get_env("DATABASE_PATH", "./llm_proxy.db")
+  quackdb_uri = System.get_env("QUACKDB_URI", "http://127.0.0.1:9494")
+  quackdb_token = System.get_env("QUACKDB_TOKEN") || System.fetch_env!("MASTER_KEY")
 
   config :llm_proxy,
-    http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+    repo: LLMProxy.QuackRepo,
+    ecto_repos: [LLMProxy.QuackRepo],
+    http: [port: String.to_integer(System.get_env("PORT", "4000"))],
+    quackdb_server: [
+      name: LLMProxy.QuackDBServer,
+      duckdb: :managed,
+      database: System.get_env("DATABASE_PATH", "./llm_proxy.duckdb"),
+      endpoint: System.get_env("QUACKDB_ENDPOINT", "quack:localhost:9494"),
+      uri: quackdb_uri,
+      token: quackdb_token
+    ]
+
+  config :llm_proxy, LLMProxy.QuackRepo,
+    uri: quackdb_uri,
+    token: quackdb_token
 end
 
 if config_env() in [:dev, :prod] do
