@@ -7,7 +7,7 @@ defmodule LLMProxy.Phoenix.Router do
     opts = Macro.expand(opts, __CALLER__)
 
     routes =
-      if Enum.any?([:mount, :core, :admin, :setup], &Keyword.has_key?(opts, &1)) do
+      if Enum.any?([:mount, :core, :setup], &Keyword.has_key?(opts, &1)) do
         build_routes(Keyword.get(opts, :mount, "/"), opts)
       else
         quote(do: nil)

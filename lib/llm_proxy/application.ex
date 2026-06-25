@@ -32,7 +32,7 @@ defmodule LLMProxy.Application do
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
           LLMProxy.TokenPool.Server
-        ] ++ web_children()
+        ] ++ http_children()
 
     opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]
     {:ok, pid} = Supervisor.start_link(children, opts)
@@ -47,9 +47,14 @@ defmodule LLMProxy.Application do
     if LLMProxy.Storage.Repo.bundled?(), do: [LLMProxy.Repo], else: []
   end
 
-  defp web_children do
-    if LLMProxy.Config.web_enabled?() and Code.ensure_loaded?(LLMProxy.Web.Endpoint) do
-      [{Phoenix.PubSub, name: LLMProxy.PubSub}, LLMProxy.Web.Endpoint]
+  defp http_children do
+    if LLMProxy.Config.http_enabled?() and Code.ensure_loaded?(Plug.Cowboy) do
+      [
+        {Plug.Cowboy,
+         scheme: :http,
+         plug: LLMProxy.HTTP.Router,
+         options: [ip: {127, 0, 0, 1}, port: LLMProxy.Config.http_port()]}
+      ]
     else
       []
     end

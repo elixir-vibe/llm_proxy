@@ -2,7 +2,6 @@ defmodule LLMProxy.RouterForwardingTest do
   use ExUnit.Case
 
   alias LLMProxy.Router
-  alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 
   @opts Router.init([])
@@ -25,47 +24,15 @@ defmodule LLMProxy.RouterForwardingTest do
     assert Jason.decode!(models_conn.resp_body)["object"] == "list"
   end
 
-  test "forwards token routes and enforces master-key auth" do
-    unauthorized = Plug.Test.conn(:get, "/tokens") |> Router.call(@opts)
+  test "does not expose admin HTTP routes" do
+    for path <- ["/tokens", "/keys", "/keys/usage", "/stats", "/admin"] do
+      conn =
+        Plug.Test.conn(:get, path)
+        |> TestSupport.put_bearer("master-key")
+        |> Router.call(@opts)
 
-    authorized =
-      Plug.Test.conn(:get, "/tokens")
-      |> Plug.Conn.fetch_query_params()
-      |> TestSupport.put_bearer("master-key")
-      |> Router.call(@opts)
-
-    assert unauthorized.status == 401
-    assert authorized.status == 200
-    assert is_list(Jason.decode!(authorized.resp_body))
-  end
-
-  test "forwards key self-service usage routes" do
-    {:ok, _key, raw_key} = Storage.create_key("router-user")
-
-    conn =
-      Plug.Test.conn(:get, "/keys/usage")
-      |> TestSupport.put_bearer(raw_key)
-      |> Router.call(@opts)
-
-    assert conn.status == 200
-    assert Jason.decode!(conn.resp_body)["name"] == "router-user"
-  end
-
-  test "forwards stats routes without claiming the admin UI path" do
-    conn =
-      Plug.Test.conn(:get, "/stats")
-      |> TestSupport.put_bearer("master-key")
-      |> Router.call(@opts)
-
-    assert conn.status == 200
-    assert Map.has_key?(Jason.decode!(conn.resp_body), "total_keys")
-
-    admin_conn =
-      Plug.Test.conn(:get, "/admin")
-      |> TestSupport.put_bearer("master-key")
-      |> Router.call(@opts)
-
-    assert admin_conn.status == 404
+      assert conn.status == 404
+    end
   end
 
   test "forwards chat routes" do

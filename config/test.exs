@@ -20,10 +20,8 @@ config :llm_proxy,
     "openrouter" => %{api_keys: System.get_env("OPENROUTER_API_KEYS", "")}
   }
 
-config :llm_proxy, LLMProxy.Web.Endpoint,
-  http: [port: 4002],
-  secret_key_base: "test-only-secret-key-base-that-is-at-least-64-bytes-long-for-test-only!!!",
-  server: false
+config :llm_proxy,
+  http: [port: 4002]
 
 config :opentelemetry, traces_exporter: :none
 

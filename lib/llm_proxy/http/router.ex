@@ -7,6 +7,7 @@ defmodule LLMProxy.HTTP.Router do
   alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.HTTP.RouteSpec
 
+  plug(Plug.RequestId, assign_as: :request_id)
   plug(:match)
   plug(:dispatch)
 

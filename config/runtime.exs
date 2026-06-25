@@ -11,13 +11,8 @@ end
 if config_env() == :prod do
   config :llm_proxy, LLMProxy.Repo, database: System.get_env("DATABASE_PATH", "./llm_proxy.db")
 
-  secret_key_base =
-    System.get_env("SECRET_KEY_BASE") || Base.encode64(:crypto.strong_rand_bytes(48))
-
-  config :llm_proxy, LLMProxy.Web.Endpoint,
-    http: [port: String.to_integer(System.get_env("PORT", "4000"))],
-    secret_key_base: secret_key_base,
-    server: true
+  config :llm_proxy,
+    http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 end
 
 if config_env() in [:dev, :prod] do

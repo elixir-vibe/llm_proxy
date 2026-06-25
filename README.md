@@ -8,7 +8,7 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 
 - **In-process Elixir API** via `LLMProxy.Provider` and `LLMProxy.chat/2`
 - **ReqLLM provider** registered as `:llm_proxy`
-- **Phoenix/Plug HTTP API** for OpenAI-compatible clients
+- **Plug HTTP API** for OpenAI-compatible clients
 - **OpenAI Chat Completions** (`/v1/chat/completions`) with streaming support
 - **Anthropic Messages** (`/v1/messages`) with streaming support
 - **OpenAI Responses** (`/v1/responses`) with streaming support
@@ -20,8 +20,7 @@ Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider toke
 - **Token pool** with multiple upstream API keys, stable user pinning, and cooldowns
 - **Usage tracking** for input/output/cache tokens and estimated cost
 - **Quota enforcement** with per-key token/message/cache controls
-- **API key and provider token management**
-- **Optional Admin LiveView UI** for keys, tokens, usage, traces, messages, and models
+- **API key and provider token management through Incant admin surfaces**
 
 ## Architecture
 
@@ -94,7 +93,7 @@ defmodule MyAppWeb.Router do
   scope "/" do
     pipe_through :api
 
-    llm_proxy "/llm", admin: false, setup: false
+    llm_proxy "/llm", setup: false
   end
 end
 ```
@@ -138,8 +137,24 @@ end
 Route groups:
 
 - `core: true` — models, chat, messages, responses, moderations
-- `admin: true` — keys, tokens, stats/admin
 - `setup: true` — optional setup helper routes; disabled by default
+
+Admin surfaces are exposed through `LLMProxy.Admin` and Incant/SafeRPC, not through public service HTTP routes.
+
+## Release artifacts
+
+Use ReleaseKit to build the standalone OTP release tarball and manifest consumed by HostKit deployments:
+
+```bash
+MIX_ENV=prod mix release_kit.artifact --out-dir _build/prod/artifacts
+```
+
+This assembles the Mix release and writes:
+
+```text
+_build/prod/artifacts/llm_proxy-<version>.tar.gz
+_build/prod/artifacts/llm_proxy.etf
+```
 
 ## Standalone HTTP API
 
@@ -158,24 +173,9 @@ Route groups:
 - `POST /moderations`
 - `POST /feedback` / `POST /v1/feedback` — submit trace feedback by `request_id` or `trace_id`
 
-### Admin routes
+### Admin surface
 
-Require the master key.
-
-- `GET /keys`
-- `POST /keys/generate`
-- `GET /keys/:id`
-- `POST /keys/quota`
-- `DELETE /keys/:id`
-- `GET /keys/usage` — self-service usage for the current key
-- `GET /tokens`
-- `POST /tokens`
-- `PATCH /tokens/:id`
-- `DELETE /tokens/:id`
-- `POST /tokens/clear-rate-limits`
-- `GET /stats`
-- `GET /stats/daily`
-- `GET /stats/messages`
+Administrative resources for keys, provider tokens, traces, messages, and operational dashboards are exposed by `LLMProxy.Admin` for Incant/SafeRPC consumers. They are not mounted on the public HTTP API.
 
 ### Optional setup routes
 
@@ -310,29 +310,7 @@ config :llm_proxy,
   }
 ```
 
-HTTP generation routes use Phoenix/Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.
-
-## Optional admin UI
-
-The bundled Phoenix LiveView admin UI is optional. Downstream library users that only mount HTTP routes or call `LLMProxy.Provider` do not need Phoenix, LiveView, Plug.Cowboy, or Volt dependencies.
-
-Standalone/admin UI usage requires the web stack:
-
-```elixir
-{:llm_proxy, "~> ..."},
-{:phoenix, "~> 1.8"},
-{:phoenix_html, "~> 4.3"},
-{:phoenix_live_view, "~> 1.1"},
-{:plug_cowboy, "~> 2.7"},
-{:volt, "~> 0.14"}
-```
-
-Disable the bundled endpoint even when web deps are present:
-
-```elixir
-config :llm_proxy,
-  web: false
-```
+HTTP generation routes use Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.
 
 ## Setup
 
@@ -345,22 +323,11 @@ mix run --no-halt
 
 ```bash
 mix test
-mix assets.build  # Build Volt/Tailwind assets
-mix ci            # Compile, JS lint/build, test, Credo, Dialyzer, ExDNA, Reach
-mix format        # Format Elixir and assets
+mix ci            # Compile, format check, test, Credo, Dialyzer, ExDNA, Reach
+mix format
 ```
 
 Test files mirror source structure under `test/llm_proxy/**`.
-
-## Release artifact
-
-LLMProxy can package the built-in Mix release as a tarball plus BEAM-native ETF manifest for HostKit-managed deployments:
-
-```bash
-MIX_ENV=prod mix llm_proxy.release_artifact
-```
-
-The task uses `mix release`, creates `_build/prod/artifacts/llm_proxy-<version>.tar.gz`, and writes `_build/prod/artifacts/llm_proxy.etf`. It does not SSH to servers or manage systemd/Caddy.
 
 ## Direction
 

@@ -24,9 +24,7 @@ defmodule LLMProxy.MixProject do
           LLMProxy.Providers.Behaviour,
           LLMProxy.Providers.Helpers,
           LLMProxy.Providers.OpenAI,
-          LLMProxy.Providers.OpenRouter,
-          LLMProxy.Web.Layouts,
-          LLMProxy.Web.Router.Helpers
+          LLMProxy.Providers.OpenRouter
         ]
       ]
     ]
@@ -45,17 +43,15 @@ defmodule LLMProxy.MixProject do
 
   defp deps do
     [
+      {:release_kit, "~> 0.2.1", only: [:dev, :test, :prod], runtime: false},
       {:phoenix, "~> 1.8", optional: true},
-      {:phoenix_html, "~> 4.3", optional: true},
-      {:phoenix_live_view, "~> 1.1", optional: true},
-      {:plug_cowboy, "~> 2.7", optional: true},
+      {:plug_cowboy, "~> 2.7"},
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:req_llm, "~> 1.6"},
       {:llm_db, "~> 2026.3"},
       {:dotenvy, "~> 1.1"},
       {:jason, "~> 1.4"},
-      {:volt, "~> 0.14", optional: true},
       {:incant, git: "git@github.com:elixir-vibe/incant.git", branch: "main"},
       {:safe_rpc, git: "git@github.com:elixir-vibe/safe_rpc.git", branch: "master"},
 
@@ -91,14 +87,10 @@ defmodule LLMProxy.MixProject do
       setup: ["deps.get", "fetch_models", "ecto.setup"],
       "ecto.setup": ["ecto.create", "ecto.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      "assets.build": ["volt.build --tailwind"],
-      "assets.deploy": ["volt.build --tailwind", "phx.digest"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",
-        "volt.js.check",
-        "assets.build",
         "test",
         "credo --strict",
         "dialyzer",

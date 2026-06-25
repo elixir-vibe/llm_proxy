@@ -1,9 +1,0 @@
-if Code.ensure_loaded?(Phoenix.Component) and Code.ensure_loaded?(Volt) do
-  defmodule LLMProxy.Web.Layouts do
-    @moduledoc false
-
-    use Phoenix.Component
-
-    embed_templates("layouts/*")
-  end
-end
