@@ -49,6 +49,20 @@ defmodule LLMProxy.HTTP.Routes.HelpersTest do
     assert trace.session_id == "sess-1"
   end
 
+  test "maybe_record_trace/6 treats missing trace flag as disabled" do
+    assert :ok ==
+             UsageTracking.maybe_record_trace(
+               %{id: "master"},
+               "gpt-4o",
+               %{"input" => "hello"},
+               %{"output" => "world"},
+               Usage.new(10, 5),
+               %{provider: "openai"}
+             )
+
+    assert [] = Storage.get_traces(%{per_page: 10})
+  end
+
   test "check_model_access/2 permits the master key" do
     assert :ok == AccessControl.check_model_access(%{id: "master"}, "any-model")
   end

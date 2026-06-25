@@ -47,7 +47,7 @@ defmodule LLMProxy.Accounting.UsageTracking do
 
   @spec maybe_record_trace(map(), String.t(), map(), map(), Usage.t(), map()) :: term()
   def maybe_record_trace(api_key, model, request_body, response_body, %Usage{} = usage, opts) do
-    if api_key.trace_requests do
+    if Map.get(api_key, :trace_requests, false) do
       cost_usd = Pricing.calculate_cost(model, usage, opts[:provider])
 
       Storage.record_trace(%{
@@ -66,6 +66,8 @@ defmodule LLMProxy.Accounting.UsageTracking do
         session_id: get_in(opts, [:metadata, "session_id"]),
         timestamp: DateTime.utc_now()
       })
+    else
+      :ok
     end
   end
 
