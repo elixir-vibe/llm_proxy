@@ -8,6 +8,13 @@ defmodule LLMProxy.HTTP.Router do
   alias LLMProxy.HTTP.RouteSpec
 
   plug(Plug.RequestId, assign_as: :request_id)
+
+  plug(Plug.Parsers,
+    parsers: [:json],
+    pass: ["*/*"],
+    json_decoder: Jason
+  )
+
   plug(:match)
   plug(:dispatch)
 

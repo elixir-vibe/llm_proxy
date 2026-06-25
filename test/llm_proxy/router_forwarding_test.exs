@@ -44,6 +44,18 @@ defmodule LLMProxy.RouterForwardingTest do
     assert conn.status == 401
   end
 
+  test "parses raw JSON request bodies at the HTTP boundary" do
+    body = Jason.encode!(%{"model" => "missing"})
+
+    conn =
+      Plug.Test.conn(:post, "/v1/chat/completions", body)
+      |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> TestSupport.put_bearer("missing")
+      |> Router.call(@opts)
+
+    assert conn.status == 401
+  end
+
   test "forwards moderation aliases" do
     conn =
       TestSupport.json_conn(:post, "/moderations", %{"input" => "hello"})
