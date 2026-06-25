@@ -32,7 +32,7 @@ defmodule LLMProxy.Application do
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
           LLMProxy.TokenPool.Server
-        ] ++ http_children()
+        ] ++ rpc_children() ++ http_children()
 
     opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]
     {:ok, pid} = Supervisor.start_link(children, opts)
@@ -56,6 +56,16 @@ defmodule LLMProxy.Application do
       [{QuackDB.Server, LLMProxy.Config.quackdb_server_options()}]
     else
       []
+    end
+  end
+
+  defp rpc_children do
+    case LLMProxy.Config.rpc_socket() do
+      socket when is_binary(socket) and socket != "" ->
+        [{LLMProxy.RPC.AdminServer, socket: socket, name: LLMProxy.RPC.AdminServer}]
+
+      _other ->
+        []
     end
   end
 

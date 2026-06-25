@@ -11,11 +11,10 @@ config :llm_proxy,
 
 config :opentelemetry,
   span_processor: :batch,
-  traces_exporter: :otlp
+  traces_exporter: :none
 
 config :opentelemetry_exporter,
-  otlp_protocol: :http_protobuf,
-  otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
+  otlp_protocol: :http_protobuf
 
 config :release_kit, :artifact,
   port: 4101,
@@ -24,6 +23,7 @@ config :release_kit, :artifact,
     "DATABASE_PATH" => "/var/lib/toys/llm-proxy/main.duckdb",
     "PORT" => "4101",
     "PUBLIC_URL" => "https://llm.elixir.toys",
+    "LLM_PROXY_RPC_SOCKET" => "/run/toys/llm-proxy/rpc.sock",
     "QUACKDB_BINARY_CACHE_DIR" => "/var/lib/toys/llm-proxy/duckdb-bin",
     "QUACKDB_ENDPOINT" => "quack:localhost:9494",
     "QUACKDB_URI" => "http://127.0.0.1:9494",

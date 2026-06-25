@@ -31,6 +31,15 @@ if config_env() == :prod do
 end
 
 if config_env() in [:dev, :prod] do
+  case System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT") do
+    endpoint when is_binary(endpoint) and endpoint != "" ->
+      config :opentelemetry, traces_exporter: :otlp
+      config :opentelemetry_exporter, otlp_endpoint: endpoint
+
+    _other ->
+      config :opentelemetry, traces_exporter: :none
+  end
+
   fallbacks =
     case System.get_env("LLM_FALLBACKS") do
       nil -> %{}
@@ -42,6 +51,7 @@ if config_env() in [:dev, :prod] do
   config :llm_proxy,
     master_key: System.get_env("MASTER_KEY"),
     public_url: public_url,
+    rpc_socket: System.get_env("LLM_PROXY_RPC_SOCKET"),
     providers: %{
       "anthropic" => %{api_keys: System.get_env("ANTHROPIC_API_KEYS", "")},
       "openai" => %{api_keys: System.get_env("OPENAI_API_KEYS", "")},

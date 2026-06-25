@@ -1,7 +1,8 @@
 defmodule LLMProxy.SafeRPCTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Incant.Service.{Entry, RegistryServer}
+  alias LLMProxy.TestSupport
 
   defmodule Server do
     use SafeRPC.Adapter.Server, service: LLMProxy
@@ -65,11 +66,12 @@ defmodule LLMProxy.SafeRPCTest do
 
     assert %{ops: ops} = Map.fetch!(descriptor.modules, LLMProxy.Admin)
 
-    assert %{describe: describe, index: index, read: read} = ops
+    assert %{describe: describe, index: index, read: read, create_api_key: create_api_key} = ops
 
     assert describe.docs == "Describe this Incant admin surface."
     assert index.spec != nil
     assert read.spec != nil
+    assert create_api_key.spec != nil
   end
 
   test "discovers and calls LLMProxy.Admin through the Incant service client" do
@@ -100,6 +102,24 @@ defmodule LLMProxy.SafeRPCTest do
     assert [_resource | _] = Incant.Session.list_surfaces(session, kind: :resource)
 
     GenServer.stop(registry)
+    GenServer.stop(server)
+  end
+
+  test "creates an API key through the SafeRPC admin socket" do
+    TestSupport.checkout_repo()
+
+    socket = socket_path("create-key")
+    {:ok, server} = LLMProxy.RPC.AdminServer.start_link(socket: socket)
+
+    assert {:ok, %{api_key: raw_key, id: id, name: "rpc-user"}} =
+             SafeRPC.call(socket, {LLMProxy.Admin, :create_api_key}, %{
+               "name" => "rpc-user",
+               "allowed_models" => ["rpc-test-model"]
+             })
+
+    assert String.starts_with?(raw_key, "sk-proxy-")
+    assert %{id: ^id, allowed_models: ["rpc-test-model"]} = LLMProxy.Storage.find_key(raw_key)
+
     GenServer.stop(server)
   end
 

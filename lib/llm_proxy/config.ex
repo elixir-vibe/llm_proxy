@@ -49,6 +49,8 @@ defmodule LLMProxy.Config do
     |> Keyword.get(:port, 4000)
   end
 
+  def rpc_socket, do: Application.get_env(:llm_proxy, :rpc_socket)
+
   def public_url, do: Application.get_env(:llm_proxy, :public_url, "")
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
   def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)
