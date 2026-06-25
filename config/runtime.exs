@@ -10,7 +10,7 @@ end
 
 if config_env() == :prod do
   quackdb_uri = System.get_env("QUACKDB_URI", "http://127.0.0.1:9494")
-  quackdb_token = System.get_env("QUACKDB_TOKEN") || System.fetch_env!("MASTER_KEY")
+  quackdb_token = System.fetch_env!("QUACKDB_TOKEN")
 
   config :llm_proxy,
     repo: LLMProxy.QuackRepo,
