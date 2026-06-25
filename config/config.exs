@@ -18,11 +18,11 @@ config :opentelemetry_exporter,
   otlp_endpoint: System.get_env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318")
 
 config :release_kit, :artifact,
-  port: 4100,
+  port: 4101,
   health_path: "/health",
   env_clear: %{
     "DATABASE_PATH" => "/var/lib/toys/llm-proxy/main.db",
-    "PORT" => "4100",
+    "PORT" => "4101",
     "PUBLIC_URL" => "https://llm.elixir.toys",
     "RELEASE_DISTRIBUTION" => "none"
   },
