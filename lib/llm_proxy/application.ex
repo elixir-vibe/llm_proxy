@@ -62,14 +62,7 @@ defmodule LLMProxy.Application do
   defp rpc_children do
     case LLMProxy.Config.rpc_socket() do
       socket when is_binary(socket) and socket != "" ->
-        [
-          %{
-            id: LLMProxy.RPC.AdminServer,
-            start:
-              {LLMProxy.RPC.AdminServer, :start_link,
-               [[socket: socket, name: LLMProxy.RPC.AdminServer]]}
-          }
-        ]
+        [{LLMProxy.RPC.AdminServer, socket: socket, name: LLMProxy.RPC.AdminServer}]
 
       _other ->
         []
