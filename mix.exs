@@ -54,7 +54,7 @@ defmodule LLMProxy.MixProject do
       {:dotenvy, "~> 1.1"},
       {:jason, "~> 1.4"},
       {:incant, git: "git@github.com:elixir-vibe/incant.git", branch: "main"},
-      {:safe_rpc, git: "git@github.com:elixir-vibe/safe_rpc.git", branch: "master"},
+      {:safe_rpc, "~> 0.1.4"},
 
       # OpenTelemetry
       {:opentelemetry_api, "~> 1.5"},
