@@ -43,7 +43,7 @@ defmodule LLMProxy.MixProject do
 
   defp deps do
     [
-      {:release_kit, "~> 0.2.1", only: [:dev, :test, :prod], runtime: false},
+      {:release_kit, "~> 0.3.0", only: [:dev, :test, :prod], runtime: false},
       {:phoenix, "~> 1.8", optional: true},
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sql, "~> 3.13"},
