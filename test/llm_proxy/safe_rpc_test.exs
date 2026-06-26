@@ -59,6 +59,7 @@ defmodule LLMProxy.SafeRPCTest do
 
   test "LLMProxy.Admin exposes Incant service operations with rpc: true" do
     descriptor = LLMProxy.Admin.__safe_rpc_descriptor__()
+    atoms = LLMProxy.Admin.__safe_rpc_atoms__()
 
     assert %SafeRPC.Descriptor{service: :llm_proxy, version: "1", module: LLMProxy.Admin} =
              descriptor
@@ -71,6 +72,10 @@ defmodule LLMProxy.SafeRPCTest do
     assert index.spec != nil
     assert read.spec != nil
     assert run_action.spec != nil
+
+    for atom <- ["compact", "density", "options", "rotate", "select", "safe_rpc_reply"] do
+      assert atom in atoms
+    end
   end
 
   test "discovers and calls LLMProxy.Admin through the Incant service client" do
