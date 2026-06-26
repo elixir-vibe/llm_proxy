@@ -43,7 +43,7 @@ defmodule LLMProxy.MixProject do
 
   defp deps do
     [
-      {:release_kit, "~> 0.3.0", only: [:dev, :test, :prod], runtime: false},
+      {:release_kit, "~> 0.3.0", runtime: false},
       {:phoenix, "~> 1.8", optional: true},
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sql, "~> 3.13"},
@@ -54,7 +54,7 @@ defmodule LLMProxy.MixProject do
       {:dotenvy, "~> 1.1"},
       {:jason, "~> 1.4"},
       {:incant, git: "git@github.com:elixir-vibe/incant.git", branch: "main"},
-      {:safe_rpc, "~> 0.1.5"},
+      {:safe_rpc, "~> 0.1.12"},
 
       # OpenTelemetry
       {:opentelemetry_api, "~> 1.5"},
