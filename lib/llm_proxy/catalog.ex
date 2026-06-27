@@ -10,7 +10,7 @@ defmodule LLMProxy.Catalog do
 
   @spec init() :: :ok
   def init do
-    load(Application.get_env(:llm_proxy, :catalog, []))
+    load(LLMProxy.Config.catalog())
   end
 
   @spec load([Model.t() | map() | keyword()]) :: :ok

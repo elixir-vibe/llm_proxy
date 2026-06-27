@@ -17,7 +17,8 @@ config :llm_proxy,
   providers: %{
     "anthropic" => %{api_keys: System.get_env("ANTHROPIC_API_KEYS", "")},
     "openai" => %{api_keys: System.get_env("OPENAI_API_KEYS", "")},
-    "openrouter" => %{api_keys: System.get_env("OPENROUTER_API_KEYS", "")}
+    "openrouter" => %{api_keys: System.get_env("OPENROUTER_API_KEYS", "")},
+    "openai-codex" => %{oauth_tokens: System.get_env("OPENAI_CODEX_TOKENS", "")}
   }
 
 config :llm_proxy,

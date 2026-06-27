@@ -49,7 +49,7 @@ defmodule LLMProxy.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:quackdb, "~> 0.5.14"},
-      {:req_llm, "~> 1.6"},
+      {:req_llm, "~> 1.17"},
       {:llm_db, "~> 2026.3"},
       {:dotenvy, "~> 1.1"},
       {:jason, "~> 1.4"},

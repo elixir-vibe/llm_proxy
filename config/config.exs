@@ -34,6 +34,7 @@ config :release_kit, :artifact,
     "QUACKDB_TOKEN",
     "ANTHROPIC_API_KEYS",
     "OPENAI_API_KEYS",
+    "OPENAI_CODEX_TOKENS",
     "OPENROUTER_API_KEYS"
   ]
 

@@ -58,7 +58,8 @@ if config_env() in [:dev, :prod] do
       "openrouter" => %{
         api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
         http_referer: public_url
-      }
+      },
+      "openai-codex" => %{oauth_tokens: System.get_env("OPENAI_CODEX_TOKENS", "")}
     },
     fallbacks: fallbacks,
     max_retries: String.to_integer(System.get_env("LLM_MAX_RETRIES", "1"))

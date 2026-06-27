@@ -229,31 +229,37 @@ Return `{:error, reason}` from a hook to reject the request/response. Returning 
 
 ## Catalog routing
 
-Public model names can be backed by one or more upstream deployments:
+Public model names can be backed by one or more upstream deployments. Embedded apps can use the readable `:models` config shape; LLMProxy normalizes it into the internal catalog at boot:
 
 ```elixir
 config :llm_proxy,
-  catalog: [
-    %{
-      name: "fast",
-      routing_strategy: :lowest_cost,
-      deployments: [
-        %{
-          provider: LLMProxy.Providers.OpenAI,
-          upstream_model: "gpt-4o-mini",
-          timeout_ms: 15_000,
+  models: [
+    fast: [
+      routing: :lowest_cost,
+      routes: [
+        [
+          to: :openai,
+          model: "gpt-4o-mini",
+          timeout: 15_000,
           failure_threshold: 3,
           cooldown_ms: 30_000
-        },
-        %{
-          provider: LLMProxy.Providers.Anthropic,
-          upstream_model: "claude-3-haiku-20240307",
-          order: 2
-        }
+        ],
+        [to: :anthropic, model: "claude-3-haiku-20240307", order: 2]
       ]
-    }
+    ]
   ]
 ```
+
+Codex subscription models should also use catalog routing instead of relying on a static model list:
+
+```elixir
+config :llm_proxy,
+  models: [
+    codex: [route: [to: :openai_codex, model: "gpt-5.3-codex-spark"]]
+  ]
+```
+
+The lower-level `:catalog` shape with provider modules and `upstream_model` remains supported for existing applications.
 
 Routing strategies:
 
@@ -268,6 +274,7 @@ Retryable provider failures and timeouts open a deployment-level circuit breaker
 ## Bundled providers
 
 - **OpenAI** — GPT/o-series models via standard API key
+- **OpenAI Codex** — ChatGPT subscription Codex backend via OAuth token; streaming uses ReqLLM's Responses WebSocket transport
 - **Anthropic** — Claude models via standard API key
 - **OpenRouter** — OpenRouter models via OpenAI-compatible API
 
@@ -286,12 +293,13 @@ Environment variables can be loaded from `.env` through Dotenvy.
 | `DATABASE_PATH` | SQLite database path in prod, default `./llm_proxy.db` |
 | `PUBLIC_URL` | Public base URL used by setup helpers and provider headers |
 | `OPENAI_API_KEYS` | Comma-separated OpenAI API keys |
+| `OPENAI_CODEX_TOKENS` | Comma-separated ChatGPT/OpenAI OAuth access tokens for Codex subscription backend |
 | `ANTHROPIC_API_KEYS` | Comma-separated Anthropic API keys |
 | `OPENROUTER_API_KEYS` | Comma-separated OpenRouter API keys |
 | `LLM_FALLBACKS` | JSON map of model fallback chains |
 | `LLM_MAX_RETRIES` | Number of fallback models to try, default `1` |
 
-Runtime defaults can also be overridden from Elixir config:
+Runtime defaults can also be overridden from Elixir config. Provider keys may be atoms or strings; `:openai_codex` normalizes to the bundled `"openai-codex"` provider.
 
 ```elixir
 config :llm_proxy,
@@ -300,16 +308,17 @@ config :llm_proxy,
   deployment_cooldown_ms: :timer.seconds(30),
   provider_receive_timeout_ms: :timer.minutes(10),
   remote_timeout_ms: :timer.seconds(30),
-  providers: %{
-    "anthropic" => %{
+  providers: [
+    anthropic: [
       base_url: "https://api.anthropic.com/v1",
       api_version: "2023-06-01",
       beta: "fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14",
-      conversion_defaults: %{max_tokens: 4096}
-    },
-    "openai" => %{base_url: "https://api.openai.com/v1"},
-    "openrouter" => %{base_url: "https://openrouter.ai/api/v1"}
-  }
+      conversion_defaults: [max_tokens: 4096]
+    ],
+    openai: [base_url: "https://api.openai.com/v1"],
+    openai_codex: [base_url: "https://chatgpt.com/backend-api"],
+    openrouter: [base_url: "https://openrouter.ai/api/v1"]
+  ]
 ```
 
 HTTP generation routes use Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.

@@ -4,10 +4,11 @@ defmodule LLMProxy.ModelDB do
   @provider_ids %{
     "anthropic" => :anthropic,
     "openai" => :openai,
+    "openai-codex" => :openai_codex,
     "openrouter" => :openrouter
   }
 
-  @known_providers [:openai, :anthropic, :openrouter]
+  @known_providers [:openai, :openai_codex, :anthropic, :openrouter]
 
   @spec provider_id(module() | atom() | String.t() | nil) :: atom() | nil
   def provider_id(nil), do: nil

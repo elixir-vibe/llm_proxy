@@ -19,6 +19,7 @@ defmodule LLMProxy.Application do
     Registry.register(LLMProxy.Providers.OpenRouter)
     Registry.register(LLMProxy.Providers.Anthropic)
     Registry.register(LLMProxy.Providers.OpenAI)
+    Registry.register(LLMProxy.Providers.OpenAICodex)
     ReqLLM.Providers.register(LLMProxy.Provider)
 
     Dynamic.register("/v1/messages", LLMProxy.HTTP.Routes.Messages)
@@ -92,16 +93,21 @@ defmodule LLMProxy.Application do
 
   defp seed_tokens_from_env do
     entries =
-      ["openrouter", "openai", "anthropic"]
-      |> Enum.map(fn provider ->
+      [
+        {"openrouter", "api-key", :api_keys},
+        {"openai", "api-key", :api_keys},
+        {"anthropic", "api-key", :api_keys},
+        {"openai-codex", "oauth", :oauth_tokens}
+      ]
+      |> Enum.map(fn {provider, kind, config_key} ->
         tokens =
           provider
-          |> LLMProxy.Config.provider_value(:api_keys, "")
+          |> LLMProxy.Config.provider_value(config_key, "")
           |> String.split(",", trim: true)
           |> Enum.map(&String.trim/1)
           |> Enum.reject(&(&1 == ""))
 
-        %{provider: provider, kind: "api-key", tokens: tokens}
+        %{provider: provider, kind: kind, tokens: tokens}
       end)
       |> Enum.reject(fn e -> e.tokens == [] end)
 
