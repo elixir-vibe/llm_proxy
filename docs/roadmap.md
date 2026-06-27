@@ -180,14 +180,17 @@ Implemented for embedded apps:
 - readable `config :llm_proxy, models: [...]` shape
 - compatibility with lower-level `:catalog` deployments
 
+Implemented for standalone releases:
+
+- optional `/etc/llm-proxy/config.toml` loaded through `LLMProxy.Config.Provider`
+- override path with `LLM_PROXY_CONFIG_TOML`
+- TOML decoding uses the `:toml` package with string keys and explicit key normalization
+- embedded/library mode does not search `/etc` or load standalone config files by default
+
 Future standalone direction:
 
-- standalone release config should not require operators to write raw `config :llm_proxy` internals
-- prefer `/etc/llm-proxy/config.toml` for normal data-only operator config
 - consider a trusted Elixir config DSL only as an expert escape hatch
 - keep provider tokens in storage/admin surfaces; env token variables should remain bootstrap/import compatibility
-- do not make embedded/library mode search `/etc` or load standalone config files by default
-- choose module namespace and mirrored test paths before implementing release config loading
 
 Candidate TOML shape:
 

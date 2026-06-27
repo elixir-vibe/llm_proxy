@@ -284,6 +284,8 @@ Additional upstream providers can be registered with `LLMProxy.Providers.Registr
 
 See [`docs/architecture.md`](docs/architecture.md) for the module hierarchy and boundary rules. See [`docs/providers.md`](docs/providers.md) for custom provider authoring. See [`docs/roadmap.md`](docs/roadmap.md) for standalone release configuration direction.
 
+Standalone releases also load optional data config from `/etc/llm-proxy/config.toml`; override the path with `LLM_PROXY_CONFIG_TOML`. Embedded/library users should continue to use ordinary `config :llm_proxy` application config.
+
 Environment variables can be loaded from `.env` through Dotenvy.
 
 | Variable | Description |

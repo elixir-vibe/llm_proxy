@@ -50,8 +50,9 @@ defmodule LLMProxy.MixProject do
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:quackdb, "~> 0.5.14"},
       {:req_llm, "~> 1.17"},
-      {:llm_db, "~> 2026.3"},
+      {:llm_db, "~> 2026.3", runtime: false},
       {:dotenvy, "~> 1.1"},
+      {:toml, "~> 0.7"},
       {:jason, "~> 1.4"},
       {:incant, git: "git@github.com:elixir-vibe/incant.git", branch: "main"},
       {:safe_rpc, "~> 0.1.12"},
@@ -78,7 +79,8 @@ defmodule LLMProxy.MixProject do
   defp releases do
     [
       llm_proxy: [
-        applications: [llm_proxy: :permanent]
+        applications: [llm_proxy: :permanent],
+        config_providers: [{LLMProxy.Config.Provider, []}]
       ]
     ]
   end
