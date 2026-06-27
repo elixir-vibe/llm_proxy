@@ -282,7 +282,7 @@ Additional upstream providers can be registered with `LLMProxy.Providers.Registr
 
 ## Configuration
 
-See [`docs/architecture.md`](docs/architecture.md) for the module hierarchy and boundary rules. See [`docs/providers.md`](docs/providers.md) for custom provider authoring. See [`docs/standalone-config.md`](docs/standalone-config.md) for standalone release configuration design notes.
+See [`docs/architecture.md`](docs/architecture.md) for the module hierarchy and boundary rules. See [`docs/providers.md`](docs/providers.md) for custom provider authoring. See [`docs/roadmap.md`](docs/roadmap.md) for standalone release configuration direction.
 
 Environment variables can be loaded from `.env` through Dotenvy.
 

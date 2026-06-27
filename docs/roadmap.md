@@ -170,6 +170,39 @@ SafeRPC is the remote BEAM communication layer for LLMProxy.
 SafeRPC.call(socket, {LLMProxy, :chat}, request, meta: %{api_key: raw_key})
 ```
 
+### 9. Standalone release configuration
+
+Keep library/embedded config and standalone operator config separate.
+
+Implemented for embedded apps:
+
+- readable `config :llm_proxy, providers: [...]` shape
+- readable `config :llm_proxy, models: [...]` shape
+- compatibility with lower-level `:catalog` deployments
+
+Future standalone direction:
+
+- standalone release config should not require operators to write raw `config :llm_proxy` internals
+- prefer `/etc/llm-proxy/config.toml` for normal data-only operator config
+- consider a trusted Elixir config DSL only as an expert escape hatch
+- keep provider tokens in storage/admin surfaces; env token variables should remain bootstrap/import compatibility
+- do not make embedded/library mode search `/etc` or load standalone config files by default
+- choose module namespace and mirrored test paths before implementing release config loading
+
+Candidate TOML shape:
+
+```toml
+[providers.openai-codex]
+base_url = "https://chatgpt.com/backend-api"
+
+[[models]]
+name = "codex"
+
+[[models.routes]]
+to = "openai-codex"
+model = "gpt-5.3-codex-spark"
+```
+
 ## Near-term order
 
 1. ✅ Update docs and test layout to match the current architecture.
