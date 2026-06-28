@@ -49,7 +49,10 @@ defmodule LLMProxy.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:quackdb, "~> 0.5.14"},
-      {:req_llm, "~> 1.17"},
+      # Temporary fork until ReqLLM PR #791 is merged/released. LLMProxy relies on
+      # these encoder fixes to avoid local OpenAI/Anthropic wire-format patches.
+      {:req_llm,
+       git: "https://github.com/dannote/req_llm.git", branch: "fix/provider-context-encoding"},
       {:llm_db, "~> 2026.3", runtime: false},
       {:dotenvy, "~> 1.1"},
       {:toml, "~> 0.7"},

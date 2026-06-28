@@ -9,9 +9,7 @@ defmodule LLMProxy.Protocol.OpenAI do
 
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Usage
-  alias ReqLLM.Message.ContentPart
   alias ReqLLM.Provider.Defaults, as: ReqLLMDefaults
-  alias ReqLLM.ToolCall
 
   @impl true
   def protocol, do: :openai
@@ -20,7 +18,6 @@ defmodule LLMProxy.Protocol.OpenAI do
   def request_body(%Request{} = request) do
     %ReqLLM.Context{messages: request.messages}
     |> ReqLLMDefaults.encode_context_to_openai_format(request.model)
-    |> normalize_openai_messages(request.messages)
     |> stringify_keys()
     |> Map.merge(Map.take(request.body, ["parallel_tool_calls", "response_format"]))
     |> Map.put("model", request.model)
@@ -50,81 +47,6 @@ defmodule LLMProxy.Protocol.OpenAI do
     response
     |> Map.get("usage", %{})
     |> Usage.from_openai()
-  end
-
-  defp normalize_openai_messages(%{messages: encoded_messages} = body, source_messages) do
-    messages =
-      encoded_messages
-      |> Enum.zip(source_messages)
-      |> Enum.map(fn {encoded, source} -> normalize_openai_message(encoded, source) end)
-
-    %{body | messages: messages}
-  end
-
-  defp normalize_openai_message(encoded, source) do
-    encoded
-    |> normalize_tool_calls(source)
-    |> normalize_content(source.content)
-  end
-
-  defp normalize_tool_calls(encoded, %{tool_calls: tool_calls}) when is_list(tool_calls) do
-    Map.put(encoded, :tool_calls, Enum.map(tool_calls, &openai_tool_call/1))
-  end
-
-  defp normalize_tool_calls(encoded, _source), do: encoded
-
-  defp openai_tool_call(%ToolCall{id: id, type: type, function: function}) do
-    %{
-      id: id,
-      type: type,
-      function: %{
-        name: function.name,
-        arguments: function.arguments
-      }
-    }
-  end
-
-  defp openai_tool_call(tool_call), do: tool_call
-
-  defp normalize_content(encoded, source_content) when is_list(source_content) do
-    case {Map.get(encoded, :content), source_content} do
-      {encoded_content, source_content} when is_list(encoded_content) ->
-        Map.put(encoded, :content, normalize_content_parts(encoded_content, source_content))
-
-      {"", [%ContentPart{type: :file, metadata: %{"file_id" => _file_id}}]} ->
-        Map.put(encoded, :content, normalize_content_parts([], source_content))
-
-      _other ->
-        encoded
-    end
-  end
-
-  defp normalize_content(encoded, _source_content), do: encoded
-
-  defp normalize_content_parts(encoded_parts, source_parts) do
-    source_parts
-    |> zip_longest(encoded_parts)
-    |> Enum.flat_map(fn
-      {%ContentPart{type: :file, metadata: %{"file_id" => file_id}}, _encoded_part} ->
-        [%{type: "file", file: %{file_id: file_id}}]
-
-      {%ContentPart{type: :image_url, metadata: metadata}, %{image_url: image_url} = encoded_part} ->
-        [%{encoded_part | image_url: maybe_put(image_url, :detail, metadata["detail"])}]
-
-      {_source_part, nil} ->
-        []
-
-      {_source_part, encoded_part} ->
-        [encoded_part]
-    end)
-  end
-
-  defp zip_longest([], []), do: []
-  defp zip_longest([left | left_rest], []), do: [{left, nil} | zip_longest(left_rest, [])]
-  defp zip_longest([], [right | right_rest]), do: [{nil, right} | zip_longest([], right_rest)]
-
-  defp zip_longest([left | left_rest], [right | right_rest]) do
-    [{left, right} | zip_longest(left_rest, right_rest)]
   end
 
   defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)

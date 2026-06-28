@@ -206,7 +206,7 @@ defmodule LLMProxy.Protocol.Request do
 
   defp content_part(%{"type" => "input_file", "file_id" => file_id}, :responses)
        when is_binary(file_id) do
-    {:ok, %ContentPart{type: :file, filename: file_id, metadata: %{"file_id" => file_id}}}
+    {:ok, ContentPart.file_id(file_id)}
   end
 
   defp content_part(

@@ -9,8 +9,6 @@ defmodule LLMProxy.Protocol.Anthropic do
 
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Usage
-  alias ReqLLM.Message
-  alias ReqLLM.Message.{ContentPart, ReasoningDetails}
   alias ReqLLM.Providers.Anthropic.Context, as: AnthropicContext
 
   @impl true
@@ -31,11 +29,8 @@ defmodule LLMProxy.Protocol.Anthropic do
 
   @spec request_body(Request.t(), keyword()) :: map()
   def request_body(%Request{} = request, opts \\ []) do
-    messages = prepare_anthropic_messages(request.messages)
-
-    %ReqLLM.Context{messages: messages}
+    %ReqLLM.Context{messages: request.messages}
     |> AnthropicContext.encode_request(%{model: request.model})
-    |> restore_redacted_thinking(request.messages)
     |> stringify_keys()
     |> Map.put("max_tokens", request.max_tokens || conversion_max_tokens(opts))
     |> maybe_put_tools(request.tools)
@@ -52,94 +47,6 @@ defmodule LLMProxy.Protocol.Anthropic do
       LLMProxy.Config.provider_conversion_default("anthropic", :max_tokens)
     end)
   end
-
-  defp prepare_anthropic_messages(messages) do
-    Enum.map(messages, &prepare_anthropic_message/1)
-  end
-
-  defp prepare_anthropic_message(%Message{role: :assistant, content: content} = message) do
-    {content, reasoning_details} = extract_reasoning_details(content)
-
-    %{
-      message
-      | content: content,
-        reasoning_details: append_reasoning_details(message.reasoning_details, reasoning_details)
-    }
-  end
-
-  defp prepare_anthropic_message(%Message{} = message), do: message
-
-  defp extract_reasoning_details(content) do
-    content
-    |> Enum.with_index()
-    |> Enum.reduce({[], []}, fn
-      {%ContentPart{type: :thinking, metadata: %{"redacted" => true}}, _index}, acc ->
-        acc
-
-      {%ContentPart{type: :thinking, text: text, metadata: metadata}, index},
-      {content_acc, detail_acc} ->
-        detail = %ReasoningDetails{
-          text: text || "",
-          signature: metadata["signature"],
-          provider: :anthropic,
-          index: index
-        }
-
-        {content_acc, [detail | detail_acc]}
-
-      {part, _index}, {content_acc, detail_acc} ->
-        {[part | content_acc], detail_acc}
-    end)
-    |> then(fn {content, details} -> {Enum.reverse(content), Enum.reverse(details)} end)
-  end
-
-  defp append_reasoning_details(nil, []), do: nil
-  defp append_reasoning_details(nil, details), do: details
-  defp append_reasoning_details(existing, []), do: existing
-  defp append_reasoning_details(existing, details), do: existing ++ details
-
-  defp restore_redacted_thinking(body, messages) do
-    redacted_by_index = redacted_thinking_by_message_index(messages)
-
-    update_in(body, [:messages], fn encoded_messages ->
-      encoded_messages
-      |> List.wrap()
-      |> Enum.with_index()
-      |> Enum.map(fn {message, index} ->
-        restore_message_redacted_thinking(message, redacted_by_index[index])
-      end)
-    end)
-  end
-
-  defp redacted_thinking_by_message_index(messages) do
-    messages
-    |> Enum.reject(&(&1.role == :system))
-    |> Enum.with_index()
-    |> Map.new(fn {%Message{} = message, index} -> {index, redacted_thinking_blocks(message)} end)
-    |> Map.reject(fn {_index, blocks} -> blocks == [] end)
-  end
-
-  defp redacted_thinking_blocks(%Message{role: :assistant, content: content}) do
-    Enum.flat_map(content, fn
-      %ContentPart{type: :thinking, metadata: %{"redacted" => true, "data" => data}} ->
-        [%{type: "redacted_thinking", data: data}]
-
-      _part ->
-        []
-    end)
-  end
-
-  defp redacted_thinking_blocks(%Message{}), do: []
-
-  defp restore_message_redacted_thinking(message, nil), do: message
-
-  defp restore_message_redacted_thinking(%{content: content} = message, redacted_blocks) do
-    Map.put(message, :content, content_blocks(content) ++ redacted_blocks)
-  end
-
-  defp content_blocks(content) when is_list(content), do: content
-  defp content_blocks(""), do: []
-  defp content_blocks(content) when is_binary(content), do: [%{type: "text", text: content}]
 
   defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
 

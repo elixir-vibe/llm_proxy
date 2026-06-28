@@ -156,7 +156,7 @@ defmodule LLMProxy.Protocol.RequestTest do
     assert [
              %ReqLLM.Message{
                content: [
-                 %ReqLLM.Message.ContentPart{type: :file, metadata: %{"file_id" => "file_123"}}
+                 %ReqLLM.Message.ContentPart{type: :file, file_id: "file_123"}
                ]
              }
            ] =
