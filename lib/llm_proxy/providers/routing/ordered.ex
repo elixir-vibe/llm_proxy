@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.Routing.Ordered do
-  @moduledoc false
+  @moduledoc """
+  Routing strategy that preserves deployment order for deterministic fallback.
+  """
 
   @spec order([term()]) :: [term()]
   def order(deployments) do

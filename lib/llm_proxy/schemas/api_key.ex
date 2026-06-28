@@ -1,5 +1,7 @@
 defmodule LLMProxy.Schemas.ApiKey do
-  @moduledoc false
+  @moduledoc """
+  Ecto schema for LLMProxy API keys, quotas, budgets, model access, and aggregate usage counters.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

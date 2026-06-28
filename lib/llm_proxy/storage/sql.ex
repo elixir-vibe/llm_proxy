@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.SQL do
-  @moduledoc false
+  @moduledoc """
+  SQL adapter detection and support checks for storage queries and migrations.
+  """
 
   alias LLMProxy.Storage.Repo
 

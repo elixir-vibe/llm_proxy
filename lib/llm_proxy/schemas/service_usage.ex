@@ -1,5 +1,7 @@
 defmodule LLMProxy.Schemas.ServiceUsage do
-  @moduledoc false
+  @moduledoc """
+  Ecto schema for non-provider service usage counters tied to an API key and endpoint.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

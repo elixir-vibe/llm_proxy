@@ -1,5 +1,7 @@
 defmodule LLMProxy.Phoenix.Router do
-  @moduledoc false
+  @moduledoc """
+  Phoenix router macros that mount LLMProxy route groups inside host applications.
+  """
 
   alias LLMProxy.HTTP.RouteSpec
 

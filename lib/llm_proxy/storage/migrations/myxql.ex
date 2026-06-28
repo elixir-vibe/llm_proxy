@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.Migrations.MyXQL do
-  @moduledoc false
+  @moduledoc """
+  MyXQL migration adapter for installing the shared LLMProxy storage schema.
+  """
 
   @behaviour LLMProxy.Storage.Migrations.Adapter
 

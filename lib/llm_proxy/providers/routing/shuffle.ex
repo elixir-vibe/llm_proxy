@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.Routing.Shuffle do
-  @moduledoc false
+  @moduledoc """
+  Routing strategy that shuffles deployments within each order group.
+  """
 
   @spec order([term()]) :: [term()]
   def order(deployments) do

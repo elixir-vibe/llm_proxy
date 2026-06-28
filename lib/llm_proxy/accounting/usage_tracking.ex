@@ -1,5 +1,7 @@
 defmodule LLMProxy.Accounting.UsageTracking do
-  @moduledoc false
+  @moduledoc """
+  Usage accounting workflow for key counters, usage rows, optional traces, and user-message logging.
+  """
 
   require Logger
 

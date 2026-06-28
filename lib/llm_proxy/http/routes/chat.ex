@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.Chat do
-  @moduledoc false
+  @moduledoc """
+  OpenAI Chat Completions route adapter for authenticated HTTP requests and SSE streams.
+  """
   use Plug.Router
 
   require Logger

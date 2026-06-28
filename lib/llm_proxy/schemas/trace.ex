@@ -1,5 +1,7 @@
 defmodule LLMProxy.Schemas.Trace do
-  @moduledoc false
+  @moduledoc """
+  Ecto schema for optional traced request and response payloads with usage and latency metadata.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

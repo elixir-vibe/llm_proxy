@@ -1,5 +1,7 @@
 defmodule LLMProxy.Telemetry do
-  @moduledoc false
+  @moduledoc """
+  Telemetry and OpenTelemetry helpers for provider routing and execution spans.
+  """
 
   require OpenTelemetry.Tracer, as: Tracer
 

@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.Routing.RoundRobin do
-  @moduledoc false
+  @moduledoc """
+  GenServer-backed routing strategy that rotates deployments within each order group by model name.
+  """
 
   use GenServer
 

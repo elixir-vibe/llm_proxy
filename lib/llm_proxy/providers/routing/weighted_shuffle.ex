@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.Routing.WeightedShuffle do
-  @moduledoc false
+  @moduledoc """
+  Routing strategy that randomly orders deployments by weight within each order group.
+  """
 
   @spec order([term()]) :: [term()]
   def order(deployments) do

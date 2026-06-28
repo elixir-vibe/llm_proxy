@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.Adapter do
-  @moduledoc false
+  @moduledoc """
+  Behaviour for persistence adapters that back LLMProxy storage operations.
+  """
 
   @callback create_key(String.t(), map()) :: {:ok, term(), String.t()} | {:error, term()}
   @callback find_key(String.t()) :: term() | nil

@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.Anthropic do
-  @moduledoc false
+  @moduledoc """
+  Built-in Anthropic Messages provider for native and OpenAI-compatible LLMProxy execution.
+  """
 
   @behaviour LLMProxy.Providers.Behaviour
 

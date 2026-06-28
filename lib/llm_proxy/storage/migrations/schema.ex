@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.Migrations.Schema do
-  @moduledoc false
+  @moduledoc """
+  Shared Ecto migration schema for installing all LLMProxy storage tables into a host repo.
+  """
 
   use Ecto.Migration
 

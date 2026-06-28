@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.Setup do
-  @moduledoc false
+  @moduledoc """
+  Optional setup-helper routes for install scripts, model lists, and client configuration snippets.
+  """
   use Plug.Router
 
   alias LLMProxy.Config

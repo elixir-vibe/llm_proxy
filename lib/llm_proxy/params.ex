@@ -1,5 +1,7 @@
 defmodule LLMProxy.Params do
-  @moduledoc false
+  @moduledoc """
+  Small parameter-shaping helpers for optional values and integer coercion at HTTP boundaries.
+  """
 
   def put_if_present(map, _key, nil), do: map
   def put_if_present(map, _key, ""), do: map

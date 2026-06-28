@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.Feedback do
-  @moduledoc false
+  @moduledoc """
+  Trace feedback endpoint for attaching user ratings and comments to request IDs or trace IDs.
+  """
   use Plug.Router
 
   alias LLMProxy.HTTP.Routes.Helpers

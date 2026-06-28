@@ -1,5 +1,7 @@
 defmodule LLMProxy.Schemas.MessageLog do
-  @moduledoc false
+  @moduledoc """
+  Ecto schema for captured user-message snippets used by operations and admin views.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

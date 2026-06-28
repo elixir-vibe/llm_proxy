@@ -1,5 +1,7 @@
 defmodule LLMProxy.Schemas.TraceFeedback do
-  @moduledoc false
+  @moduledoc """
+  Ecto schema for user feedback associated with traces or request IDs.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

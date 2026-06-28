@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.Routing.LowestCost do
-  @moduledoc false
+  @moduledoc """
+  Routing strategy that orders deployments by known LLMDB token pricing within each order group.
+  """
 
   alias LLMProxy.ModelDB
 

@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.OpenAI do
-  @moduledoc false
+  @moduledoc """
+  Built-in OpenAI provider backed by the shared OpenAI-compatible provider implementation.
+  """
 
   use LLMProxy.Providers.OpenAICompatibleProvider,
     name: "openai",

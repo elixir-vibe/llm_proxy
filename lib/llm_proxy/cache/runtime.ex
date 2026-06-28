@@ -1,5 +1,7 @@
 defmodule LLMProxy.Cache.Runtime do
-  @moduledoc false
+  @moduledoc """
+  Runtime dispatcher for optional cache adapters, cache-key generation, and cache writes.
+  """
 
   alias LLMProxy.Cache.{Key, Policy}
   alias LLMProxy.Protocol.Request

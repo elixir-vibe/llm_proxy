@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
-  @moduledoc false
+  @moduledoc """
+  Anthropic Messages route adapter that preserves provider-native request and response shapes.
+  """
   use Plug.Router
 
   require Logger

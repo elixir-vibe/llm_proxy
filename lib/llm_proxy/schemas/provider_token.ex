@@ -1,5 +1,7 @@
 defmodule LLMProxy.Schemas.ProviderToken do
-  @moduledoc false
+  @moduledoc """
+  Ecto schema for upstream provider API keys, OAuth tokens, labels, proxies, and enabled state.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

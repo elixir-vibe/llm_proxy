@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.Migrations.Postgres do
-  @moduledoc false
+  @moduledoc """
+  PostgreSQL migration adapter for installing the shared LLMProxy storage schema.
+  """
 
   @behaviour LLMProxy.Storage.Migrations.Adapter
 

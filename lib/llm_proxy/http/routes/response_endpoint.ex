@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
-  @moduledoc false
+  @moduledoc """
+  OpenAI Responses route adapter that passes native request and stream events through LLMProxy execution.
+  """
   use Plug.Router
 
   require Logger

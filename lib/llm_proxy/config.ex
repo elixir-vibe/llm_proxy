@@ -1,5 +1,7 @@
 defmodule LLMProxy.Config do
-  @moduledoc false
+  @moduledoc """
+  Runtime accessors and normalization helpers for LLMProxy application configuration.
+  """
 
   alias LLMProxy.Config.Catalog
 

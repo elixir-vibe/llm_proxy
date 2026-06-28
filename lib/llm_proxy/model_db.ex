@@ -1,5 +1,7 @@
 defmodule LLMProxy.ModelDB do
-  @moduledoc false
+  @moduledoc """
+  LLMDB integration for provider model lists and pricing lookup used by routing and accounting.
+  """
 
   alias LLMProxy.Pricing.Rates
   alias LLMProxy.Providers.{Anthropic, OpenAI, OpenAICodex, OpenRouter}

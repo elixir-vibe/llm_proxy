@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.TokenAccess do
-  @moduledoc false
+  @moduledoc """
+  Provider-facing token lookup helper that converts token-pool misses into provider results.
+  """
 
   alias LLMProxy.Providers.Result
   alias LLMProxy.TokenPool.Server, as: TokenPool

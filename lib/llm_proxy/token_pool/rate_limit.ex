@@ -1,5 +1,7 @@
 defmodule LLMProxy.TokenPool.RateLimit do
-  @moduledoc false
+  @moduledoc """
+  Logging wrapper for marking provider tokens as rate-limited in the token pool.
+  """
 
   require Logger
 

@@ -1,5 +1,7 @@
 defmodule LLMProxy.Protocol.Request.Error do
-  @moduledoc false
+  @moduledoc """
+  Structured request-parse error returned by protocol request boundary parsers.
+  """
 
   defstruct [:code, :message]
 

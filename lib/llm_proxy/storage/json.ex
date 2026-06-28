@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.JSON do
-  @moduledoc false
+  @moduledoc """
+  Ecto type for storing map and list values as JSON strings across supported SQL adapters.
+  """
 
   use Ecto.Type
 

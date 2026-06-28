@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.OpenAIStream do
-  @moduledoc false
+  @moduledoc """
+  Converts OpenAI-compatible SSE payloads into transport-neutral LLMProxy stream events.
+  """
 
   alias LLMProxy.Stream.Event
   alias LLMProxy.Usage

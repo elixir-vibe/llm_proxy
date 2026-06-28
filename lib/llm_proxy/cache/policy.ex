@@ -1,5 +1,7 @@
 defmodule LLMProxy.Cache.Policy do
-  @moduledoc false
+  @moduledoc """
+  Resolves configured and per-request cache policy into a strict runtime policy struct.
+  """
 
   alias LLMProxy.Protocol.Request
 

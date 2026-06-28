@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.OpenAICompatible do
-  @moduledoc false
+  @moduledoc """
+  Shared HTTP client implementation for upstream providers with OpenAI-compatible chat endpoints.
+  """
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol.OpenAI

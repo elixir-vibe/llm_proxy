@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.CircuitBreaker do
-  @moduledoc false
+  @moduledoc """
+  GenServer-backed deployment circuit breaker for routing skips, half-open probes, and cooldowns.
+  """
 
   use GenServer
 

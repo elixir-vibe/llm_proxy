@@ -1,5 +1,7 @@
 defmodule LLMProxy.Application do
-  @moduledoc false
+  @moduledoc """
+  OTP application callback that starts LLMProxy storage, routing state, token pools, RPC, and HTTP serving.
+  """
 
   use Application
 

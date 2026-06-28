@@ -1,5 +1,7 @@
 defmodule LLMProxy.Protocol.Request do
-  @moduledoc false
+  @moduledoc """
+  Boundary parser that normalizes OpenAI Chat, Anthropic Messages, and OpenAI Responses requests.
+  """
 
   alias LLMProxy.Protocol.Request.Error
   alias ReqLLM.Context

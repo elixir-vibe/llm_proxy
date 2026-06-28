@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.Migrations.SQLite do
-  @moduledoc false
+  @moduledoc """
+  SQLite migration adapter for installing the shared LLMProxy storage schema.
+  """
 
   @behaviour LLMProxy.Storage.Migrations.Adapter
 

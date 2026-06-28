@@ -1,5 +1,7 @@
 defmodule LLMProxy.Storage.Migrations.QuackDB do
-  @moduledoc false
+  @moduledoc """
+  QuackDB migration adapter for installing the shared LLMProxy storage schema.
+  """
 
   @behaviour LLMProxy.Storage.Migrations.Adapter
 

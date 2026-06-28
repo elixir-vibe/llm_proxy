@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.Helpers do
-  @moduledoc false
+  @moduledoc """
+  Shared HTTP response helpers for LLMProxy Plug route modules.
+  """
 
   import Plug.Conn
 

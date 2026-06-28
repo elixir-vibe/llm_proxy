@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP do
-  @moduledoc false
+  @moduledoc """
+  Req client factory that applies LLMProxy's HTTP instrumentation and test plug configuration.
+  """
 
   def new(opts) do
     opts

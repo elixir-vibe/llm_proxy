@@ -1,5 +1,7 @@
 defmodule LLMProxy.Trace do
-  @moduledoc false
+  @moduledoc """
+  Request and trace ID generation plus Plug response-header propagation.
+  """
 
   alias Plug.Conn
 

@@ -1,5 +1,7 @@
 defmodule LLMProxy.Schemas.UsageLog do
-  @moduledoc false
+  @moduledoc """
+  Ecto schema for per-request token, cost, latency, provider, tag, and metadata usage records.
+  """
   use Ecto.Schema
   import Ecto.Changeset
 

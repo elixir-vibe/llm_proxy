@@ -15,7 +15,9 @@ defmodule LLMProxy.TokenPool.Server do
   import Ecto.Query
 
   defmodule State do
-    @moduledoc false
+    @moduledoc """
+    Runtime state for provider-token cooldown timestamps.
+    """
     defstruct cooldowns: %{}
   end
 

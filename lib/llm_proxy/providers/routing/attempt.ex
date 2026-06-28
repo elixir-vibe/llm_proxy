@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.Routing.Attempt do
-  @moduledoc false
+  @moduledoc """
+  Normalized provider deployment attempt used by routing, fallback, cache keys, and circuit breakers.
+  """
 
   alias LLMProxy.Catalog.Deployment
 

@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.Router do
-  @moduledoc false
+  @moduledoc """
+  Standalone Plug router for LLMProxy health checks, core API routes, setup routes, and dynamic extensions.
+  """
 
   use Plug.Router
 

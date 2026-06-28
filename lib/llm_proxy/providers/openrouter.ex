@@ -1,5 +1,7 @@
 defmodule LLMProxy.Providers.OpenRouter do
-  @moduledoc false
+  @moduledoc """
+  Built-in OpenRouter provider backed by the shared OpenAI-compatible provider implementation.
+  """
 
   use LLMProxy.Providers.OpenAICompatibleProvider,
     name: "openrouter",

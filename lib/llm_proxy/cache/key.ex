@@ -1,5 +1,7 @@
 defmodule LLMProxy.Cache.Key do
-  @moduledoc false
+  @moduledoc """
+  Deterministic cache-key builder for normalized requests and resolved provider attempts.
+  """
 
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.Routing.Attempt

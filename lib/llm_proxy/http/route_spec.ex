@@ -1,5 +1,7 @@
 defmodule LLMProxy.HTTP.RouteSpec do
-  @moduledoc false
+  @moduledoc """
+  Route table shared by standalone Plug routing and Phoenix router embedding macros.
+  """
 
   @type route :: {String.t(), module()}
 
