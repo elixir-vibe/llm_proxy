@@ -22,10 +22,10 @@ defmodule LLMProxy.Application do
     Registry.register(LLMProxy.Providers.OpenAICodex)
     ReqLLM.Providers.register(LLMProxy.Provider)
 
-    Dynamic.register("/v1/messages", LLMProxy.HTTP.Routes.Messages)
-    Dynamic.register("/messages", LLMProxy.HTTP.Routes.Messages)
-    Dynamic.register("/v1/responses", LLMProxy.HTTP.Routes.Responses)
-    Dynamic.register("/responses", LLMProxy.HTTP.Routes.Responses)
+    Dynamic.register("/v1/messages", LLMProxy.HTTP.Routes.MessageEndpoint)
+    Dynamic.register("/messages", LLMProxy.HTTP.Routes.MessageEndpoint)
+    Dynamic.register("/v1/responses", LLMProxy.HTTP.Routes.ResponseEndpoint)
+    Dynamic.register("/responses", LLMProxy.HTTP.Routes.ResponseEndpoint)
 
     children =
       storage_children() ++

@@ -1,7 +1,7 @@
-defmodule LLMProxy.HTTP.Routes.ResponsesTest do
+defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
   use ExUnit.Case
 
-  alias LLMProxy.HTTP.Routes.Responses
+  alias LLMProxy.HTTP.Routes.ResponseEndpoint
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
   alias LLMProxy.Stream.Event
@@ -73,7 +73,7 @@ defmodule LLMProxy.HTTP.Routes.ResponsesTest do
       })
       |> Plug.Conn.put_req_header("x-request-id", "responses-request-id-123")
       |> TestSupport.put_bearer(raw_key)
-      |> Responses.call(Responses.init([]))
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
 
     assert conn.status == 200
     assert Plug.Conn.get_resp_header(conn, "x-request-id") == ["responses-request-id-123"]
@@ -94,7 +94,7 @@ defmodule LLMProxy.HTTP.Routes.ResponsesTest do
         "input" => [%{"role" => "user", "content" => "hello"}]
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Responses.call(Responses.init([]))
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
 
     assert conn.status == 200
     assert conn.state == :chunked
@@ -114,7 +114,7 @@ defmodule LLMProxy.HTTP.Routes.ResponsesTest do
         "stream" => false
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Responses.call(Responses.init([]))
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
 
     assert conn.status == 400
     assert get_in(Jason.decode!(conn.resp_body), ["error", "type"]) == "invalid_message"
@@ -132,7 +132,7 @@ defmodule LLMProxy.HTTP.Routes.ResponsesTest do
         "stream" => false
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Responses.call(Responses.init([]))
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
 
     assert conn.status == 429
     assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "slow down"
@@ -148,7 +148,7 @@ defmodule LLMProxy.HTTP.Routes.ResponsesTest do
         "stream" => false
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Responses.call(Responses.init([]))
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
 
     assert conn.status == 500
     assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "response failed"
@@ -160,7 +160,7 @@ defmodule LLMProxy.HTTP.Routes.ResponsesTest do
     conn =
       Plug.Test.conn(:get, "/missing")
       |> TestSupport.put_bearer(raw_key)
-      |> Responses.call(Responses.init([]))
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
 
     assert conn.status == 404
   end
@@ -175,7 +175,7 @@ defmodule LLMProxy.HTTP.Routes.ResponsesTest do
         "stream" => false
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Responses.call(Responses.init([]))
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
 
     assert conn.status == 404
 

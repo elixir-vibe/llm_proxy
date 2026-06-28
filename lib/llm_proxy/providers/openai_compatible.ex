@@ -3,7 +3,15 @@ defmodule LLMProxy.Providers.OpenAICompatible do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol.OpenAI
-  alias LLMProxy.Providers.{Errors, OpenAIStream, ResponseHandler, Result, SSE, TokenAccess}
+
+  alias LLMProxy.Providers.{
+    OpenAIStream,
+    ProviderError,
+    ResponseHandler,
+    Result,
+    SSE,
+    TokenAccess
+  }
 
   def call(provider_name, body, user_id, opts) do
     with {:ok, token} <- TokenAccess.pick_token(provider_name, user_id) do
@@ -29,10 +37,10 @@ defmodule LLMProxy.Providers.OpenAICompatible do
           {:ok, Result.stream(stream, token)}
 
         {:ok, response} ->
-          Errors.handle_response(token, response)
+          ProviderError.handle_response(token, response)
 
         {:error, exception} ->
-          Errors.handle_exception(exception)
+          ProviderError.handle_exception(exception)
       end
     end
   end

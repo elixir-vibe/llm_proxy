@@ -1,7 +1,7 @@
-defmodule LLMProxy.HTTP.Routes.MessagesTest do
+defmodule LLMProxy.HTTP.Routes.MessageEndpointTest do
   use ExUnit.Case
 
-  alias LLMProxy.HTTP.Routes.Messages
+  alias LLMProxy.HTTP.Routes.MessageEndpoint
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
   alias LLMProxy.Stream.Event
@@ -79,7 +79,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
       })
       |> Plug.Conn.put_req_header("x-request-id", "messages-request-id-123")
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 200
     assert Plug.Conn.get_resp_header(conn, "x-request-id") == ["messages-request-id-123"]
@@ -101,7 +101,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 200
     assert conn.state == :chunked
@@ -120,7 +120,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
         "messages" => [%{"role" => "wat", "content" => "hello"}]
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 400
     assert get_in(Jason.decode!(conn.resp_body), ["error", "type"]) == "invalid_message"
@@ -135,7 +135,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 401
     assert get_in(Jason.decode!(conn.resp_body), ["error", "type"]) == "authentication_error"
@@ -150,7 +150,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 400
     assert get_in(Jason.decode!(conn.resp_body), ["error", "type"]) == "invalid_request_error"
@@ -165,7 +165,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 429
     assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "provider failed"
@@ -177,7 +177,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
     conn =
       Plug.Test.conn(:get, "/missing")
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 404
   end
@@ -191,7 +191,7 @@ defmodule LLMProxy.HTTP.Routes.MessagesTest do
         "messages" => [%{"role" => "user", "content" => "hello"}]
       })
       |> TestSupport.put_bearer(raw_key)
-      |> Messages.call(Messages.init([]))
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
 
     assert conn.status == 404
 

@@ -16,7 +16,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Actor
   alias LLMProxy.Auth.AccessControl
   alias LLMProxy.Cache.Runtime, as: CacheRuntime
-  alias LLMProxy.Guardrails
+  alias LLMProxy.GuardrailPipeline
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Caller, Registry, Result}
   alias LLMProxy.Providers.Routing.Attempt
@@ -226,7 +226,7 @@ defmodule LLMProxy.Provider do
   defp guard_before_request(request, actor, api_key, route) do
     context = guard_context(request, actor, api_key, route)
 
-    case Guardrails.before_request(request, context) do
+    case GuardrailPipeline.before_request(request, context) do
       {:ok, request} -> {:ok, request}
       {:error, reason} -> {:error, {:guardrail, reason}}
     end
@@ -394,7 +394,7 @@ defmodule LLMProxy.Provider do
       stream,
       fn -> {Usage.zero(), nil} end,
       fn %Event{} = event, {usage, ttft_ms} ->
-        case Guardrails.on_stream_event(event, context) do
+        case GuardrailPipeline.on_stream_event(event, context) do
           {:ok, nil} ->
             {[], {usage, ttft_ms}}
 
@@ -471,7 +471,7 @@ defmodule LLMProxy.Provider do
 
     context = %{context | provider: used_provider, model: used_model}
 
-    case Guardrails.after_response(response, context) do
+    case GuardrailPipeline.after_response(response, context) do
       {:ok, response} ->
         CacheRuntime.put(cache_key, request, response, context)
         track_provider_response(api_key, used_model, request, response, duration_ms, opts)

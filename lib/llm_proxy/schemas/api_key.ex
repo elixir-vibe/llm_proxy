@@ -67,7 +67,7 @@ defmodule LLMProxy.Schemas.ApiKey do
     |> validate_number(:max_budget_usd, greater_than_or_equal_to: 0)
     |> validate_inclusion(:budget_period, ["4h", "week"], allow_nil: true)
     |> validate_change(:budget_limits, fn :budget_limits, limits ->
-      if LLMProxy.Limits.valid?(limits),
+      if LLMProxy.Limit.valid?(limits),
         do: [],
         else: [budget_limits: "has invalid limit definitions"]
     end)
@@ -81,7 +81,7 @@ defmodule LLMProxy.Schemas.ApiKey do
         changeset
 
       limits ->
-        case LLMProxy.Limits.normalize(limits) do
+        case LLMProxy.Limit.normalize(limits) do
           {:ok, normalized} ->
             put_change(changeset, :budget_limits, Enum.map(normalized, &Map.from_struct/1))
 

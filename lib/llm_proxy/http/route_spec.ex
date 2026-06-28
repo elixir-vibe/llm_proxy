@@ -6,14 +6,14 @@ defmodule LLMProxy.HTTP.RouteSpec do
   @core_routes [
     {"/feedback", LLMProxy.HTTP.Routes.Feedback},
     {"/v1/feedback", LLMProxy.HTTP.Routes.Feedback},
-    {"/v1/models", LLMProxy.HTTP.Routes.Models},
-    {"/models", LLMProxy.HTTP.Routes.Models},
+    {"/v1/models", LLMProxy.HTTP.Routes.ModelEndpoint},
+    {"/models", LLMProxy.HTTP.Routes.ModelEndpoint},
     {"/v1/chat", LLMProxy.HTTP.Routes.Chat},
     {"/chat", LLMProxy.HTTP.Routes.Chat},
-    {"/v1/messages", LLMProxy.HTTP.Routes.Messages},
-    {"/v1/responses", LLMProxy.HTTP.Routes.Responses},
-    {"/v1/moderations", LLMProxy.HTTP.Routes.Moderations},
-    {"/moderations", LLMProxy.HTTP.Routes.Moderations}
+    {"/v1/messages", LLMProxy.HTTP.Routes.MessageEndpoint},
+    {"/v1/responses", LLMProxy.HTTP.Routes.ResponseEndpoint},
+    {"/v1/moderations", LLMProxy.HTTP.Routes.ModerationEndpoint},
+    {"/moderations", LLMProxy.HTTP.Routes.ModerationEndpoint}
   ]
 
   @setup_routes [

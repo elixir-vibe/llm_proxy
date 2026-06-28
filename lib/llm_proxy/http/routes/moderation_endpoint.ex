@@ -1,11 +1,13 @@
-defmodule LLMProxy.HTTP.Routes.Moderations do
-  @moduledoc false
+defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
+  @moduledoc """
+  Serves OpenAI-compatible moderation requests.
+  """
   use Plug.Router
 
   require Logger
 
   alias LLMProxy.HTTP
-  alias LLMProxy.HTTP.Routes.Moderations.Params
+  alias LLMProxy.HTTP.Routes.ModerationEndpoint.CreateRequest
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Telemetry
   alias LLMProxy.TokenPool.Server, as: TokenPool
@@ -19,7 +21,7 @@ defmodule LLMProxy.HTTP.Routes.Moderations do
   post "/" do
     {conn, trace_id} = Trace.ensure_conn(conn)
 
-    case Params.parse_create(conn.body_params) do
+    case CreateRequest.parse(conn.body_params) do
       {:ok, attrs} ->
         moderate(conn, conn.assigns.api_key, attrs, trace_id)
 
@@ -28,7 +30,7 @@ defmodule LLMProxy.HTTP.Routes.Moderations do
     end
   end
 
-  defp moderate(conn, api_key, %Params.Create{} = attrs, trace_id) do
+  defp moderate(conn, api_key, %CreateRequest{} = attrs, trace_id) do
     Logger.info("Moderation from #{api_key.name} model=#{attrs.model}")
 
     case TokenPool.pick_token_by_kind("openai", "api-key", api_key.id) do
@@ -40,7 +42,7 @@ defmodule LLMProxy.HTTP.Routes.Moderations do
     end
   end
 
-  defp request_moderation(conn, %Params.Create{} = attrs, token, trace_id) do
+  defp request_moderation(conn, %CreateRequest{} = attrs, token, trace_id) do
     req =
       HTTP.new(
         url: "https://api.openai.com/v1/moderations",
@@ -57,7 +59,7 @@ defmodule LLMProxy.HTTP.Routes.Moderations do
     end
   end
 
-  defp post_moderation(req, %Params.Create{} = attrs, trace_id) do
+  defp post_moderation(req, %CreateRequest{} = attrs, trace_id) do
     Telemetry.with_provider_span(
       "openai",
       attrs.model,

@@ -1,5 +1,7 @@
-defmodule LLMProxy.Providers.Errors do
-  @moduledoc false
+defmodule LLMProxy.Providers.ProviderError do
+  @moduledoc """
+  Converts provider HTTP failures and exceptions into `LLMProxy.Providers.Result` errors.
+  """
 
   alias LLMProxy.Providers.Result
   alias LLMProxy.TokenPool.Server, as: TokenPool

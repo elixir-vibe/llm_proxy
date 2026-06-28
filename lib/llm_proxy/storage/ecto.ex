@@ -169,7 +169,7 @@ defmodule LLMProxy.Storage.Ecto do
   # --- Quota Checking ---
 
   def check_quota(key) do
-    with :ok <- LLMProxy.Limits.check(key),
+    with :ok <- LLMProxy.Limit.check(key),
          :ok <- check_budget(key),
          :ok <- check_4h_token_quota(key),
          :ok <- check_week_token_quota(key),

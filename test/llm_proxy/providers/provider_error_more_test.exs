@@ -1,7 +1,7 @@
-defmodule LLMProxy.Providers.ErrorsMoreTest do
+defmodule LLMProxy.Providers.ProviderErrorMoreTest do
   use ExUnit.Case
 
-  alias LLMProxy.Providers.{Errors, Result}
+  alias LLMProxy.Providers.{ProviderError, Result}
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 
@@ -16,11 +16,11 @@ defmodule LLMProxy.Providers.ErrorsMoreTest do
     {:ok, token} = Storage.add_token("openai", "api-key", "token")
 
     assert {:error, %Result{status: 429, token: ^token}} =
-             Errors.handle_response(token, 429, %{"error" => "slow down"})
+             ProviderError.handle_response(token, 429, %{"error" => "slow down"})
   end
 
   test "handle_exception/1 wraps exceptions" do
     assert {:error, %Result{status: 502, error: "boom"}} =
-             Errors.handle_exception(%RuntimeError{message: "boom"})
+             ProviderError.handle_exception(%RuntimeError{message: "boom"})
   end
 end

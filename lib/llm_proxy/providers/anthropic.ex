@@ -5,7 +5,7 @@ defmodule LLMProxy.Providers.Anthropic do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol
-  alias LLMProxy.Providers.{Errors, ResponseHandler, Result, SSE, TokenAccess}
+  alias LLMProxy.Providers.{ProviderError, ResponseHandler, Result, SSE, TokenAccess}
   alias LLMProxy.Stream.Event
 
   @impl true
@@ -86,10 +86,10 @@ defmodule LLMProxy.Providers.Anthropic do
         {:ok, Result.stream(stream, token)}
 
       {:ok, response} ->
-        Errors.handle_response(token, response)
+        ProviderError.handle_response(token, response)
 
       {:error, exception} ->
-        Errors.handle_exception(exception)
+        ProviderError.handle_exception(exception)
     end
   end
 

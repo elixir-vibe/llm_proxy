@@ -1,4 +1,4 @@
-defmodule LLMProxy.GuardrailsTest do
+defmodule LLMProxy.GuardrailPipelineTest do
   use ExUnit.Case
 
   alias LLMProxy.HTTP.Routes.Chat

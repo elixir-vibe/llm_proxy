@@ -1,5 +1,7 @@
-defmodule LLMProxy.HTTP.Routes.Models do
-  @moduledoc false
+defmodule LLMProxy.HTTP.Routes.ModelEndpoint do
+  @moduledoc """
+  Serves the OpenAI-compatible model list endpoint.
+  """
 
   use Plug.Router
 

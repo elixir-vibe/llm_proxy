@@ -1,7 +1,7 @@
-defmodule LLMProxy.HTTP.Routes.ModerationsTest do
+defmodule LLMProxy.HTTP.Routes.ModerationEndpointTest do
   use ExUnit.Case
 
-  alias LLMProxy.HTTP.Routes.Moderations
+  alias LLMProxy.HTTP.Routes.ModerationEndpoint
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias LLMProxy.TokenPool.Server, as: TokenPool
@@ -25,7 +25,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationsTest do
     conn =
       TestSupport.json_conn(:post, "/", %{})
       |> TestSupport.put_bearer(raw_key)
-      |> Moderations.call(Moderations.init([]))
+      |> ModerationEndpoint.call(ModerationEndpoint.init([]))
 
     assert conn.status == 400
     assert Jason.decode!(conn.resp_body) == %{"error" => "input is required"}
@@ -37,7 +37,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationsTest do
     conn =
       TestSupport.json_conn(:post, "/", %{"input" => "hello"})
       |> TestSupport.put_bearer(raw_key)
-      |> Moderations.call(Moderations.init([]))
+      |> ModerationEndpoint.call(ModerationEndpoint.init([]))
 
     assert conn.status == 503
     assert Jason.decode!(conn.resp_body)["error"] =~ "No OpenAI token available"
@@ -57,7 +57,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationsTest do
       TestSupport.json_conn(:post, "/", %{"input" => "hello"})
       |> Plug.Conn.put_req_header("x-request-id", "moderations-request-id-123")
       |> TestSupport.put_bearer(raw_key)
-      |> Moderations.call(Moderations.init([]))
+      |> ModerationEndpoint.call(ModerationEndpoint.init([]))
 
     assert conn.status == 200
     assert Plug.Conn.get_resp_header(conn, "x-request-id") == ["moderations-request-id-123"]

@@ -1,5 +1,7 @@
-defmodule LLMProxy.Guardrails do
-  @moduledoc false
+defmodule LLMProxy.GuardrailPipeline do
+  @moduledoc """
+  Runs configured `LLMProxy.Guardrail` callbacks around requests, responses, and stream events.
+  """
 
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Response

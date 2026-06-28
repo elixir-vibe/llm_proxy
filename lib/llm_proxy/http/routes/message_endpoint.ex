@@ -1,4 +1,4 @@
-defmodule LLMProxy.HTTP.Routes.Messages do
+defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   @moduledoc false
   use Plug.Router
 
@@ -6,7 +6,7 @@ defmodule LLMProxy.HTTP.Routes.Messages do
 
   alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
-  alias LLMProxy.HTTP.Routes.{Helpers, PassthroughErrors, PassthroughResults}
+  alias LLMProxy.HTTP.Routes.{Helpers, Passthrough}
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Provider
@@ -70,22 +70,22 @@ defmodule LLMProxy.HTTP.Routes.Messages do
            api_name: "Messages API"
          ) do
       {:ok, %Result{kind: :response} = result} ->
-        PassthroughResults.handle(conn, result, api_key, trace_id, passthrough_handlers())
+        Passthrough.send_result(conn, result, api_key, trace_id, passthrough_result_handler())
 
       {:error, reason} ->
         handle_provider_error(conn, reason)
     end
   end
 
-  defp passthrough_handlers do
-    PassthroughResults.handlers(&handle_non_stream/6, &handle_stream/7)
+  defp passthrough_result_handler do
+    Passthrough.result_handler(&handle_non_stream/6, &handle_stream/7)
   end
 
   defp handle_provider_error(conn, reason) do
-    PassthroughErrors.send(
+    Passthrough.send_error(
       conn,
       reason,
-      PassthroughErrors.handlers(&send_error/4, &error_type/1, &mark_rate_limited_if_needed/1)
+      Passthrough.error_handler(&send_error/4, &error_type/1, &mark_rate_limited_if_needed/1)
     )
   end
 
