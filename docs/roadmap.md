@@ -213,7 +213,7 @@ model = "gpt-5.3-codex-spark"
 3. ✅ Migrate provider registry reads to catalog-aware resolution.
 4. ✅ Replace quota fields with a limit evaluator while keeping migration-compatible schema fields.
 5. ✅ Add timeout and circuit breaker state.
-6. ✅ Add explicit routing strategy modules.
+6. ✅ Add explicit routing strategies.
 7. ✅ Add cache hooks.
 8. ✅ Add guardrail behaviours.
 9. ✅ Add remote BEAM calls.
