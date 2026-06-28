@@ -6,7 +6,7 @@ defmodule LLMProxy.HTTP.Routes.Messages do
 
   alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
-  alias LLMProxy.HTTP.Routes.{Helpers, NativeErrors, NativeResults}
+  alias LLMProxy.HTTP.Routes.{Helpers, PassthroughErrors, PassthroughResults}
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Provider
@@ -70,19 +70,23 @@ defmodule LLMProxy.HTTP.Routes.Messages do
            api_name: "Messages API"
          ) do
       {:ok, %Result{kind: :response} = result} ->
-        NativeResults.handle(conn, result, api_key, trace_id, native_handlers())
+        PassthroughResults.handle(conn, result, api_key, trace_id, passthrough_handlers())
 
       {:error, reason} ->
         handle_provider_error(conn, reason)
     end
   end
 
-  defp native_handlers do
-    %{non_stream: &handle_non_stream/6, stream: &handle_stream/7}
+  defp passthrough_handlers do
+    PassthroughResults.handlers(&handle_non_stream/6, &handle_stream/7)
   end
 
   defp handle_provider_error(conn, reason) do
-    NativeErrors.send(conn, reason, &send_error/4, &error_type/1, &mark_rate_limited_if_needed/1)
+    PassthroughErrors.send(
+      conn,
+      reason,
+      PassthroughErrors.handlers(&send_error/4, &error_type/1, &mark_rate_limited_if_needed/1)
+    )
   end
 
   defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
