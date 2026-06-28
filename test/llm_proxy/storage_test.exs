@@ -1,13 +1,13 @@
 defmodule LLMProxy.StorageTest do
   use ExUnit.Case
 
-  alias LLMProxy.Repo
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo.SQLite
 
   alias Ecto.Adapters.SQL.Sandbox
 
   setup do
-    :ok = Sandbox.checkout(Repo)
+    :ok = Sandbox.checkout(SQLite)
   end
 
   describe "API keys" do

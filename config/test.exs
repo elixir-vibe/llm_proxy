@@ -7,8 +7,9 @@ if Code.ensure_loaded?(Dotenvy) do
   |> System.put_env()
 end
 
-config :llm_proxy, LLMProxy.Repo,
+config :llm_proxy, LLMProxy.Storage.Repo.SQLite,
   database: "llm_proxy_test.db",
+  priv: "priv/repo",
   pool: Ecto.Adapters.SQL.Sandbox,
   pool_size: 1
 

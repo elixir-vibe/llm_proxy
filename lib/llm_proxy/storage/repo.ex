@@ -1,10 +1,17 @@
 defmodule LLMProxy.Storage.Repo do
-  @moduledoc false
+  @moduledoc """
+  Facade for the configured LLMProxy Ecto repo.
+
+  Application code calls this module instead of concrete repo modules so local
+  SQLite storage, production QuackDB storage, and host-provided repos share one
+  internal storage boundary.
+  """
 
   def configured do
     repo = LLMProxy.Config.repo()
 
-    if repo == LLMProxy.Repo and not Code.ensure_loaded?(LLMProxy.Repo) do
+    if repo == LLMProxy.Storage.Repo.SQLite and
+         not Code.ensure_loaded?(LLMProxy.Storage.Repo.SQLite) do
       raise """
       LLMProxy is configured to use the bundled SQLite repo, but ecto_sqlite3 is not available.
 
@@ -18,7 +25,7 @@ defmodule LLMProxy.Storage.Repo do
     repo
   end
 
-  def bundled?, do: configured() in [LLMProxy.Repo, LLMProxy.QuackRepo]
+  def bundled?, do: configured() in [LLMProxy.Storage.Repo.SQLite, LLMProxy.Storage.Repo.QuackDB]
 
   def adapter, do: configured().__adapter__()
   def config, do: configured().config()

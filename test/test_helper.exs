@@ -6,5 +6,5 @@ unless Code.ensure_loaded?(Ecto.Adapters.QuackDB) do
   end
 end
 
-Ecto.Adapters.SQL.Sandbox.mode(LLMProxy.Repo, :manual)
+Ecto.Adapters.SQL.Sandbox.mode(LLMProxy.Storage.Repo.SQLite, :manual)
 ExUnit.start(exclude: [:integration])

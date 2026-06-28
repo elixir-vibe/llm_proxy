@@ -23,7 +23,7 @@ defmodule LLMProxy.Storage.RepoTest do
   test "defaults to bundled repo" do
     Application.delete_env(:llm_proxy, :repo)
 
-    assert Repo.configured() == LLMProxy.Repo
+    assert Repo.configured() == LLMProxy.Storage.Repo.SQLite
     assert Repo.bundled?()
   end
 

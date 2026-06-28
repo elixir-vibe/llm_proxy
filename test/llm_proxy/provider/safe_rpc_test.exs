@@ -50,7 +50,7 @@ defmodule LLMProxy.Provider.SafeRPCTest do
     {:ok, _key, raw_key} = Storage.create_key("req-llm-safe-rpc-user")
     socket = socket_path("req-llm")
     {:ok, server} = Server.start_link(socket: socket)
-    Sandbox.allow(LLMProxy.Repo, self(), server)
+    Sandbox.allow(LLMProxy.Storage.Repo.SQLite, self(), server)
 
     model = %{
       id: "req-llm-safe-rpc-model",

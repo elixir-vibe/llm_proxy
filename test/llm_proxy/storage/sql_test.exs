@@ -34,7 +34,7 @@ defmodule LLMProxy.Storage.SQLTest do
     Application.put_env(:llm_proxy, :repo, MyXQLRepo)
     assert SQL.adapter() == :mysql
 
-    Application.put_env(:llm_proxy, :repo, LLMProxy.Repo)
+    Application.put_env(:llm_proxy, :repo, LLMProxy.Storage.Repo.SQLite)
     assert SQL.adapter() == :sqlite
 
     Application.put_env(:llm_proxy, :repo, QuackDBRepo)

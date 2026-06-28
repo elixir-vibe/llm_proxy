@@ -13,8 +13,8 @@ if config_env() == :prod do
   quackdb_token = System.fetch_env!("QUACKDB_TOKEN")
 
   config :llm_proxy,
-    repo: LLMProxy.QuackRepo,
-    ecto_repos: [LLMProxy.QuackRepo],
+    repo: LLMProxy.Storage.Repo.QuackDB,
+    ecto_repos: [LLMProxy.Storage.Repo.QuackDB],
     http: [port: String.to_integer(System.get_env("PORT", "4000"))],
     quackdb_server: [
       name: LLMProxy.QuackDBServer,
@@ -25,9 +25,10 @@ if config_env() == :prod do
       token: quackdb_token
     ]
 
-  config :llm_proxy, LLMProxy.QuackRepo,
+  config :llm_proxy, LLMProxy.Storage.Repo.QuackDB,
     uri: quackdb_uri,
-    token: quackdb_token
+    token: quackdb_token,
+    priv: "priv/repo"
 end
 
 if config_env() in [:dev, :prod] do

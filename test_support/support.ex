@@ -3,16 +3,16 @@ defmodule LLMProxy.TestSupport do
   import Plug.Test
 
   alias Ecto.Adapters.SQL.Sandbox
-  alias LLMProxy.Repo
   alias LLMProxy.Schemas.ProviderToken
+  alias LLMProxy.Storage.Repo.SQLite
 
   def checkout_repo do
-    :ok = Sandbox.checkout(Repo)
-    Sandbox.mode(Repo, {:shared, self()})
+    :ok = Sandbox.checkout(SQLite)
+    Sandbox.mode(SQLite, {:shared, self()})
   end
 
   def allow_token_pool do
-    Sandbox.allow(Repo, self(), Process.whereis(LLMProxy.TokenPool.Server))
+    Sandbox.allow(SQLite, self(), Process.whereis(LLMProxy.TokenPool.Server))
   end
 
   def json_conn(method, path, body \\ %{}) do
@@ -33,7 +33,7 @@ defmodule LLMProxy.TestSupport do
   end
 
   def clear_provider_tokens do
-    Repo.delete_all(ProviderToken)
+    SQLite.delete_all(ProviderToken)
   end
 
   def put_bearer(conn, token) do

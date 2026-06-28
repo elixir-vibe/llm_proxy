@@ -1,6 +1,8 @@
 import Config
 
-config :llm_proxy, LLMProxy.Repo, database: "llm_proxy_dev.db"
+config :llm_proxy, LLMProxy.Storage.Repo.SQLite,
+  database: "llm_proxy_dev.db",
+  priv: "priv/repo"
 
 config :llm_proxy,
   http: [port: 4000]

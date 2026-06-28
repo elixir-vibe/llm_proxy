@@ -6,8 +6,8 @@ defmodule LLMProxy.Integration.OpenRouterTest do
 
   alias Ecto.Adapters.SQL.Sandbox
   alias LLMProxy.Providers.{OpenRouter, Result}
-  alias LLMProxy.Repo
   alias LLMProxy.Router
+  alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.Storage
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
@@ -28,8 +28,8 @@ defmodule LLMProxy.Integration.OpenRouterTest do
   end
 
   setup do
-    :ok = Sandbox.checkout(Repo)
-    Sandbox.mode(Repo, {:shared, self()})
+    :ok = Sandbox.checkout(SQLite)
+    Sandbox.mode(SQLite, {:shared, self()})
 
     {:ok, _token} = Storage.add_token("openrouter", "api-key", @api_key)
     TokenPool.clear_rate_limits()

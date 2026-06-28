@@ -5,15 +5,15 @@ defmodule LLMProxy.Plugs.AuthTest do
   import Plug.Conn
 
   alias LLMProxy.Plugs.Auth
-  alias LLMProxy.Repo
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo.SQLite
 
   alias Ecto.Adapters.SQL.Sandbox
 
   @master_key "test-master-key-xyz"
 
   setup do
-    :ok = Sandbox.checkout(Repo)
+    :ok = Sandbox.checkout(SQLite)
     Application.put_env(:llm_proxy, :master_key, @master_key)
 
     on_exit(fn ->

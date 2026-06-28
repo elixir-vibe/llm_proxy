@@ -38,7 +38,7 @@ defmodule LLMProxy.Config do
   @usage_window_4h_ms :timer.hours(4)
   @usage_window_week_ms :timer.hours(24 * 7)
 
-  def repo, do: Application.get_env(:llm_proxy, :repo, LLMProxy.Repo)
+  def repo, do: Application.get_env(:llm_proxy, :repo, LLMProxy.Storage.Repo.SQLite)
   def storage, do: Application.get_env(:llm_proxy, :storage, LLMProxy.Storage.Ecto)
 
   def quackdb_server_options do

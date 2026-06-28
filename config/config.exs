@@ -1,10 +1,12 @@
 import Config
 
 config :llm_proxy,
-  ecto_repos: [LLMProxy.Repo],
-  repo: LLMProxy.Repo
+  ecto_repos: [LLMProxy.Storage.Repo.SQLite],
+  repo: LLMProxy.Storage.Repo.SQLite
 
-config :llm_proxy, LLMProxy.Repo, database: "llm_proxy_#{config_env()}.db"
+config :llm_proxy, LLMProxy.Storage.Repo.SQLite,
+  database: "llm_proxy_#{config_env()}.db",
+  priv: "priv/repo"
 
 config :llm_proxy,
   http: [port: 4000]
