@@ -63,7 +63,11 @@ defmodule LLMProxy.Providers.OpenAICodex do
     with {:ok, token} <- pick_token(user_id),
          {:ok, context} <- context_from_responses_body(body),
          {:ok, response} <- generate(body["model"], context, token, stream?: false) do
-      {:ok, Result.response(to_responses_response(response, body["model"]), token)}
+      {:ok,
+       Result.response(
+         ProxyResponse.to_responses(response, body["model"], System.system_time(:second)),
+         token
+       )}
     end
   end
 
@@ -309,50 +313,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   defp arguments_map(arguments) when is_map(arguments), do: arguments
   defp arguments_map(_arguments), do: %{}
-
-  defp to_responses_response(%ReqLLM.Response{} = response, model) do
-    output = []
-    text = ReqLLM.Response.text(response) || ""
-    tool_calls = ReqLLM.Response.tool_calls(response)
-
-    output =
-      if text == "" do
-        output
-      else
-        output ++
-          [
-            %{
-              "type" => "message",
-              "role" => "assistant",
-              "content" => [%{"type" => "output_text", "text" => text, "annotations" => []}],
-              "status" => "completed"
-            }
-          ]
-      end
-
-    output = output ++ Enum.map(tool_calls, &to_responses_tool_call/1)
-    usage = Usage.to_responses(response.usage)
-
-    %{
-      "id" => response.id,
-      "object" => "response",
-      "created_at" => System.system_time(:second),
-      "model" => model,
-      "status" => response_status(response.finish_reason),
-      "output" => output,
-      "usage" => usage
-    }
-  end
-
-  defp to_responses_tool_call(tool_call) do
-    %{
-      "type" => "function_call",
-      "id" => tool_call.id,
-      "call_id" => tool_call.id,
-      "name" => ReqLLM.ToolCall.name(tool_call),
-      "arguments" => ReqLLM.ToolCall.args_json(tool_call)
-    }
-  end
 
   defp account_id_from_token(token), do: ReqLLM.Providers.OpenAICodex.account_id_from_token(token)
 

@@ -82,6 +82,20 @@ defmodule LLMProxy.Response do
     |> maybe_put("created", created_at)
   end
 
+  @spec to_responses(ReqLLM.Response.t(), String.t(), pos_integer() | nil) :: map()
+  def to_responses(%ReqLLM.Response{} = response, model, created_at \\ nil)
+      when is_binary(model) do
+    %{
+      "id" => response.id,
+      "object" => "response",
+      "model" => model,
+      "status" => responses_status(response.finish_reason),
+      "output" => responses_output(response),
+      "usage" => Usage.to_responses(response.usage)
+    }
+    |> maybe_put("created_at", created_at)
+  end
+
   @spec put_text(t(), String.t()) :: t()
   def put_text(%__MODULE__{message: %ReqLLM.Response{} = message} = response, text)
       when is_binary(text) do
@@ -135,6 +149,42 @@ defmodule LLMProxy.Response do
   defp openai_finish_reason(:incomplete), do: "length"
   defp openai_finish_reason(nil), do: nil
   defp openai_finish_reason(other), do: to_string(other)
+
+  defp responses_output(%ReqLLM.Response{} = response) do
+    response
+    |> responses_text_output()
+    |> Kernel.++(Enum.map(ReqLLM.Response.tool_calls(response), &responses_tool_call/1))
+  end
+
+  defp responses_text_output(%ReqLLM.Response{} = response) do
+    case ReqLLM.Response.text(response) || "" do
+      "" ->
+        []
+
+      text ->
+        [
+          %{
+            "type" => "message",
+            "role" => "assistant",
+            "content" => [%{"type" => "output_text", "text" => text, "annotations" => []}],
+            "status" => "completed"
+          }
+        ]
+    end
+  end
+
+  defp responses_tool_call(tool_call) do
+    %{
+      "type" => "function_call",
+      "id" => tool_call.id,
+      "call_id" => tool_call.id,
+      "name" => ReqLLM.ToolCall.name(tool_call),
+      "arguments" => ReqLLM.ToolCall.args_json(tool_call)
+    }
+  end
+
+  defp responses_status(:incomplete), do: "incomplete"
+  defp responses_status(_reason), do: "completed"
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
