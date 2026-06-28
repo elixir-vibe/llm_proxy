@@ -4,7 +4,7 @@ defmodule LLMProxy.Catalog do
   """
 
   alias LLMProxy.Catalog.Model
-  alias LLMProxy.Providers.Routing.{LowestCost, Ordered, RoundRobin, Shuffle, WeightedShuffle}
+  alias LLMProxy.Providers.Routing.RoundRobin
 
   @catalog_key :llm_proxy_catalog
 
@@ -68,11 +68,57 @@ defmodule LLMProxy.Catalog do
     end)
   end
 
-  defp route(:lowest_cost, _name, deployments), do: LowestCost.order(deployments)
+  defp route(:lowest_cost, _name, deployments), do: order_by_lowest_cost(deployments)
   defp route(:round_robin, name, deployments), do: RoundRobin.order(name, deployments)
-  defp route(:shuffle, _name, deployments), do: Shuffle.order(deployments)
-  defp route(:weighted_shuffle, _name, deployments), do: WeightedShuffle.order(deployments)
-  defp route(_strategy, _name, deployments), do: Ordered.order(deployments)
+  defp route(:shuffle, _name, deployments), do: shuffle_by_order_group(deployments)
+
+  defp route(:weighted_shuffle, _name, deployments),
+    do: weighted_shuffle_by_order_group(deployments)
+
+  defp route(_strategy, _name, deployments), do: Enum.sort_by(deployments, & &1.order)
+
+  defp shuffle_by_order_group(deployments) do
+    deployments
+    |> Enum.group_by(& &1.order)
+    |> Enum.sort_by(fn {order, _deployments} -> order end)
+    |> Enum.flat_map(fn {_order, deployments} -> Enum.shuffle(deployments) end)
+  end
+
+  defp weighted_shuffle_by_order_group(deployments) do
+    deployments
+    |> Enum.group_by(& &1.order)
+    |> Enum.sort_by(fn {order, _deployments} -> order end)
+    |> Enum.flat_map(fn {_order, deployments} -> weighted_shuffle(deployments) end)
+  end
+
+  defp weighted_shuffle(deployments) do
+    deployments
+    |> Enum.map(fn deployment -> {deployment, weighted_priority(deployment)} end)
+    |> Enum.sort_by(fn {_deployment, priority} -> priority end, :desc)
+    |> Enum.map(fn {deployment, _priority} -> deployment end)
+  end
+
+  defp weighted_priority(%{weight: weight}) when is_integer(weight) and weight > 0 do
+    :math.pow(:rand.uniform(), 1 / weight)
+  end
+
+  defp weighted_priority(_deployment), do: :rand.uniform()
+
+  defp order_by_lowest_cost(deployments) do
+    deployments
+    |> Enum.group_by(& &1.order)
+    |> Enum.sort_by(fn {order, _deployments} -> order end)
+    |> Enum.flat_map(fn {_order, deployments} ->
+      Enum.sort_by(deployments, &deployment_cost/1)
+    end)
+  end
+
+  defp deployment_cost(%{provider: provider, upstream_model: model}) do
+    case LLMProxy.ModelDB.pricing(model, provider) do
+      %LLMProxy.Pricing.Rates{} = rates -> rates.input + rates.output
+      nil -> :infinity
+    end
+  end
 
   defp owner([%{provider: provider} | _]) when is_atom(provider) do
     if function_exported?(provider, :name, 0), do: provider.name(), else: inspect(provider)

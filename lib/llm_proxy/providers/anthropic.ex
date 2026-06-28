@@ -7,8 +7,9 @@ defmodule LLMProxy.Providers.Anthropic do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol
-  alias LLMProxy.Providers.{ResponseHandler, Result, TokenAccess}
+  alias LLMProxy.Providers.{ResponseHandler, Result}
   alias LLMProxy.Stream.Event
+  alias LLMProxy.TokenPool.Server, as: TokenPool
 
   @impl true
   def name, do: "anthropic"
@@ -21,28 +22,28 @@ defmodule LLMProxy.Providers.Anthropic do
 
   @impl true
   def call(body, user_id) do
-    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
+    with {:ok, token} <- pick_token(user_id) do
       do_call(body, token)
     end
   end
 
   @impl true
   def stream(body, user_id) do
-    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
+    with {:ok, token} <- pick_token(user_id) do
       body |> Map.put("stream", true) |> do_stream(token)
     end
   end
 
   @impl true
   def call_native(body, user_id) do
-    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
+    with {:ok, token} <- pick_token(user_id) do
       do_call(body, token)
     end
   end
 
   @impl true
   def stream_native(body, user_id) do
-    with {:ok, token} <- TokenAccess.pick_token("anthropic", user_id) do
+    with {:ok, token} <- pick_token(user_id) do
       body |> Map.put("stream", true) |> do_stream(token)
     end
   end
@@ -53,6 +54,13 @@ defmodule LLMProxy.Providers.Anthropic do
   @impl true
   def to_openai_response(response, model) do
     Protocol.OpenAI.convert_response(response, :anthropic, model)
+  end
+
+  defp pick_token(user_id) do
+    case TokenPool.pick_token("anthropic", user_id) do
+      {:ok, token} -> {:ok, token}
+      {:error, reason} -> Result.unavailable_tokens(reason)
+    end
   end
 
   # HTTP calls

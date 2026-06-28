@@ -42,6 +42,9 @@ defmodule LLMProxy.Providers.Result do
   @spec stream(Enumerable.t(), token()) :: t()
   def stream(stream, token), do: %__MODULE__{kind: :stream, stream: stream, token: token}
 
+  @spec unavailable_tokens(term()) :: {:error, t()}
+  def unavailable_tokens(reason), do: {:error, error("No available tokens: #{reason}", 503, nil)}
+
   @spec error(String.t(), pos_integer(), token(), keyword()) :: t()
   def error(error, status, token, opts \\ [])
       when is_binary(error) and is_integer(status) and status > 0 do

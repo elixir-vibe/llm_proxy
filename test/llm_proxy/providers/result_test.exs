@@ -21,6 +21,11 @@ defmodule LLMProxy.Providers.ResultTest do
              Result.error("rate limited", 429, nil, retry_after_ms: 100)
   end
 
+  test "constructs unavailable token errors" do
+    assert {:error, %Result{kind: :error, error: "No available tokens: no_tokens", status: 503}} =
+             Result.unavailable_tokens(:no_tokens)
+  end
+
   test "attaches routing attempt metadata" do
     assert {:ok, %Result{provider: String, model: "model"}} =
              Result.response(%{}, nil)
