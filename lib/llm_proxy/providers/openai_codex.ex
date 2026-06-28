@@ -125,44 +125,26 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @doc false
   def to_responses_event(%StreamChunk{type: :content, text: text}) when is_binary(text) do
-    Event.new(%{"type" => "response.output_text.delta", "delta" => text})
+    Event.responses_output_text_delta(text)
   end
 
   def to_responses_event(%StreamChunk{type: :thinking, text: text}) when is_binary(text) do
-    Event.new(%{"type" => "response.reasoning.delta", "delta" => text})
+    Event.responses_reasoning_delta(text)
   end
 
   def to_responses_event(%StreamChunk{type: :tool_call} = chunk) do
     index = Map.get(chunk.metadata, :index, 0)
     id = Map.get(chunk.metadata, :id) || "call_#{System.unique_integer([:positive])}"
 
-    Event.new(%{
-      "type" => "response.output_item.added",
-      "output_index" => index,
-      "item" => %{
-        "type" => "function_call",
-        "id" => id,
-        "call_id" => id,
-        "name" => chunk.name,
-        "arguments" => Jason.encode!(chunk.arguments || %{})
-      }
-    })
+    Event.responses_function_call_added(index, id, chunk.name, chunk.arguments || %{})
   end
 
   def to_responses_event(%StreamChunk{type: :meta, metadata: metadata}) do
     if metadata[:terminal?] do
-      usage = Usage.to_responses(metadata[:usage])
-
-      Event.new(
-        %{
-          "type" => terminal_type(metadata[:finish_reason]),
-          "response" => %{
-            "id" => metadata[:response_id] || "resp_#{System.unique_integer([:positive])}",
-            "status" => response_status(metadata[:finish_reason]),
-            "usage" => usage
-          }
-        },
-        usage: Usage.from_responses(usage)
+      Event.responses_terminal(
+        metadata[:finish_reason],
+        metadata[:response_id] || "resp_#{System.unique_integer([:positive])}",
+        metadata[:usage]
       )
     end
   end
@@ -172,7 +154,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @doc false
   def to_openai_chat_event(%StreamChunk{type: :content, text: text}, model)
       when is_binary(text) do
-    Event.new(openai_chunk(model, %{"content" => text}, nil))
+    Event.openai_chat_delta(model, %{"content" => text}, nil)
   end
 
   def to_openai_chat_event(%StreamChunk{type: :tool_call} = chunk, model) do
@@ -193,17 +175,12 @@ defmodule LLMProxy.Providers.OpenAICodex do
       ]
     }
 
-    Event.new(openai_chunk(model, delta, nil))
+    Event.openai_chat_delta(model, delta, nil)
   end
 
   def to_openai_chat_event(%StreamChunk{type: :meta, metadata: metadata}, model) do
     if metadata[:terminal?] do
-      usage = Usage.to_openai(metadata[:usage])
-
-      event =
-        Event.new(openai_chunk(model, %{}, chat_finish_reason(metadata[:finish_reason]), usage))
-
-      Event.attach_usage(event, Usage.from_openai(usage))
+      Event.openai_chat_delta(model, %{}, metadata[:finish_reason], metadata[:usage])
     end
   end
 
@@ -315,29 +292,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
   defp arguments_map(_arguments), do: %{}
 
   defp account_id_from_token(token), do: ReqLLM.Providers.OpenAICodex.account_id_from_token(token)
-
-  defp openai_chunk(model, delta, finish_reason, usage \\ nil) do
-    chunk = %{
-      "id" => "chatcmpl-#{System.unique_integer([:positive])}",
-      "object" => "chat.completion.chunk",
-      "created" => System.system_time(:second),
-      "model" => model,
-      "choices" => [%{"index" => 0, "delta" => delta, "finish_reason" => finish_reason}]
-    }
-
-    if usage, do: Map.put(chunk, "usage", usage), else: chunk
-  end
-
-  defp terminal_type(:incomplete), do: "response.incomplete"
-  defp terminal_type(_reason), do: "response.completed"
-
-  defp response_status(:incomplete), do: "incomplete"
-  defp response_status(_reason), do: "completed"
-
-  defp chat_finish_reason(:tool_calls), do: "tool_calls"
-  defp chat_finish_reason(:length), do: "length"
-  defp chat_finish_reason(:incomplete), do: "length"
-  defp chat_finish_reason(_reason), do: "stop"
 
   defp maybe_put(list, _key, nil) when is_list(list), do: list
   defp maybe_put(list, key, value) when is_list(list), do: Keyword.put(list, key, value)
