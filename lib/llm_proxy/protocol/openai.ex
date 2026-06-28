@@ -9,8 +9,8 @@ defmodule LLMProxy.Protocol.OpenAI do
 
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Usage
-  alias ReqLLM.Message
   alias ReqLLM.Message.ContentPart
+  alias ReqLLM.Provider.Defaults, as: ReqLLMDefaults
   alias ReqLLM.ToolCall
 
   @impl true
@@ -18,9 +18,12 @@ defmodule LLMProxy.Protocol.OpenAI do
 
   @spec request_body(Request.t()) :: map()
   def request_body(%Request{} = request) do
-    request.body
+    %ReqLLM.Context{messages: request.messages}
+    |> ReqLLMDefaults.encode_context_to_openai_format(request.model)
+    |> normalize_openai_messages(request.messages)
+    |> stringify_keys()
+    |> Map.merge(Map.take(request.body, ["parallel_tool_calls", "response_format"]))
     |> Map.put("model", request.model)
-    |> Map.put("messages", Enum.map(request.messages, &message_to_openai/1))
     |> maybe_put("stream", request.stream)
     |> maybe_put("tools", request.tools)
     |> maybe_put("tool_choice", request.tool_choice)
@@ -49,80 +52,94 @@ defmodule LLMProxy.Protocol.OpenAI do
     |> Usage.from_openai()
   end
 
-  defp message_to_openai(%Message{role: :system, content: content}) do
-    %{"role" => "system", "content" => content_to_openai(content)}
+  defp normalize_openai_messages(%{messages: encoded_messages} = body, source_messages) do
+    messages =
+      encoded_messages
+      |> Enum.zip(source_messages)
+      |> Enum.map(fn {encoded, source} -> normalize_openai_message(encoded, source) end)
+
+    %{body | messages: messages}
   end
 
-  defp message_to_openai(%Message{role: :user, content: content}) do
-    %{"role" => "user", "content" => content_to_openai(content)}
+  defp normalize_openai_message(encoded, source) do
+    encoded
+    |> normalize_tool_calls(source)
+    |> normalize_content(source.content)
   end
 
-  defp message_to_openai(%Message{role: :assistant, content: content, tool_calls: tool_calls}) do
-    %{"role" => "assistant", "content" => content_to_openai(content)}
-    |> maybe_put_tool_calls(tool_calls)
+  defp normalize_tool_calls(encoded, %{tool_calls: tool_calls}) when is_list(tool_calls) do
+    Map.put(encoded, :tool_calls, Enum.map(tool_calls, &openai_tool_call/1))
   end
 
-  defp message_to_openai(%Message{role: :tool, content: content, tool_call_id: id}) do
-    %{"role" => "tool", "tool_call_id" => id, "content" => text_content(content)}
-  end
+  defp normalize_tool_calls(encoded, _source), do: encoded
 
-  defp content_to_openai([]), do: ""
-  defp content_to_openai([%ContentPart{type: :text, text: text}]), do: text || ""
-
-  defp content_to_openai(content) do
-    Enum.map(content, fn
-      %ContentPart{type: :text, text: text} ->
-        %{"type" => "text", "text" => text || ""}
-
-      %ContentPart{type: :image_url, url: url, metadata: metadata} ->
-        %{"type" => "image_url", "image_url" => image_url_payload(url, metadata)}
-
-      %ContentPart{type: :image, data: data, media_type: media_type} ->
-        %{"type" => "image_url", "image_url" => %{"url" => data_url(media_type, data)}}
-
-      %ContentPart{type: :file, metadata: %{"file_id" => file_id}} ->
-        %{"type" => "file", "file" => %{"file_id" => file_id}}
-
-      %ContentPart{type: :file, filename: filename, data: data} ->
-        %{"type" => "file", "file" => %{"filename" => filename, "file_data" => data}}
-
-      %ContentPart{type: :thinking, text: text} ->
-        %{"type" => "text", "text" => text || ""}
-    end)
-  end
-
-  defp image_url_payload(url, metadata) do
-    %{"url" => url}
-    |> maybe_put("detail", metadata["detail"])
-  end
-
-  defp data_url(media_type, data), do: "data:#{media_type};base64,#{data}"
-
-  defp text_content(content), do: Enum.map_join(content, "\n", &(&1.text || ""))
-
-  defp maybe_put(map, _key, nil), do: map
-  defp maybe_put(map, key, value), do: Map.put(map, key, value)
-
-  defp maybe_put_tool_calls(message, nil), do: message
-  defp maybe_put_tool_calls(message, []), do: message
-
-  defp maybe_put_tool_calls(message, tool_calls) do
-    Map.put(message, "tool_calls", Enum.map(tool_calls, &tool_call_to_openai/1))
-  end
-
-  defp tool_call_to_openai(%ToolCall{id: id, type: type, function: function}) do
+  defp openai_tool_call(%ToolCall{id: id, type: type, function: function}) do
     %{
-      "id" => id,
-      "type" => type,
-      "function" => %{
-        "name" => function.name,
-        "arguments" => function.arguments
+      id: id,
+      type: type,
+      function: %{
+        name: function.name,
+        arguments: function.arguments
       }
     }
   end
 
-  defp tool_call_to_openai(%{"function" => _function} = tool_call), do: tool_call
-  defp tool_call_to_openai(tool_call), do: tool_call
+  defp openai_tool_call(tool_call), do: tool_call
+
+  defp normalize_content(encoded, source_content) when is_list(source_content) do
+    case {Map.get(encoded, :content), source_content} do
+      {encoded_content, source_content} when is_list(encoded_content) ->
+        Map.put(encoded, :content, normalize_content_parts(encoded_content, source_content))
+
+      {"", [%ContentPart{type: :file, metadata: %{"file_id" => _file_id}}]} ->
+        Map.put(encoded, :content, normalize_content_parts([], source_content))
+
+      _other ->
+        encoded
+    end
+  end
+
+  defp normalize_content(encoded, _source_content), do: encoded
+
+  defp normalize_content_parts(encoded_parts, source_parts) do
+    source_parts
+    |> zip_longest(encoded_parts)
+    |> Enum.flat_map(fn
+      {%ContentPart{type: :file, metadata: %{"file_id" => file_id}}, _encoded_part} ->
+        [%{type: "file", file: %{file_id: file_id}}]
+
+      {%ContentPart{type: :image_url, metadata: metadata}, %{image_url: image_url} = encoded_part} ->
+        [%{encoded_part | image_url: maybe_put(image_url, :detail, metadata["detail"])}]
+
+      {_source_part, nil} ->
+        []
+
+      {_source_part, encoded_part} ->
+        [encoded_part]
+    end)
+  end
+
+  defp zip_longest([], []), do: []
+  defp zip_longest([left | left_rest], []), do: [{left, nil} | zip_longest(left_rest, [])]
+  defp zip_longest([], [right | right_rest]), do: [{nil, right} | zip_longest([], right_rest)]
+
+  defp zip_longest([left | left_rest], [right | right_rest]) do
+    [{left, right} | zip_longest(left_rest, right_rest)]
+  end
+
+  defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
+
+  defp stringify_keys(value) when is_map(value) do
+    Map.new(value, fn {key, nested} -> {string_key(key), stringify_keys(nested)} end)
+  end
+
+  defp stringify_keys(value), do: value
+
+  defp string_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp string_key(key), do: key
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp anthropic_stream_event(%{"type" => "message_start", "message" => message}, model) do
     chunk(message["id"], model, %{"role" => "assistant"})
