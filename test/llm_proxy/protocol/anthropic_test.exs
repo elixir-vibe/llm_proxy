@@ -32,7 +32,7 @@ defmodule LLMProxy.Protocol.AnthropicTest do
 
       result = body |> request() |> Anthropic.request_body()
 
-      assert [%{"type" => "text", "text" => "You are helpful"}] = result["system"]
+      assert result["system"] == "You are helpful"
       assert [%{"role" => "user", "content" => "Hi"}] = result["messages"]
     end
 

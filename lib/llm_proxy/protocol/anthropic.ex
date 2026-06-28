@@ -10,8 +10,8 @@ defmodule LLMProxy.Protocol.Anthropic do
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Usage
   alias ReqLLM.Message
-  alias ReqLLM.Message.ContentPart
-  alias ReqLLM.ToolCall
+  alias ReqLLM.Message.{ContentPart, ReasoningDetails}
+  alias ReqLLM.Providers.Anthropic.Context, as: AnthropicContext
 
   @impl true
   def protocol, do: :anthropic
@@ -31,16 +31,13 @@ defmodule LLMProxy.Protocol.Anthropic do
 
   @spec request_body(Request.t(), keyword()) :: map()
   def request_body(%Request{} = request, opts \\ []) do
-    {system_messages, messages} = Enum.split_with(request.messages, &(&1.role == :system))
+    messages = prepare_anthropic_messages(request.messages)
 
-    base = %{
-      "model" => request.model,
-      "messages" => Enum.map(messages, &message_to_anthropic/1),
-      "max_tokens" => request.max_tokens || conversion_max_tokens(opts)
-    }
-
-    base
-    |> maybe_put_system_messages(system_messages)
+    %ReqLLM.Context{messages: messages}
+    |> AnthropicContext.encode_request(%{model: request.model})
+    |> restore_redacted_thinking(request.messages)
+    |> stringify_keys()
+    |> Map.put("max_tokens", request.max_tokens || conversion_max_tokens(opts))
     |> maybe_put_tools(request.tools)
     |> maybe_put("temperature", request.temperature)
     |> maybe_put("top_p", request.top_p)
@@ -56,65 +53,104 @@ defmodule LLMProxy.Protocol.Anthropic do
     end)
   end
 
-  defp message_to_anthropic(%Message{role: :user, content: content}) do
-    %{"role" => "user", "content" => content_to_anthropic(content)}
+  defp prepare_anthropic_messages(messages) do
+    Enum.map(messages, &prepare_anthropic_message/1)
   end
 
-  defp message_to_anthropic(%Message{role: :assistant, content: content, tool_calls: tool_calls}) do
-    %{"role" => "assistant", "content" => content_blocks(content) ++ tool_call_blocks(tool_calls)}
-  end
+  defp prepare_anthropic_message(%Message{role: :assistant, content: content} = message) do
+    {content, reasoning_details} = extract_reasoning_details(content)
 
-  defp message_to_anthropic(%Message{role: :tool, content: content, tool_call_id: id}) do
     %{
-      "role" => "user",
-      "content" => [
-        %{"type" => "tool_result", "tool_use_id" => id, "content" => text_content(content)}
-      ]
+      message
+      | content: content,
+        reasoning_details: append_reasoning_details(message.reasoning_details, reasoning_details)
     }
   end
 
-  defp content_to_anthropic([%ContentPart{type: :text, text: text}]), do: text || ""
-  defp content_to_anthropic(content), do: content_blocks(content)
+  defp prepare_anthropic_message(%Message{} = message), do: message
 
-  defp content_blocks(content) do
-    Enum.map(content, fn
-      %ContentPart{type: :text, text: text} ->
-        %{"type" => "text", "text" => text || ""}
+  defp extract_reasoning_details(content) do
+    content
+    |> Enum.with_index()
+    |> Enum.reduce({[], []}, fn
+      {%ContentPart{type: :thinking, metadata: %{"redacted" => true}}, _index}, acc ->
+        acc
 
-      %ContentPart{type: :image_url, url: url} ->
-        %{"type" => "image", "source" => %{"type" => "url", "url" => url}}
-
-      %ContentPart{type: :thinking, metadata: %{"redacted" => true, "data" => data}} ->
-        %{"type" => "redacted_thinking", "data" => data}
-
-      %ContentPart{type: :thinking, text: text, metadata: metadata} ->
-        %{"type" => "thinking", "thinking" => text || ""}
-        |> maybe_put("signature", metadata["signature"])
-
-      %ContentPart{type: :image, data: data, media_type: media_type} ->
-        %{
-          "type" => "image",
-          "source" => %{"type" => "base64", "media_type" => media_type, "data" => data}
+      {%ContentPart{type: :thinking, text: text, metadata: metadata}, index},
+      {content_acc, detail_acc} ->
+        detail = %ReasoningDetails{
+          text: text || "",
+          signature: metadata["signature"],
+          provider: :anthropic,
+          index: index
         }
+
+        {content_acc, [detail | detail_acc]}
+
+      {part, _index}, {content_acc, detail_acc} ->
+        {[part | content_acc], detail_acc}
+    end)
+    |> then(fn {content, details} -> {Enum.reverse(content), Enum.reverse(details)} end)
+  end
+
+  defp append_reasoning_details(nil, []), do: nil
+  defp append_reasoning_details(nil, details), do: details
+  defp append_reasoning_details(existing, []), do: existing
+  defp append_reasoning_details(existing, details), do: existing ++ details
+
+  defp restore_redacted_thinking(body, messages) do
+    redacted_by_index = redacted_thinking_by_message_index(messages)
+
+    update_in(body, [:messages], fn encoded_messages ->
+      encoded_messages
+      |> List.wrap()
+      |> Enum.with_index()
+      |> Enum.map(fn {message, index} ->
+        restore_message_redacted_thinking(message, redacted_by_index[index])
+      end)
     end)
   end
 
-  defp tool_call_blocks(nil), do: []
-  defp tool_call_blocks([]), do: []
-  defp tool_call_blocks(tool_calls), do: Enum.map(tool_calls, &tool_call_block/1)
-
-  defp tool_call_block(%ToolCall{id: id, function: %{name: name, arguments: arguments}}) do
-    %{"type" => "tool_use", "id" => id, "name" => name, "input" => parse_arguments(arguments)}
+  defp redacted_thinking_by_message_index(messages) do
+    messages
+    |> Enum.reject(&(&1.role == :system))
+    |> Enum.with_index()
+    |> Map.new(fn {%Message{} = message, index} -> {index, redacted_thinking_blocks(message)} end)
+    |> Map.reject(fn {_index, blocks} -> blocks == [] end)
   end
 
-  defp text_content(content), do: Enum.map_join(content, "\n", &(&1.text || ""))
+  defp redacted_thinking_blocks(%Message{role: :assistant, content: content}) do
+    Enum.flat_map(content, fn
+      %ContentPart{type: :thinking, metadata: %{"redacted" => true, "data" => data}} ->
+        [%{type: "redacted_thinking", data: data}]
 
-  defp maybe_put_system_messages(body, []), do: body
-
-  defp maybe_put_system_messages(body, system_messages) do
-    system = Enum.flat_map(system_messages, &content_blocks(&1.content))
-    Map.put(body, "system", system)
+      _part ->
+        []
+    end)
   end
+
+  defp redacted_thinking_blocks(%Message{}), do: []
+
+  defp restore_message_redacted_thinking(message, nil), do: message
+
+  defp restore_message_redacted_thinking(%{content: content} = message, redacted_blocks) do
+    Map.put(message, :content, content_blocks(content) ++ redacted_blocks)
+  end
+
+  defp content_blocks(content) when is_list(content), do: content
+  defp content_blocks(""), do: []
+  defp content_blocks(content) when is_binary(content), do: [%{type: "text", text: content}]
+
+  defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
+
+  defp stringify_keys(value) when is_map(value) do
+    Map.new(value, fn {key, nested} -> {string_key(key), stringify_keys(nested)} end)
+  end
+
+  defp stringify_keys(value), do: value
+
+  defp string_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp string_key(key), do: key
 
   defp build_assistant_text_blocks(nil), do: []
   defp build_assistant_text_blocks(""), do: []
