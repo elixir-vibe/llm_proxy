@@ -20,9 +20,9 @@ defmodule LLMProxy.Storage.MigrationsTest do
   end
 
   test "accepts supported repo adapters" do
-    assert Migrations.migrator(repo: PostgresRepo) == LLMProxy.Storage.Migrations.Schema
-    assert Migrations.migrator(repo: SQLiteRepo) == LLMProxy.Storage.Migrations.Schema
-    assert Migrations.migrator(repo: MyXQLRepo) == LLMProxy.Storage.Migrations.Schema
-    assert Migrations.migrator(repo: QuackDBRepo) == LLMProxy.Storage.Migrations.Schema
+    assert Migrations.migrator(repo: PostgresRepo) == Migrations
+    assert Migrations.migrator(repo: SQLiteRepo) == Migrations
+    assert Migrations.migrator(repo: MyXQLRepo) == Migrations
+    assert Migrations.migrator(repo: QuackDBRepo) == Migrations
   end
 end
