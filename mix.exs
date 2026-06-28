@@ -14,7 +14,6 @@ defmodule LLMProxy.MixProject do
       test_coverage: [
         summary: [threshold: 85],
         ignore_modules: [
-          Mix.Tasks.FetchModels,
           LLMProxy.HTTP,
           LLMProxy.Providers.Anthropic,
           LLMProxy.Providers.Behaviour,
@@ -85,7 +84,7 @@ defmodule LLMProxy.MixProject do
 
   defp aliases do
     [
-      setup: ["deps.get", "fetch_models", "ecto.setup"],
+      setup: ["deps.get", "ecto.setup"],
       "ecto.setup": ["ecto.create", "ecto.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],

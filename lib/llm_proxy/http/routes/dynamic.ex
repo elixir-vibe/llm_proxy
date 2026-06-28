@@ -2,10 +2,10 @@ defmodule LLMProxy.HTTP.Routes.Dynamic do
   @moduledoc """
   Registry for dynamically registered routes from optional packages.
 
-  Private repo registers its routes at startup:
+  Optional packages can register additional routes at startup:
 
-      LLMProxy.HTTP.Routes.Dynamic.register("/v1/messages", LLMProxyPrivate.Routes.Messages)
-      LLMProxy.HTTP.Routes.Dynamic.register("/v1/responses", LLMProxyPrivate.Routes.Responses)
+      LLMProxy.HTTP.Routes.Dynamic.register("/private/messages", LLMProxyPrivate.Routes.Messages)
+      LLMProxy.HTTP.Routes.Dynamic.register("/private/responses", LLMProxyPrivate.Routes.Responses)
   """
 
   @registry_key :llm_proxy_dynamic_routes

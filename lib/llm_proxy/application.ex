@@ -5,7 +5,6 @@ defmodule LLMProxy.Application do
 
   require Logger
 
-  alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Storage.Repo
 
@@ -14,7 +13,6 @@ defmodule LLMProxy.Application do
     setup_opentelemetry()
 
     Registry.init()
-    Dynamic.init()
     LLMProxy.Catalog.init()
     LLMProxy.Pricing.init()
     Registry.register(LLMProxy.Providers.OpenRouter)
@@ -22,11 +20,6 @@ defmodule LLMProxy.Application do
     Registry.register(LLMProxy.Providers.OpenAI)
     Registry.register(LLMProxy.Providers.OpenAICodex)
     ReqLLM.Providers.register(LLMProxy.Provider)
-
-    Dynamic.register("/v1/messages", LLMProxy.HTTP.Routes.MessageEndpoint)
-    Dynamic.register("/messages", LLMProxy.HTTP.Routes.MessageEndpoint)
-    Dynamic.register("/v1/responses", LLMProxy.HTTP.Routes.ResponseEndpoint)
-    Dynamic.register("/responses", LLMProxy.HTTP.Routes.ResponseEndpoint)
 
     children =
       storage_children() ++
