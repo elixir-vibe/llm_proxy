@@ -157,33 +157,19 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @doc false
   def to_openai_chat_event(%StreamChunk{type: :content, text: text}, model)
       when is_binary(text) do
-    Event.openai_chat_delta(model, %{"content" => text}, nil)
+    Event.openai_chat_content_delta(model, text)
   end
 
   def to_openai_chat_event(%StreamChunk{type: :tool_call} = chunk, model) do
     index = Map.get(chunk.metadata, :index, 0)
     id = Map.get(chunk.metadata, :id) || "call_#{System.unique_integer([:positive])}"
 
-    delta = %{
-      "tool_calls" => [
-        %{
-          "index" => index,
-          "id" => id,
-          "type" => "function",
-          "function" => %{
-            "name" => chunk.name,
-            "arguments" => Jason.encode!(chunk.arguments || %{})
-          }
-        }
-      ]
-    }
-
-    Event.openai_chat_delta(model, delta, nil)
+    Event.openai_chat_tool_call_delta(index, id, chunk.name, chunk.arguments || %{}, model)
   end
 
   def to_openai_chat_event(%StreamChunk{type: :meta, metadata: metadata}, model) do
     if metadata[:terminal?] do
-      Event.openai_chat_delta(model, %{}, metadata[:finish_reason], metadata[:usage])
+      Event.openai_chat_terminal(model, metadata[:finish_reason], metadata[:usage])
     end
   end
 

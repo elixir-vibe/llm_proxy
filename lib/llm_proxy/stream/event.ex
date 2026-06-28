@@ -65,6 +65,40 @@ defmodule LLMProxy.Stream.Event do
     )
   end
 
+  @spec openai_chat_content_delta(String.t(), String.t()) :: t()
+  def openai_chat_content_delta(model, text) when is_binary(model) and is_binary(text) do
+    openai_chat_delta(model, %{"content" => text}, nil)
+  end
+
+  @spec openai_chat_tool_call_delta(non_neg_integer(), String.t(), String.t(), map(), String.t()) ::
+          t()
+  def openai_chat_tool_call_delta(index, id, name, arguments, model)
+      when is_integer(index) and is_binary(id) and is_binary(name) and is_map(arguments) and
+             is_binary(model) do
+    openai_chat_delta(
+      model,
+      %{
+        "tool_calls" => [
+          %{
+            "index" => index,
+            "id" => id,
+            "type" => "function",
+            "function" => %{
+              "name" => name,
+              "arguments" => Jason.encode!(arguments)
+            }
+          }
+        ]
+      },
+      nil
+    )
+  end
+
+  @spec openai_chat_terminal(String.t(), atom() | nil, map() | nil) :: t()
+  def openai_chat_terminal(model, finish_reason, usage) when is_binary(model) do
+    openai_chat_delta(model, %{}, finish_reason, usage)
+  end
+
   @spec openai_chat_delta(String.t(), map(), atom() | nil, map() | nil) :: t()
   def openai_chat_delta(model, delta, finish_reason, usage \\ nil)
       when is_binary(model) and is_map(delta) do

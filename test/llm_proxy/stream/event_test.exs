@@ -24,6 +24,15 @@ defmodule LLMProxy.Stream.EventTest do
     assert event.usage.output_tokens == 3
   end
 
+  test "builds OpenAI chat tool-call delta events" do
+    event = Event.openai_chat_tool_call_delta(0, "call_1", "lookup", %{id: 1}, "model")
+
+    assert [choice] = event.data["choices"]
+    assert [tool_call] = choice["delta"]["tool_calls"]
+    assert tool_call["id"] == "call_1"
+    assert tool_call["function"] == %{"name" => "lookup", "arguments" => ~s({"id":1})}
+  end
+
   test "builds OpenAI chat delta events with usage" do
     event =
       Event.openai_chat_delta("model", %{}, :incomplete, %{input_tokens: 2, output_tokens: 3})
