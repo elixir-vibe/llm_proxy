@@ -6,7 +6,6 @@ defmodule LLMProxy.Providers.OpenAICompatible do
 
   alias LLMProxy.Providers.{
     OpenAIStream,
-    ProviderError,
     ResponseHandler,
     Result,
     SSE,
@@ -37,10 +36,10 @@ defmodule LLMProxy.Providers.OpenAICompatible do
           {:ok, Result.stream(stream, token)}
 
         {:ok, response} ->
-          ProviderError.handle_response(token, response)
+          ResponseHandler.handle_response(token, response)
 
         {:error, exception} ->
-          ProviderError.handle_exception(exception)
+          ResponseHandler.handle_exception(exception)
       end
     end
   end

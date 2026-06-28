@@ -3,9 +3,18 @@ defmodule LLMProxy.HTTP.Routes.Setup do
   use Plug.Router
 
   alias LLMProxy.Config
-  alias LLMProxy.HTTP.Routes.Setup.Params
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Storage
+
+  defmodule Auth do
+    @moduledoc """
+    Parsed setup endpoint authentication.
+    """
+
+    defstruct [:api_key]
+
+    @type t :: %__MODULE__{api_key: String.t()}
+  end
 
   plug(:match)
   plug(:dispatch)
@@ -85,14 +94,28 @@ defmodule LLMProxy.HTTP.Routes.Setup do
   defp with_auth(conn, fun) do
     conn = fetch_query_params(conn)
 
-    with {:ok, auth} <-
-           Params.parse_auth(conn.query_params, get_req_header(conn, "authorization")),
+    with {:ok, %Auth{} = auth} <-
+           parse_auth(conn.query_params, get_req_header(conn, "authorization")),
          api_key when not is_nil(api_key) <- Storage.find_key(auth.api_key) do
       fun.(auth.api_key, api_key)
     else
       _ -> send_json(conn, 401, %{error: "Invalid API key"})
     end
   end
+
+  defp parse_auth(query_params, auth_headers) do
+    key = query_params["key"] || bearer_token(auth_headers)
+
+    if is_binary(key) and key != "" do
+      {:ok, %Auth{api_key: key}}
+    else
+      {:error, "Invalid API key"}
+    end
+  end
+
+  defp bearer_token(["Bearer " <> token | _]), do: token
+  defp bearer_token([_ | rest]), do: bearer_token(rest)
+  defp bearer_token([]), do: nil
 
   defp allowed_models(api_key) do
     Registry.all_models()
