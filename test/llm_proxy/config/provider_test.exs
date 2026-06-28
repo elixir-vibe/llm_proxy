@@ -38,6 +38,23 @@ defmodule LLMProxy.Config.ProviderTest do
              Provider.init([])
   end
 
+  test "load/2 resolves init system path from environment" do
+    path = tmp_path("env-config.toml")
+    env = "LLM_PROXY_CONFIG_TOML"
+
+    File.write!(path, """
+    [[models]]
+    name = "codex"
+    """)
+
+    System.put_env(env, path)
+
+    assert [llm_proxy: [models: [%{name: "codex", routes: []}]]] =
+             Provider.load([], Provider.init([]))
+  after
+    System.delete_env("LLM_PROXY_CONFIG_TOML")
+  end
+
   defp tmp_path(name) do
     dir =
       Path.join(

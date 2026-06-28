@@ -22,7 +22,7 @@ defmodule LLMProxy.Config.Provider do
   def load(config, opts) when is_list(opts) do
     {:ok, _apps} = Application.ensure_all_started(:toml)
 
-    path = opts |> Keyword.fetch!(:path) |> Config.Provider.resolve_config_path!()
+    path = opts |> Keyword.fetch!(:path) |> resolve_path()
 
     if File.regular?(path) do
       Config.Reader.merge(config, llm_proxy: load_toml!(path))
@@ -30,6 +30,12 @@ defmodule LLMProxy.Config.Provider do
       config
     end
   end
+
+  defp resolve_path({:system, env, default}) do
+    System.get_env(env, default)
+  end
+
+  defp resolve_path(path), do: Config.Provider.resolve_config_path!(path)
 
   defp load_toml!(path) do
     case LLMProxy.Config.TOML.decode_file(path) do
