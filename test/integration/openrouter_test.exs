@@ -7,8 +7,8 @@ defmodule LLMProxy.Integration.OpenRouterTest do
   alias Ecto.Adapters.SQL.Sandbox
   alias LLMProxy.Providers.{OpenRouter, Result}
   alias LLMProxy.Router
-  alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
   @moduletag :integration

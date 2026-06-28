@@ -9,6 +9,8 @@ defmodule LLMProxy.Config.Provider do
 
   @behaviour Config.Provider
 
+  alias LLMProxy.Config.TOML
+
   @default_path "/etc/llm-proxy/config.toml"
 
   @type state :: [path: Config.Provider.config_path()]
@@ -38,7 +40,7 @@ defmodule LLMProxy.Config.Provider do
   defp resolve_path(path), do: Config.Provider.resolve_config_path!(path)
 
   defp load_toml!(path) do
-    case LLMProxy.Config.TOML.decode_file(path) do
+    case TOML.decode_file(path) do
       {:ok, config} ->
         config
 

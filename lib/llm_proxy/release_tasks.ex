@@ -6,6 +6,8 @@ defmodule LLMProxy.ReleaseTasks do
   by systemd jobs or operators. They avoid Mix so they work from an OTP release.
   """
 
+  alias LLMProxy.Storage.Repo
+
   @doc "Runs all pending Ecto migrations for the configured LLMProxy repo."
   @spec migrate() :: :ok
   def migrate do
@@ -25,7 +27,7 @@ defmodule LLMProxy.ReleaseTasks do
   end
 
   defp checkpoint_if_quackdb(repo) do
-    if LLMProxy.Storage.Repo.adapter() == Ecto.Adapters.QuackDB do
+    if Repo.adapter() == Ecto.Adapters.QuackDB do
       repo.query!("CHECKPOINT")
     end
 
@@ -33,20 +35,24 @@ defmodule LLMProxy.ReleaseTasks do
   end
 
   defp with_quackdb_server(fun) do
-    if LLMProxy.Storage.Repo.adapter() == Ecto.Adapters.QuackDB do
-      case QuackDB.Server.start_link(LLMProxy.Config.quackdb_server_options()) do
-        {:ok, pid} ->
-          try do
-            fun.()
-          after
-            if Process.alive?(pid), do: GenServer.stop(pid)
-          end
-
-        {:error, _reason} ->
-          fun.()
-      end
+    if Repo.adapter() == Ecto.Adapters.QuackDB do
+      run_with_quackdb_server(fun)
     else
       fun.()
+    end
+  end
+
+  defp run_with_quackdb_server(fun) do
+    case QuackDB.Server.start_link(LLMProxy.Config.quackdb_server_options()) do
+      {:ok, pid} ->
+        try do
+          fun.()
+        after
+          if Process.alive?(pid), do: GenServer.stop(pid)
+        end
+
+      {:error, _reason} ->
+        fun.()
     end
   end
 end

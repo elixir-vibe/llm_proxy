@@ -8,7 +8,7 @@ defmodule LLMProxy.CatalogTest do
 
   defmodule Provider do
     def name, do: "catalog-provider"
-    def models, do: ["upstream-model", "second-upstream-model"]
+    def models, do: ["primary", "upstream-model", "second-upstream-model"]
   end
 
   setup do
@@ -17,6 +17,8 @@ defmodule LLMProxy.CatalogTest do
     Registry.register(Provider)
 
     on_exit(fn ->
+      Application.delete_env(:llm_proxy, :fallbacks)
+      Application.delete_env(:llm_proxy, :max_retries)
       Catalog.load([])
       RoundRobin.reset()
     end)
@@ -119,6 +121,20 @@ defmodule LLMProxy.CatalogTest do
               %Attempt{provider: Anthropic, model: "claude-3-haiku-20240307"},
               %Attempt{provider: OpenAI, model: "gpt-4o"}
             ]} = Registry.resolve_attempts("cheap")
+  end
+
+  test "registry applies max_retries to configured fallback attempts" do
+    Application.put_env(:llm_proxy, :fallbacks, %{
+      "primary" => ["upstream-model", "second-upstream-model"]
+    })
+
+    Application.put_env(:llm_proxy, :max_retries, 1)
+
+    assert {:ok,
+            [
+              %Attempt{provider: Provider, model: "primary"},
+              %Attempt{provider: Provider, model: "upstream-model"}
+            ]} = Registry.resolve_attempts("primary")
   end
 
   test "all models includes visible aliases and hides hidden aliases" do

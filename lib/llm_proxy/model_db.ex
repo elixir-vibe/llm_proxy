@@ -1,6 +1,17 @@
 defmodule LLMProxy.ModelDB do
   @moduledoc false
 
+  alias LLMProxy.Pricing.Rates
+  alias LLMProxy.Providers.{Anthropic, OpenAI, OpenAICodex, OpenRouter}
+
+  @dialyzer {:nowarn_function,
+             [
+               provider_model_ids: 1,
+               find_model: 2,
+               find_model_without_provider: 1,
+               find_model_in_known_providers: 1
+             ]}
+
   @known_providers [:openai, :openai_codex, :anthropic, :openrouter]
 
   @spec provider_id(module() | atom() | nil) :: atom() | nil
@@ -9,10 +20,10 @@ defmodule LLMProxy.ModelDB do
   def provider_id(:openai_codex), do: :openai_codex
   def provider_id(:anthropic), do: :anthropic
   def provider_id(:openrouter), do: :openrouter
-  def provider_id(LLMProxy.Providers.OpenAI), do: :openai
-  def provider_id(LLMProxy.Providers.OpenAICodex), do: :openai_codex
-  def provider_id(LLMProxy.Providers.Anthropic), do: :anthropic
-  def provider_id(LLMProxy.Providers.OpenRouter), do: :openrouter
+  def provider_id(OpenAI), do: :openai
+  def provider_id(OpenAICodex), do: :openai_codex
+  def provider_id(Anthropic), do: :anthropic
+  def provider_id(OpenRouter), do: :openrouter
   def provider_id(_provider), do: nil
 
   @spec provider_model_ids(atom()) :: [String.t()]
@@ -27,7 +38,7 @@ defmodule LLMProxy.ModelDB do
     _error in [ArgumentError, RuntimeError] -> []
   end
 
-  @spec pricing(String.t(), module() | atom() | nil) :: LLMProxy.Pricing.Rates.t() | nil
+  @spec pricing(String.t(), module() | atom() | nil) :: Rates.t() | nil
   def pricing(model, provider \\ nil) when is_binary(model) do
     case find_model(model, provider) do
       {:ok, llm_db_model} -> rates_from_model(llm_db_model)
@@ -64,11 +75,11 @@ defmodule LLMProxy.ModelDB do
   defp model_id(%{id: id}), do: id
 
   defp rates_from_model(%{pricing: %{components: components}}) when is_list(components) do
-    Enum.reduce(components, LLMProxy.Pricing.Rates.zero(), &put_component_rate/2)
+    Enum.reduce(components, Rates.zero(), &put_component_rate/2)
   end
 
   defp rates_from_model(%{cost: cost}) when is_map(cost) do
-    LLMProxy.Pricing.Rates.new(
+    Rates.new(
       input: cost.input || 0,
       output: cost.output || 0,
       cache_read: cost.cache_read || 0,
@@ -93,7 +104,7 @@ defmodule LLMProxy.ModelDB do
   defp put_component_rate(_component, rates), do: rates
 
   defp put_rate(rates, key, %{per: per, rate: rate}) when is_number(per) and is_number(rate) do
-    LLMProxy.Pricing.Rates.put(rates, key, rate * 1_000_000 / per)
+    Rates.put(rates, key, rate * 1_000_000 / per)
   end
 
   defp put_rate(rates, _key, _component), do: rates

@@ -83,6 +83,13 @@ defmodule LLMProxy.GuardrailPipelineTest do
     def on_stream_event(event, _context), do: {:ok, event}
   end
 
+  defmodule StrictStreamGuardrail do
+    @behaviour LLMProxy.Guardrail
+
+    @impl LLMProxy.Guardrail
+    def on_stream_event(%Event{} = event, _context), do: {:ok, event}
+  end
+
   setup do
     TestSupport.checkout_repo()
     Registry.register(Provider)
@@ -112,6 +119,16 @@ defmodule LLMProxy.GuardrailPipelineTest do
              "message",
              "content"
            ]) == "redacted"
+  end
+
+  test "filtered stream chunks stop before later guardrails" do
+    Application.put_env(:llm_proxy, :guardrails, [StreamGuardrail, StrictStreamGuardrail])
+
+    assert {:ok, nil} =
+             LLMProxy.GuardrailPipeline.on_stream_event(
+               %Event{data: %{"choices" => [%{"delta" => %{"content" => "drop"}}]}},
+               %{}
+             )
   end
 
   test "on_stream_event can filter stream chunks" do

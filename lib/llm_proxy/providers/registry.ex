@@ -50,14 +50,14 @@ defmodule LLMProxy.Providers.Registry do
   def resolve_attempts(model_id) when is_binary(model_id) do
     case LLMProxy.Catalog.resolve_deployments(model_id) do
       {:ok, deployments} ->
-        {:ok, Enum.map(deployments, &Attempt.new/1) ++ get_fallbacks(model_id)}
+        {:ok, Enum.map(deployments, &Attempt.new/1) ++ retry_fallbacks(model_id)}
 
       :error ->
         model_index = :persistent_term.get(@model_index_key, %{})
 
         case Map.get(model_index, model_id) do
           nil -> :error
-          provider -> {:ok, [Attempt.new({provider, model_id}) | get_fallbacks(model_id)]}
+          provider -> {:ok, [Attempt.new({provider, model_id}) | retry_fallbacks(model_id)]}
         end
     end
   end
@@ -75,6 +75,12 @@ defmodule LLMProxy.Providers.Registry do
         {:ok, {provider, upstream_model}} <- [resolve_model_without_fallbacks(fb_model)] do
       Attempt.new({provider, upstream_model})
     end
+  end
+
+  defp retry_fallbacks(model_id) do
+    model_id
+    |> get_fallbacks()
+    |> Enum.take(LLMProxy.Config.max_retries())
   end
 
   defp resolve_model_without_fallbacks(model_id) do

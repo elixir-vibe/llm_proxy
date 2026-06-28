@@ -7,6 +7,7 @@ defmodule LLMProxy.Application do
 
   alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.Providers.Registry
+  alias LLMProxy.Storage.Repo
 
   @impl true
   def start(_type, _args) do
@@ -45,15 +46,15 @@ defmodule LLMProxy.Application do
   end
 
   defp storage_children do
-    if LLMProxy.Storage.Repo.bundled?() do
-      quackdb_server_children() ++ [LLMProxy.Storage.Repo.configured()]
+    if Repo.bundled?() do
+      quackdb_server_children() ++ [Repo.configured()]
     else
       []
     end
   end
 
   defp quackdb_server_children do
-    if LLMProxy.Storage.Repo.adapter() == Ecto.Adapters.QuackDB do
+    if Repo.adapter() == Ecto.Adapters.QuackDB do
       [{QuackDB.Server, LLMProxy.Config.quackdb_server_options()}]
     else
       []

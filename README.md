@@ -292,7 +292,7 @@ Environment variables can be loaded from `.env` through Dotenvy.
 |---|---|
 | `PORT` | Server port in prod, default `4000` |
 | `MASTER_KEY` | Admin key |
-| `DATABASE_PATH` | SQLite database path in prod, default `./llm_proxy.db` |
+| `DATABASE_PATH` | DuckDB database path for standalone QuackDB storage in prod, default `./llm_proxy.duckdb` |
 | `PUBLIC_URL` | Public base URL used by setup helpers and provider headers |
 | `OPENAI_API_KEYS` | Comma-separated OpenAI API keys |
 | `OPENAI_CODEX_TOKENS` | Comma-separated ChatGPT/OpenAI OAuth access tokens for Codex subscription backend |

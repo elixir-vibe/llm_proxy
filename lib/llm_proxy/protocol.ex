@@ -8,7 +8,7 @@ defmodule LLMProxy.Protocol do
   - Handle streaming event conversion
   """
 
-  alias LLMProxy.Protocol.Request
+  alias LLMProxy.Protocol.{Anthropic, OpenAI, Request}
 
   @type protocol :: :openai | :anthropic
 
@@ -27,18 +27,31 @@ defmodule LLMProxy.Protocol do
 
     case provider_protocol(provider) do
       :anthropic ->
-        LLMProxy.Protocol.Anthropic.request_body(
+        Anthropic.request_body(
           request,
           max_tokens: LLMProxy.Config.provider_conversion_default("anthropic", :max_tokens)
         )
 
       :openai ->
-        LLMProxy.Protocol.OpenAI.request_body(request)
+        OpenAI.request_body(request)
     end
   end
 
-  def get_module(:openai), do: LLMProxy.Protocol.OpenAI
-  def get_module(:anthropic), do: LLMProxy.Protocol.Anthropic
+  def get_module(:openai), do: OpenAI
+  def get_module(:anthropic), do: Anthropic
+
+  @doc false
+  @spec stringify_keys(term()) :: term()
+  def stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
+
+  def stringify_keys(value) when is_map(value) do
+    Map.new(value, fn {key, nested} -> {string_key(key), stringify_keys(nested)} end)
+  end
+
+  def stringify_keys(value), do: value
+
+  defp string_key(key) when is_atom(key), do: Atom.to_string(key)
+  defp string_key(key), do: key
 
   defp provider_protocol(provider) do
     if function_exported?(provider, :native_protocol, 0),

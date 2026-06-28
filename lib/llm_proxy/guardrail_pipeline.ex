@@ -29,7 +29,7 @@ defmodule LLMProxy.GuardrailPipeline do
     Enum.reduce_while(guardrails(), {:ok, value}, fn guardrail, {:ok, current} ->
       guardrail
       |> apply_guardrail(callback, current, context)
-      |> reduce_result()
+      |> reduce_result(callback)
     end)
   end
 
@@ -39,8 +39,9 @@ defmodule LLMProxy.GuardrailPipeline do
       else: {:ok, current}
   end
 
-  defp reduce_result({:ok, updated}), do: {:cont, {:ok, updated}}
-  defp reduce_result({:error, reason}), do: {:halt, {:error, reason}}
+  defp reduce_result({:ok, nil}, :on_stream_event), do: {:halt, {:ok, nil}}
+  defp reduce_result({:ok, updated}, _callback), do: {:cont, {:ok, updated}}
+  defp reduce_result({:error, reason}, _callback), do: {:halt, {:error, reason}}
 
   defp guardrails do
     :llm_proxy

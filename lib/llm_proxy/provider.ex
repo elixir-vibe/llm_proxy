@@ -22,10 +22,12 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.ReqLLM.Model
   alias LLMProxy.Response
-  alias ReqLLM.Provider.Defaults, as: ReqLLMDefaults
   alias LLMProxy.Stream.Event
   alias LLMProxy.Telemetry
   alias LLMProxy.Usage
+  alias ReqLLM.Provider.Defaults, as: ReqLLMDefaults
+
+  @dialyzer {:nowarn_function, req_llm_response: 6}
 
   @type call_error ::
           {:request, Request.Error.t()}
@@ -557,7 +559,7 @@ defmodule LLMProxy.Provider do
       | context: %ReqLLM.Context{messages: request.messages},
         usage: req_llm_usage(usage),
         provider_meta:
-          Map.merge(req_llm_response.provider_meta || %{}, %{
+          Map.merge(req_llm_response.provider_meta, %{
             provider: provider.name(),
             trace_id: trace_id
           })

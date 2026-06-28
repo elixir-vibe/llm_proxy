@@ -2,8 +2,7 @@ defmodule LLMProxy.ProtocolTest do
   use ExUnit.Case, async: true
 
   alias LLMProxy.Protocol
-  alias LLMProxy.Protocol.Request
-  alias LLMProxy.Protocol.{Anthropic, OpenAI}
+  alias LLMProxy.Protocol.{Anthropic, OpenAI, Request}
 
   test "get_module/1 resolves protocol modules" do
     assert Protocol.get_module(:openai) == OpenAI

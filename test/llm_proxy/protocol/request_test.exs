@@ -191,7 +191,7 @@ defmodule LLMProxy.Protocol.RequestTest do
     assert [%ReqLLM.Message{role: :assistant, tool_calls: [tool_call]}] = request.messages
     assert tool_call.id == "call_1"
     assert ReqLLM.ToolCall.name(tool_call) == "lookup"
-    assert ReqLLM.ToolCall.args_json(tool_call) == ~s({"id":1})
+    assert ReqLLM.ToolCall.args_json(tool_call) == "{\"id\":1}"
   end
 
   test "extracts Responses API input text" do

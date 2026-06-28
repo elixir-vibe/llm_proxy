@@ -66,6 +66,13 @@ defmodule LLMProxy.Providers.CallerTest do
       do: {:ok, Result.stream([Event.new(%{"ok" => true})], nil)}
   end
 
+  defmodule NativeBodyProvider do
+    def name, do: "native-body"
+
+    def call_native(%{"model" => "upstream-native"}, _user_id),
+      do: {:ok, Result.response(%{"ok" => true}, nil)}
+  end
+
   setup do
     LLMProxy.Providers.Registry.register(FallbackProvider)
     CircuitBreaker.reset()
@@ -145,6 +152,18 @@ defmodule LLMProxy.Providers.CallerTest do
                )
 
       assert %CircuitBreaker{state: :open, cooldown_ms: 123} = CircuitBreaker.status(attempt)
+    end
+  end
+
+  describe "native attempts" do
+    test "send the upstream attempt model in native bodies" do
+      assert {:ok, %Result{response: %{"ok" => true}, provider: NativeBodyProvider}} =
+               Caller.call_native_attempts(
+                 [%Attempt{provider: NativeBodyProvider, model: "upstream-native"}],
+                 request("public-alias"),
+                 "user",
+                 "Native API"
+               )
     end
   end
 

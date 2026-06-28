@@ -17,6 +17,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
   alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Usage
+  alias ReqLLM.Providers.OpenAICodex, as: ReqLLMOpenAICodex
   alias ReqLLM.StreamChunk
 
   @impl true
@@ -117,7 +118,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
         access_token: token.token,
         codex_originator: "pi"
       ]
-      |> maybe_put(:chatgpt_account_id, account_id_from_token(token.token))
+      |> maybe_put(:chatgpt_account_id, ReqLLMOpenAICodex.account_id_from_token(token.token))
       |> maybe_put(:openai_stream_transport, if(stream?, do: :websocket, else: :sse))
 
     [
@@ -190,7 +191,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
       {:error, reason} -> provider_error(Exception.message(reason), 502)
     end
   rescue
-    exception -> provider_error(Exception.message(exception), 502)
+    exception in [ArgumentError, RuntimeError] ->
+      provider_error(Exception.message(exception), 502)
   end
 
   defp generate(model, %ReqLLM.Context{} = context, token, stream?: true) do
@@ -201,10 +203,9 @@ defmodule LLMProxy.Providers.OpenAICodex do
       {:error, reason} -> provider_error(Exception.message(reason), 502)
     end
   rescue
-    exception -> provider_error(Exception.message(exception), 502)
+    exception in [ArgumentError, RuntimeError] ->
+      provider_error(Exception.message(exception), 502)
   end
-
-  defp account_id_from_token(token), do: ReqLLM.Providers.OpenAICodex.account_id_from_token(token)
 
   defp maybe_put(list, _key, nil) when is_list(list), do: list
   defp maybe_put(list, key, value) when is_list(list), do: Keyword.put(list, key, value)

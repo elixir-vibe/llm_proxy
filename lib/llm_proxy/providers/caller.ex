@@ -193,7 +193,7 @@ defmodule LLMProxy.Providers.Caller do
         Telemetry.emit([:routing, event, :start], attempt)
 
         attempt
-        |> invoke(function, [Request.native_body(%{request | model: attempt.model}), user_id])
+        |> invoke(function, [native_attempt_body(request, attempt.model), user_id])
         |> handle_native_result(attempt, rest, function, request, user_id, api_name)
     end
   end
@@ -288,6 +288,13 @@ defmodule LLMProxy.Providers.Caller do
        nil
      )}
     |> Result.with_attempt(attempt.provider, attempt.model)
+  end
+
+  defp native_attempt_body(%Request{} = request, model) do
+    request
+    |> Map.update!(:body, &Map.put(&1, "model", model))
+    |> Map.put(:model, model)
+    |> Request.native_body()
   end
 
   defp native_event(:stream_native), do: :native_stream_attempt

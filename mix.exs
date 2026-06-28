@@ -15,14 +15,9 @@ defmodule LLMProxy.MixProject do
         summary: [threshold: 85],
         ignore_modules: [
           Mix.Tasks.FetchModels,
-          LLMProxy.CacheBodyReader,
           LLMProxy.HTTP,
-          LLMProxy.Repo,
-          LLMProxy.Routes.Moderations,
-          LLMProxy.Routes.Setup,
           LLMProxy.Providers.Anthropic,
           LLMProxy.Providers.Behaviour,
-          LLMProxy.Providers.Helpers,
           LLMProxy.Providers.OpenAI,
           LLMProxy.Providers.OpenRouter
         ]

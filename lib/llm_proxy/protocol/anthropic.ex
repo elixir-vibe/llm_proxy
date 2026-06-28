@@ -31,7 +31,7 @@ defmodule LLMProxy.Protocol.Anthropic do
   def request_body(%Request{} = request, opts \\ []) do
     %ReqLLM.Context{messages: request.messages}
     |> AnthropicContext.encode_request(%{model: request.model})
-    |> stringify_keys()
+    |> LLMProxy.Protocol.stringify_keys()
     |> Map.put("max_tokens", request.max_tokens || conversion_max_tokens(opts))
     |> maybe_put_tools(request.tools)
     |> maybe_put("temperature", request.temperature)
@@ -47,17 +47,6 @@ defmodule LLMProxy.Protocol.Anthropic do
       LLMProxy.Config.provider_conversion_default("anthropic", :max_tokens)
     end)
   end
-
-  defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
-
-  defp stringify_keys(value) when is_map(value) do
-    Map.new(value, fn {key, nested} -> {string_key(key), stringify_keys(nested)} end)
-  end
-
-  defp stringify_keys(value), do: value
-
-  defp string_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp string_key(key), do: key
 
   defp build_assistant_text_blocks(nil), do: []
   defp build_assistant_text_blocks(""), do: []

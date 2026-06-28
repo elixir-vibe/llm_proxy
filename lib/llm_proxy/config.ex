@@ -1,6 +1,8 @@
 defmodule LLMProxy.Config do
   @moduledoc false
 
+  alias LLMProxy.Config.Catalog
+
   def master_key, do: Application.get_env(:llm_proxy, :master_key)
 
   def valid_master_key?(key) when is_binary(key) do
@@ -63,7 +65,7 @@ defmodule LLMProxy.Config do
     configured_catalog = Application.get_env(:llm_proxy, :catalog, [])
     configured_models = Application.get_env(:llm_proxy, :models, [])
 
-    LLMProxy.Config.Catalog.parse(configured_catalog, configured_models)
+    Catalog.parse(configured_catalog, configured_models)
   end
 
   def provider_config(provider) when is_atom(provider),

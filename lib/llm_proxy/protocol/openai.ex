@@ -18,7 +18,7 @@ defmodule LLMProxy.Protocol.OpenAI do
   def request_body(%Request{} = request) do
     %ReqLLM.Context{messages: request.messages}
     |> ReqLLMDefaults.encode_context_to_openai_format(request.model)
-    |> stringify_keys()
+    |> LLMProxy.Protocol.stringify_keys()
     |> Map.merge(Map.take(request.body, ["parallel_tool_calls", "response_format"]))
     |> Map.put("model", request.model)
     |> maybe_put("stream", request.stream)
@@ -48,17 +48,6 @@ defmodule LLMProxy.Protocol.OpenAI do
     |> Map.get("usage", %{})
     |> Usage.from_openai()
   end
-
-  defp stringify_keys(value) when is_list(value), do: Enum.map(value, &stringify_keys/1)
-
-  defp stringify_keys(value) when is_map(value) do
-    Map.new(value, fn {key, nested} -> {string_key(key), stringify_keys(nested)} end)
-  end
-
-  defp stringify_keys(value), do: value
-
-  defp string_key(key) when is_atom(key), do: Atom.to_string(key)
-  defp string_key(key), do: key
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)

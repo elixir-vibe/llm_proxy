@@ -1,8 +1,9 @@
 defmodule LLMProxy.ConfigTest do
   use ExUnit.Case, async: false
 
+  alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Config
-  alias LLMProxy.Providers.{Anthropic, OpenAICodex, OpenAI}
+  alias LLMProxy.Providers.{Anthropic, OpenAI, OpenAICodex}
 
   setup do
     original_providers = Application.get_env(:llm_proxy, :providers)
@@ -63,10 +64,10 @@ defmodule LLMProxy.ConfigTest do
     Application.put_env(:llm_proxy, :models, [])
 
     model =
-      LLMProxy.Catalog.Model.new!(
+      Model.new!(
         name: "strict",
         deployments: [
-          LLMProxy.Catalog.Deployment.new!(
+          Deployment.new!(
             provider: OpenAICodex,
             upstream_model: "gpt-5.3-codex-spark"
           )

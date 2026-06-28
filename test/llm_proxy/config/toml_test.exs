@@ -9,6 +9,9 @@ defmodule LLMProxy.Config.TOMLTest do
     base_url = "https://chatgpt.com/backend-api"
     oauth_tokens = "token"
 
+    [providers.anthropic.conversion_defaults]
+    max_tokens = 4096
+
     [[models]]
     name = "codex"
 
@@ -33,13 +36,14 @@ defmodule LLMProxy.Config.TOMLTest do
                 "openai-codex" => %{
                   base_url: "https://chatgpt.com/backend-api",
                   oauth_tokens: "token"
-                }
+                },
+                "anthropic" => %{conversion_defaults: %{max_tokens: 4096}}
               },
               models: [
                 %{
                   name: "codex",
                   routes: [
-                    %{to: "openai-codex", model: "gpt-5.3-codex-spark", timeout_ms: 15000}
+                    %{to: "openai-codex", model: "gpt-5.3-codex-spark", timeout_ms: 15_000}
                   ]
                 },
                 %{

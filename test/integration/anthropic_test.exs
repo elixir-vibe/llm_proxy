@@ -7,8 +7,8 @@ defmodule LLMProxy.Integration.AnthropicTest do
   alias Ecto.Adapters.SQL.Sandbox
   alias LLMProxy.Providers.{Anthropic, Result}
   alias LLMProxy.Router
-  alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
 

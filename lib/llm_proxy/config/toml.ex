@@ -80,6 +80,7 @@ defmodule LLMProxy.Config.TOML do
     "failure_threshold" => :failure_threshold,
     "hidden" => :hidden,
     "http_referer" => :http_referer,
+    "max_tokens" => :max_tokens,
     "metadata" => :metadata,
     "model" => :model,
     "name" => :name,
@@ -96,12 +97,14 @@ defmodule LLMProxy.Config.TOML do
   }
 
   defp normalize_keys(map) when is_map(map) do
-    Map.new(map, fn {key, value} -> {normalize_key(key), normalize_value(value)} end)
+    Map.new(map, fn {key, value} ->
+      normalized_key = normalize_key(key)
+      {normalized_key, normalize_value(normalized_key, value)}
+    end)
   end
 
-  defp normalize_value(value) when is_map(value), do: value
-  defp normalize_value(value) when is_list(value), do: value
-  defp normalize_value(value), do: value
+  defp normalize_value(:conversion_defaults, value) when is_map(value), do: normalize_keys(value)
+  defp normalize_value(_key, value), do: value
 
   defp normalize_model_values(%{routing: routing} = model),
     do: %{model | routing: routing_strategy!(routing)}
