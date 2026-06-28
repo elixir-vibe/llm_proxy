@@ -42,7 +42,7 @@ defmodule LLMProxy.MixProject do
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
-      {:quackdb, "~> 0.5.14"},
+      {:quackdb, "~> 0.5.15"},
       # Temporary fork until ReqLLM PR #791 is merged/released. LLMProxy relies on
       # these encoder fixes to avoid local OpenAI/Anthropic wire-format patches.
       {:req_llm,
