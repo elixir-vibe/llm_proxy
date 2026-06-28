@@ -98,7 +98,7 @@ defmodule MyAppWeb.Router do
 end
 ```
 
-Dev/test storage defaults to the bundled SQLite repo. Standalone production releases use the bundled QuackDB/DuckDB repo and supervise a local Quack server. Production requires a `QUACKDB_TOKEN` distinct from `MASTER_KEY`.
+Dev/test storage defaults to the bundled SQLite repo. Standalone production releases use the bundled QuackDB/DuckDB repo and supervise a local Quack server. QuackDB generates the local Quack protocol token at runtime and LLMProxy injects it into the bundled repo; operators do not configure a `QUACKDB_TOKEN` secret.
 
 SQLite remains an optional dependency for downstream apps that want a lightweight embedded repo in non-production hosts:
 

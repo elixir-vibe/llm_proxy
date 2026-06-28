@@ -42,7 +42,17 @@ defmodule LLMProxy.Application do
 
   defp storage_children do
     if Repo.bundled?() do
-      quackdb_server_children() ++ [Repo.configured()]
+      [
+        %{
+          id: LLMProxy.Storage.Supervisor,
+          start:
+            {Supervisor, :start_link,
+             [
+               quackdb_server_children() ++ [Repo.configured()],
+               [strategy: :rest_for_one, name: LLMProxy.Storage.Supervisor]
+             ]}
+        }
+      ]
     else
       []
     end
@@ -50,7 +60,7 @@ defmodule LLMProxy.Application do
 
   defp quackdb_server_children do
     if Repo.adapter() == Ecto.Adapters.QuackDB do
-      [{QuackDB.Server, LLMProxy.Config.quackdb_server_options()}]
+      [{LLMProxy.Storage.QuackDBServer, LLMProxy.Config.quackdb_server_options()}]
     else
       []
     end

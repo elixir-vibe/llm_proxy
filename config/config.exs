@@ -33,7 +33,6 @@ config :release_kit, :artifact,
   },
   env_secret: [
     "MASTER_KEY",
-    "QUACKDB_TOKEN",
     "ANTHROPIC_API_KEYS",
     "OPENAI_API_KEYS",
     "OPENAI_CODEX_TOKENS",

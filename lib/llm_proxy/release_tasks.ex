@@ -3,9 +3,11 @@ defmodule LLMProxy.ReleaseTasks do
   Release-safe operational tasks for standalone LLMProxy deployments.
 
   These functions are intended to be called through `bin/llm_proxy eval ...`
-  by systemd jobs or operators. They avoid Mix so they work from an OTP release.
+  by systemd jobs or operators. Release `eval` runs in a new, non-booted VM,
+  so tasks that need bundled storage start only the local dependencies they use.
   """
 
+  alias LLMProxy.Storage.QuackDBServer
   alias LLMProxy.Storage.Repo
 
   @doc "Runs all pending Ecto migrations for the configured LLMProxy repo."
@@ -36,14 +38,14 @@ defmodule LLMProxy.ReleaseTasks do
 
   defp with_quackdb_server(fun) do
     if Repo.adapter() == Ecto.Adapters.QuackDB do
-      run_with_quackdb_server(fun)
+      run_with_temporary_quackdb_server(fun)
     else
       fun.()
     end
   end
 
-  defp run_with_quackdb_server(fun) do
-    case QuackDB.Server.start_link(LLMProxy.Config.quackdb_server_options()) do
+  defp run_with_temporary_quackdb_server(fun) do
+    case QuackDBServer.start_link(LLMProxy.Config.quackdb_server_options()) do
       {:ok, pid} ->
         try do
           fun.()
