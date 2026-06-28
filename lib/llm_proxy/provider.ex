@@ -21,8 +21,8 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Providers.{Caller, Registry, Result}
   alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.ReqLLM.Model
-  alias LLMProxy.ReqLLM.ResponseAdapter
   alias LLMProxy.Response
+  alias ReqLLM.Provider.Defaults, as: ReqLLMDefaults
   alias LLMProxy.Stream.Event
   alias LLMProxy.Telemetry
   alias LLMProxy.Usage
@@ -522,16 +522,54 @@ defmodule LLMProxy.Provider do
 
     case result do
       {:ok, response} ->
-        req_llm_response = ResponseAdapter.from_response(response)
-        Req.Request.halt(req_request, Req.Response.new(status: 200, body: req_llm_response))
+        Req.Request.halt(
+          req_request,
+          Req.Response.new(status: 200, body: req_llm_response(response))
+        )
 
       {:error, reason} ->
         Req.Request.halt(
           req_request,
-          Req.Response.new(status: ResponseAdapter.error_status(reason), body: inspect(reason))
+          Req.Response.new(status: error_status(reason), body: inspect(reason))
         )
     end
   end
+
+  defp req_llm_response(%Response{} = response) do
+    model = LLMDB.Model.new!(%{id: response.model, provider: :llm_proxy})
+
+    {:ok, req_llm_response} =
+      ReqLLMDefaults.decode_response_body_openai_format(response.body, model)
+
+    %{
+      req_llm_response
+      | context: %ReqLLM.Context{messages: response.request.messages},
+        usage: req_llm_usage(response.usage),
+        provider_meta:
+          Map.merge(req_llm_response.provider_meta || %{}, %{
+            provider: response.provider.name(),
+            trace_id: response.trace_id
+          })
+    }
+  end
+
+  defp req_llm_usage(%Usage{} = usage) do
+    %{
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      cache_read_tokens: usage.cache_read_tokens,
+      cache_write_tokens: usage.cache_write_tokens,
+      total_tokens: usage.input_tokens + usage.output_tokens
+    }
+  end
+
+  defp error_status({:not_found, _}), do: 404
+  defp error_status({:permission, _}), do: 403
+  defp error_status({:missing_api_key, _}), do: 401
+  defp error_status({:invalid_api_key, _}), do: 401
+  defp error_status({:guardrail, _}), do: 403
+  defp error_status({:provider, %{status: status}}) when is_integer(status), do: status
+  defp error_status(_reason), do: 500
 
   defp req_llm_safe_rpc_meta(actor, api_key) do
     %{}
