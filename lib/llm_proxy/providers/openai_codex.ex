@@ -135,7 +135,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   def to_responses_event(%StreamChunk{type: :meta, metadata: metadata}) do
     if metadata[:terminal?] do
-      usage = responses_usage_map(metadata[:usage])
+      usage = Usage.to_responses(metadata[:usage])
 
       Event.new(
         %{
@@ -182,7 +182,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   def to_openai_chat_event(%StreamChunk{type: :meta, metadata: metadata}, model) do
     if metadata[:terminal?] do
-      usage = openai_usage_map(metadata[:usage])
+      usage = Usage.to_openai(metadata[:usage])
 
       event =
         Event.new(openai_chunk(model, %{}, chat_finish_reason(metadata[:finish_reason]), usage))
@@ -301,7 +301,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
   defp to_openai_chat_completion(%ReqLLM.Response{} = response, model) do
     text = ReqLLM.Response.text(response) || ""
     tool_calls = Enum.map(ReqLLM.Response.tool_calls(response), &to_openai_tool_call/1)
-    usage = openai_usage_map(response.usage)
+    usage = Usage.to_openai(response.usage)
 
     %{
       "id" => "chatcmpl-#{response.id}",
@@ -342,7 +342,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
       end
 
     output = output ++ Enum.map(tool_calls, &to_responses_tool_call/1)
-    usage = responses_usage_map(response.usage)
+    usage = Usage.to_responses(response.usage)
 
     %{
       "id" => response.id,
@@ -388,38 +388,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
     }
 
     if usage, do: Map.put(chunk, "usage", usage), else: chunk
-  end
-
-  defp responses_usage_map(nil),
-    do: %{"input_tokens" => 0, "output_tokens" => 0, "total_tokens" => 0}
-
-  defp responses_usage_map(usage) when is_map(usage) do
-    input = Map.get(usage, :input_tokens) || Map.get(usage, "input_tokens") || 0
-    output = Map.get(usage, :output_tokens) || Map.get(usage, "output_tokens") || 0
-    cached = Map.get(usage, :cached_tokens) || Map.get(usage, :cache_read_tokens) || 0
-
-    %{
-      "input_tokens" => input,
-      "output_tokens" => output,
-      "total_tokens" => Map.get(usage, :total_tokens) || input + output,
-      "input_tokens_details" => %{"cached_tokens" => cached}
-    }
-  end
-
-  defp openai_usage_map(nil),
-    do: %{"prompt_tokens" => 0, "completion_tokens" => 0, "total_tokens" => 0}
-
-  defp openai_usage_map(usage) when is_map(usage) do
-    input = Map.get(usage, :input_tokens) || Map.get(usage, "input_tokens") || 0
-    output = Map.get(usage, :output_tokens) || Map.get(usage, "output_tokens") || 0
-    cached = Map.get(usage, :cached_tokens) || Map.get(usage, :cache_read_tokens) || 0
-
-    %{
-      "prompt_tokens" => input,
-      "completion_tokens" => output,
-      "total_tokens" => Map.get(usage, :total_tokens) || input + output,
-      "prompt_tokens_details" => %{"cached_tokens" => cached}
-    }
   end
 
   defp terminal_type(:incomplete), do: "response.incomplete"

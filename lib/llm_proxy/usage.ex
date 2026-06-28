@@ -1,5 +1,7 @@
 defmodule LLMProxy.Usage do
-  @moduledoc false
+  @moduledoc """
+  Token usage accounting and protocol usage-map rendering.
+  """
 
   defstruct input_tokens: 0,
             output_tokens: 0,
@@ -51,6 +53,38 @@ defmodule LLMProxy.Usage do
     )
   end
 
+  @spec to_openai(map() | t() | nil) :: map()
+  def to_openai(nil), do: %{"prompt_tokens" => 0, "completion_tokens" => 0, "total_tokens" => 0}
+
+  def to_openai(usage) when is_map(usage) do
+    input = token_count(usage, :input_tokens)
+    output = token_count(usage, :output_tokens)
+    cached = token_count(usage, :cache_read_tokens, :cached_tokens)
+
+    %{
+      "prompt_tokens" => input,
+      "completion_tokens" => output,
+      "total_tokens" => Map.get(usage, :total_tokens) || input + output,
+      "prompt_tokens_details" => %{"cached_tokens" => cached}
+    }
+  end
+
+  @spec to_responses(map() | t() | nil) :: map()
+  def to_responses(nil), do: %{"input_tokens" => 0, "output_tokens" => 0, "total_tokens" => 0}
+
+  def to_responses(usage) when is_map(usage) do
+    input = token_count(usage, :input_tokens)
+    output = token_count(usage, :output_tokens)
+    cached = token_count(usage, :cache_read_tokens, :cached_tokens)
+
+    %{
+      "input_tokens" => input,
+      "output_tokens" => output,
+      "total_tokens" => Map.get(usage, :total_tokens) || input + output,
+      "input_tokens_details" => %{"cached_tokens" => cached}
+    }
+  end
+
   @spec merge_max(t(), t()) :: t()
   def merge_max(%__MODULE__{} = usage, %__MODULE__{} = event_usage) do
     %__MODULE__{
@@ -65,4 +99,11 @@ defmodule LLMProxy.Usage do
   def put_output_tokens(%__MODULE__{} = usage, output_tokens) do
     %{usage | output_tokens: output_tokens}
   end
+
+  defp token_count(usage, key, fallback_key \\ nil) do
+    Map.get(usage, key) || fallback_count(usage, fallback_key) || 0
+  end
+
+  defp fallback_count(_usage, nil), do: nil
+  defp fallback_count(usage, key), do: Map.get(usage, key)
 end

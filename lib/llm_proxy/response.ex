@@ -51,7 +51,7 @@ defmodule LLMProxy.Response do
           "finish_reason" => openai_finish_reason(response.message.finish_reason)
         }
       ],
-      "usage" => openai_usage(response.usage)
+      "usage" => Usage.to_openai(response.usage)
     }
   end
 
@@ -101,13 +101,4 @@ defmodule LLMProxy.Response do
   defp openai_finish_reason(:content_filter), do: "content_filter"
   defp openai_finish_reason(nil), do: nil
   defp openai_finish_reason(other), do: to_string(other)
-
-  defp openai_usage(%Usage{} = usage) do
-    %{
-      "prompt_tokens" => usage.input_tokens,
-      "completion_tokens" => usage.output_tokens,
-      "total_tokens" => usage.input_tokens + usage.output_tokens,
-      "prompt_tokens_details" => %{"cached_tokens" => usage.cache_read_tokens}
-    }
-  end
 end
