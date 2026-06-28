@@ -40,19 +40,46 @@ defmodule LLMProxy.Response do
 
   @spec to_openai(t()) :: map()
   def to_openai(%__MODULE__{} = response) do
+    to_openai_chat_completion(
+      response.message,
+      response.model,
+      response.message.id || "llm_proxy",
+      response.usage,
+      ""
+    )
+  end
+
+  @spec to_openai_chat_completion(
+          ReqLLM.Response.t(),
+          String.t(),
+          String.t(),
+          Usage.t() | map() | nil,
+          String.t() | nil,
+          pos_integer() | nil
+        ) :: map()
+  def to_openai_chat_completion(
+        %ReqLLM.Response{} = response,
+        model,
+        id,
+        usage,
+        empty_content,
+        created_at \\ nil
+      )
+      when is_binary(model) and is_binary(id) do
     %{
-      "id" => response.message.id || "llm_proxy",
+      "id" => id,
       "object" => "chat.completion",
-      "model" => response.model,
+      "model" => model,
       "choices" => [
         %{
           "index" => 0,
-          "message" => openai_message(response.message.message),
-          "finish_reason" => openai_finish_reason(response.message.finish_reason)
+          "message" => openai_message(response.message, empty_content),
+          "finish_reason" => openai_finish_reason(response.finish_reason)
         }
       ],
-      "usage" => Usage.to_openai(response.usage)
+      "usage" => Usage.to_openai(usage)
     }
+    |> maybe_put("created", created_at)
   end
 
   @spec put_text(t(), String.t()) :: t()
@@ -62,12 +89,18 @@ defmodule LLMProxy.Response do
     %{response | message: %{message | message: assistant}}
   end
 
-  defp openai_message(%Message{role: :assistant, content: content, tool_calls: tool_calls}) do
-    %{"role" => "assistant", "content" => text_content(content)}
+  defp openai_message(
+         %Message{role: :assistant, content: content, tool_calls: tool_calls},
+         empty_content
+       ) do
+    content = text_content(content)
+
+    %{"role" => "assistant", "content" => if(content == "", do: empty_content, else: content)}
     |> maybe_put_tool_calls(tool_calls)
   end
 
-  defp openai_message(_message), do: %{"role" => "assistant", "content" => ""}
+  defp openai_message(_message, empty_content),
+    do: %{"role" => "assistant", "content" => empty_content}
 
   defp text_content(content) when is_list(content) do
     content
@@ -99,6 +132,10 @@ defmodule LLMProxy.Response do
   defp openai_finish_reason(:length), do: "length"
   defp openai_finish_reason(:tool_calls), do: "tool_calls"
   defp openai_finish_reason(:content_filter), do: "content_filter"
+  defp openai_finish_reason(:incomplete), do: "length"
   defp openai_finish_reason(nil), do: nil
   defp openai_finish_reason(other), do: to_string(other)
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 end

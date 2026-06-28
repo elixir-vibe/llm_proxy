@@ -12,6 +12,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @behaviour LLMProxy.Providers.Behaviour
 
   alias LLMProxy.Providers.Result
+  alias LLMProxy.Response, as: ProxyResponse
   alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Usage
@@ -32,7 +33,18 @@ defmodule LLMProxy.Providers.OpenAICodex do
     with {:ok, token} <- pick_token(user_id),
          {:ok, context} <- context_from_chat_body(body),
          {:ok, response} <- generate(body["model"], context, token, stream?: false) do
-      {:ok, Result.response(to_openai_chat_completion(response, body["model"]), token)}
+      {:ok,
+       Result.response(
+         ProxyResponse.to_openai_chat_completion(
+           response,
+           body["model"],
+           "chatcmpl-#{response.id}",
+           response.usage,
+           nil,
+           System.system_time(:second)
+         ),
+         token
+       )}
     end
   end
 
@@ -298,29 +310,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
   defp arguments_map(arguments) when is_map(arguments), do: arguments
   defp arguments_map(_arguments), do: %{}
 
-  defp to_openai_chat_completion(%ReqLLM.Response{} = response, model) do
-    text = ReqLLM.Response.text(response) || ""
-    tool_calls = Enum.map(ReqLLM.Response.tool_calls(response), &to_openai_tool_call/1)
-    usage = Usage.to_openai(response.usage)
-
-    %{
-      "id" => "chatcmpl-#{response.id}",
-      "object" => "chat.completion",
-      "created" => System.system_time(:second),
-      "model" => model,
-      "choices" => [
-        %{
-          "index" => 0,
-          "message" =>
-            %{"role" => "assistant", "content" => if(text == "", do: nil, else: text)}
-            |> maybe_put("tool_calls", if(tool_calls != [], do: tool_calls)),
-          "finish_reason" => chat_finish_reason(response.finish_reason)
-        }
-      ],
-      "usage" => usage
-    }
-  end
-
   defp to_responses_response(%ReqLLM.Response{} = response, model) do
     output = []
     text = ReqLLM.Response.text(response) || ""
@@ -352,17 +341,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
       "status" => response_status(response.finish_reason),
       "output" => output,
       "usage" => usage
-    }
-  end
-
-  defp to_openai_tool_call(tool_call) do
-    %{
-      "id" => tool_call.id,
-      "type" => "function",
-      "function" => %{
-        "name" => ReqLLM.ToolCall.name(tool_call),
-        "arguments" => ReqLLM.ToolCall.args_json(tool_call)
-      }
     }
   end
 
@@ -403,8 +381,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   defp maybe_put(list, _key, nil) when is_list(list), do: list
   defp maybe_put(list, key, value) when is_list(list), do: Keyword.put(list, key, value)
-  defp maybe_put(map, _key, nil) when is_map(map), do: map
-  defp maybe_put(map, key, value) when is_map(map), do: Map.put(map, key, value)
 
   defp provider_error(message, status), do: {:error, Result.error(message, status, nil)}
 end
