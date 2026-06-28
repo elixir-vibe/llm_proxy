@@ -89,7 +89,7 @@ defmodule LLMProxy.CacheTest do
 
     assert {:ok, second} = LLMProxy.chat("hello", model: "cache-model", api_key: key)
     assert second.cache_hit
-    assert second.body == first.body
+    assert LLMProxy.Response.to_openai(second) == LLMProxy.Response.to_openai(first)
     assert Provider.calls() == 1
   end
 

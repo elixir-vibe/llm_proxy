@@ -127,7 +127,7 @@ defmodule LLMProxy.ProviderResilienceTest do
 
     assert {:ok, response} = LLMProxy.chat("hello", model: "timeout-model", api_key: key)
     assert response.model == "fast-model"
-    assert response.body["model"] == "fast-model"
+    assert LLMProxy.Response.to_openai(response)["model"] == "fast-model"
   end
 
   test "circuit breaker opens and skips unhealthy deployments" do

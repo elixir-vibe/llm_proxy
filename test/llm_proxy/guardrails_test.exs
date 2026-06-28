@@ -65,8 +65,7 @@ defmodule LLMProxy.GuardrailsTest do
 
     @impl LLMProxy.Guardrail
     def after_response(response, _context) do
-      body = put_in(response.body, ["choices", Access.at(0), "message", "content"], "redacted")
-      {:ok, %{response | body: body}}
+      {:ok, LLMProxy.Response.put_text(response, "redacted")}
     end
   end
 
@@ -106,7 +105,13 @@ defmodule LLMProxy.GuardrailsTest do
     {:ok, key, _raw_key} = Storage.create_key("guardrail-response-user")
 
     assert {:ok, response} = LLMProxy.chat("hello", model: "guardrail-model", api_key: key)
-    assert get_in(response.body, ["choices", Access.at(0), "message", "content"]) == "redacted"
+
+    assert get_in(LLMProxy.Response.to_openai(response), [
+             "choices",
+             Access.at(0),
+             "message",
+             "content"
+           ]) == "redacted"
   end
 
   test "on_stream_event can filter stream chunks" do

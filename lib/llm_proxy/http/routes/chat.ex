@@ -54,7 +54,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
            usage_metadata: Map.to_list(meta)
          ) do
       {:ok, response} ->
-        Helpers.send_json(conn, 200, response.body)
+        Helpers.send_json(conn, 200, LLMProxy.Response.to_openai(response))
 
       {:error, reason} ->
         handle_provider_error(conn, reason)

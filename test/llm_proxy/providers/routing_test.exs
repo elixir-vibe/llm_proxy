@@ -63,7 +63,7 @@ defmodule LLMProxy.Providers.RoutingTest do
     {:ok, key, _raw_key} = Storage.create_key("routing-user")
 
     assert {:ok, response} = LLMProxy.chat("hello", model: "routed-model", api_key: key)
-    assert response.body["model"] == "secondary-routing-model"
+    assert LLMProxy.Response.to_openai(response)["model"] == "secondary-routing-model"
     assert response.usage.input_tokens == 1
     assert response.usage.output_tokens == 2
   end

@@ -62,7 +62,7 @@ defmodule LLMProxy.ProviderTest do
     assert {:ok, response} =
              LLMProxy.chat("hello", model: "req-llm-provider-model", api_key: key)
 
-    assert response.body["model"] == "req-llm-provider-model"
+    assert LLMProxy.Response.to_openai(response)["model"] == "req-llm-provider-model"
     assert response.usage.input_tokens == 4
     assert response.usage.output_tokens == 3
 

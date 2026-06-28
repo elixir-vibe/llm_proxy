@@ -449,9 +449,12 @@ defmodule LLMProxy.Provider do
 
     cache_policy = CacheRuntime.policy(request, context)
 
+    openai_body = used_provider.to_openai_response(provider_body, used_model)
+
     response = %Response{
-      body: used_provider.to_openai_response(provider_body, used_model),
-      provider_body: provider_body,
+      message:
+        req_llm_response(openai_body, used_model, request, used_provider, context.trace_id, usage),
+      provider_response: provider_body,
       provider: used_provider,
       model: used_model,
       request: request,
@@ -489,7 +492,7 @@ defmodule LLMProxy.Provider do
       api_key,
       model,
       request.body,
-      response.provider_body,
+      response.provider_response,
       response.usage,
       tracking_opts
     )
@@ -535,20 +538,22 @@ defmodule LLMProxy.Provider do
     end
   end
 
-  defp req_llm_response(%Response{} = response) do
-    model = LLMDB.Model.new!(%{id: response.model, provider: :llm_proxy})
+  defp req_llm_response(%Response{message: %ReqLLM.Response{} = message}), do: message
+
+  defp req_llm_response(openai_body, model_id, request, provider, trace_id, usage) do
+    model = LLMDB.Model.new!(%{id: model_id, provider: :llm_proxy})
 
     {:ok, req_llm_response} =
-      ReqLLMDefaults.decode_response_body_openai_format(response.body, model)
+      ReqLLMDefaults.decode_response_body_openai_format(openai_body, model)
 
     %{
       req_llm_response
-      | context: %ReqLLM.Context{messages: response.request.messages},
-        usage: req_llm_usage(response.usage),
+      | context: %ReqLLM.Context{messages: request.messages},
+        usage: req_llm_usage(usage),
         provider_meta:
           Map.merge(req_llm_response.provider_meta || %{}, %{
-            provider: response.provider.name(),
-            trace_id: response.trace_id
+            provider: provider.name(),
+            trace_id: trace_id
           })
     }
   end

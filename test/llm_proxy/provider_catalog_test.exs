@@ -61,7 +61,7 @@ defmodule LLMProxy.ProviderCatalogTest do
     assert {:ok, response} =
              LLMProxy.chat("hello", model: "public-catalog-model", api_key: key)
 
-    assert response.body["model"] == "upstream-catalog-model"
+    assert LLMProxy.Response.to_openai(response)["model"] == "upstream-catalog-model"
     assert response.usage.input_tokens == 2
     assert response.usage.output_tokens == 3
   end
