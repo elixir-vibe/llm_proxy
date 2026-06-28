@@ -368,7 +368,8 @@ defmodule LLMProxy.Provider do
       })
 
     case stream_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
-      {:ok, %Result{stream: stream, provider: used_provider, model: used_model} = result} ->
+      {:ok,
+       %Result{kind: :stream, stream: stream, provider: used_provider, model: used_model} = result} ->
         context = %{context | provider: used_provider, model: used_model}
         stream = track_stream(stream, used_model, request, api_key, context, start, opts)
         {:ok, %{result | stream: stream}}
@@ -436,7 +437,12 @@ defmodule LLMProxy.Provider do
   end
 
   defp handle_provider_result(
-         %Result{response: provider_body, provider: used_provider, model: used_model},
+         %Result{
+           kind: :response,
+           response: provider_body,
+           provider: used_provider,
+           model: used_model
+         },
          request,
          api_key,
          context,

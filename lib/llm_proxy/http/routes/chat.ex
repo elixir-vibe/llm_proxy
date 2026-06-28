@@ -69,7 +69,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
            trace_id: request_id,
            usage_metadata: Map.to_list(meta)
          ) do
-      {:ok, %Result{} = result} ->
+      {:ok, %Result{kind: :stream} = result} ->
         finish_stream(conn, result)
 
       {:error, reason} ->
@@ -97,7 +97,12 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     Helpers.send_json(conn, 403, %{error: inspect(reason)})
   end
 
-  defp finish_stream(conn, %Result{stream: stream, provider: used_provider, model: used_model}) do
+  defp finish_stream(conn, %Result{
+         kind: :stream,
+         stream: stream,
+         provider: used_provider,
+         model: used_model
+       }) do
     conn = SSEWriter.start_sse(conn)
     from_protocol = provider_protocol(used_provider)
 

@@ -1,16 +1,23 @@
 defmodule LLMProxy.Providers.Result do
   @moduledoc false
 
-  defstruct response: nil,
-            stream: nil,
-            error: nil,
-            status: nil,
-            token: nil,
-            retry_after_ms: nil,
-            provider: nil,
-            model: nil
+  @type kind :: :response | :stream | :error
+
+  @enforce_keys [:kind]
+  defstruct [
+    :kind,
+    :response,
+    :stream,
+    :error,
+    :status,
+    :token,
+    :retry_after_ms,
+    :provider,
+    :model
+  ]
 
   @type t :: %__MODULE__{
+          kind: kind(),
           response: map() | nil,
           stream: Enumerable.t() | nil,
           error: String.t() | nil,
@@ -22,14 +29,21 @@ defmodule LLMProxy.Providers.Result do
         }
 
   @spec response(map(), map() | nil) :: t()
-  def response(body, token), do: %__MODULE__{response: body, token: token}
+  def response(body, token) when is_map(body),
+    do: %__MODULE__{kind: :response, response: body, token: token}
 
   @spec stream(Enumerable.t(), map() | nil) :: t()
-  def stream(stream, token), do: %__MODULE__{stream: stream, token: token}
+  def stream(stream, token), do: %__MODULE__{kind: :stream, stream: stream, token: token}
 
   @spec error(String.t(), pos_integer(), map() | nil, keyword()) :: t()
-  def error(error, status, token, opts \\ []) do
-    %__MODULE__{error: error, status: status, token: token, retry_after_ms: opts[:retry_after_ms]}
+  def error(error, status, token, opts \\ []) when is_binary(error) and is_integer(status) do
+    %__MODULE__{
+      kind: :error,
+      error: error,
+      status: status,
+      token: token,
+      retry_after_ms: opts[:retry_after_ms]
+    }
   end
 
   @spec with_attempt({:ok, t()} | {:error, t()}, module(), String.t()) ::

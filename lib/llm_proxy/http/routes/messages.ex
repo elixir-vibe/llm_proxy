@@ -54,7 +54,8 @@ defmodule LLMProxy.HTTP.Routes.Messages do
            trace_id: trace_id,
            api_name: "Messages API"
          ) do
-      {:ok, %Result{stream: stream, token: token, provider: provider, model: model}} ->
+      {:ok,
+       %Result{kind: :stream, stream: stream, token: token, provider: provider, model: model}} ->
         handle_stream(conn, provider, stream, api_key, model, token, trace_id)
 
       {:error, reason} ->
@@ -68,7 +69,7 @@ defmodule LLMProxy.HTTP.Routes.Messages do
            trace_id: trace_id,
            api_name: "Messages API"
          ) do
-      {:ok, %Result{} = result} ->
+      {:ok, %Result{kind: :response} = result} ->
         NativeResults.handle(conn, result, api_key, trace_id, native_handlers())
 
       {:error, reason} ->
