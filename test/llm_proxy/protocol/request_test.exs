@@ -163,6 +163,37 @@ defmodule LLMProxy.Protocol.RequestTest do
              request.messages
   end
 
+  test "parses Responses API function call output" do
+    assert {:ok, request} =
+             Request.parse(:openai_responses, %{
+               "input" => [
+                 %{"type" => "function_call_output", "call_id" => "call_1", "output" => "42"}
+               ]
+             })
+
+    assert [%ReqLLM.Message{role: :tool, tool_call_id: "call_1"}] = request.messages
+  end
+
+  test "parses Responses API assistant function calls" do
+    assert {:ok, request} =
+             Request.parse(:openai_responses, %{
+               "input" => [
+                 %{
+                   "type" => "function_call",
+                   "id" => "item_1",
+                   "call_id" => "call_1",
+                   "name" => "lookup",
+                   "arguments" => %{"id" => 1}
+                 }
+               ]
+             })
+
+    assert [%ReqLLM.Message{role: :assistant, tool_calls: [tool_call]}] = request.messages
+    assert tool_call.id == "call_1"
+    assert ReqLLM.ToolCall.name(tool_call) == "lookup"
+    assert ReqLLM.ToolCall.args_json(tool_call) == ~s({"id":1})
+  end
+
   test "extracts Responses API input text" do
     assert {:ok, request} =
              Request.parse(:openai_responses, %{

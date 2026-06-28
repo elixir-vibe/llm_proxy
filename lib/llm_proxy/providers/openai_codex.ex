@@ -11,12 +11,12 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @behaviour LLMProxy.Providers.Behaviour
 
+  alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.Result
   alias LLMProxy.Response, as: ProxyResponse
   alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Usage
-  alias ReqLLM.Message.ContentPart
   alias ReqLLM.StreamChunk
 
   @impl true
@@ -100,8 +100,11 @@ defmodule LLMProxy.Providers.OpenAICodex do
   def context_from_chat_body(_body), do: provider_error("Request must include messages", 400)
 
   @doc false
-  def context_from_responses_body(%{"input" => input}) when is_list(input) do
-    {:ok, ReqLLM.Context.new(Enum.flat_map(input, &responses_item_to_messages/1))}
+  def context_from_responses_body(body) when is_map(body) do
+    case Request.parse(:openai_responses, body) do
+      {:ok, %Request{messages: messages}} -> {:ok, %ReqLLM.Context{messages: messages}}
+      {:error, %Request.Error{} = error} -> provider_error(error.message, 400)
+    end
   end
 
   def context_from_responses_body(_body), do: provider_error("Request must include input", 400)
@@ -214,82 +217,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
   rescue
     exception -> provider_error(Exception.message(exception), 502)
   end
-
-  defp responses_item_to_messages(%{"type" => "function_call_output"} = item) do
-    [ReqLLM.Context.tool_result(item["call_id"] || "", item["output"] || "")]
-  end
-
-  defp responses_item_to_messages(%{"role" => "system", "content" => content}) do
-    [ReqLLM.Context.system(content_text(content))]
-  end
-
-  defp responses_item_to_messages(%{"role" => "user", "content" => content}) do
-    [ReqLLM.Context.user(content_parts(content))]
-  end
-
-  defp responses_item_to_messages(%{"role" => "assistant"} = item) do
-    content = content_parts(item["content"] || "")
-    tool_calls = tool_calls_from_item(item)
-    [ReqLLM.Context.assistant(content, tool_calls: tool_calls, metadata: response_metadata(item))]
-  end
-
-  defp responses_item_to_messages(_item), do: []
-
-  defp content_parts(content) when is_binary(content), do: [ContentPart.text(content)]
-
-  defp content_parts(content) when is_list(content) do
-    Enum.flat_map(content, fn
-      %{"type" => type, "text" => text} when type in ["text", "input_text", "output_text"] ->
-        [ContentPart.text(text || "")]
-
-      %{"type" => "input_image", "image_url" => url} when is_binary(url) ->
-        [%ContentPart{type: :image_url, url: url}]
-
-      %{"type" => "image_url", "image_url" => %{"url" => url}} when is_binary(url) ->
-        [%ContentPart{type: :image_url, url: url}]
-
-      _other ->
-        []
-    end)
-  end
-
-  defp content_parts(_content), do: []
-
-  defp content_text(content) do
-    content
-    |> content_parts()
-    |> Enum.filter(&(&1.type == :text))
-    |> Enum.map_join("", &(&1.text || ""))
-  end
-
-  defp tool_calls_from_item(%{"type" => "function_call"} = item) do
-    [
-      {item["name"] || "unknown", arguments_map(item["arguments"]),
-       id: item["call_id"] || item["id"]}
-    ]
-  end
-
-  defp tool_calls_from_item(%{"tool_calls" => calls}) when is_list(calls) do
-    Enum.map(calls, fn call ->
-      function = call["function"] || %{}
-      {function["name"] || "unknown", arguments_map(function["arguments"]), id: call["id"]}
-    end)
-  end
-
-  defp tool_calls_from_item(_item), do: nil
-
-  defp response_metadata(%{"id" => id}) when is_binary(id), do: %{response_id: id}
-  defp response_metadata(_item), do: %{}
-
-  defp arguments_map(arguments) when is_binary(arguments) do
-    case Jason.decode(arguments) do
-      {:ok, decoded} when is_map(decoded) -> decoded
-      _ -> %{}
-    end
-  end
-
-  defp arguments_map(arguments) when is_map(arguments), do: arguments
-  defp arguments_map(_arguments), do: %{}
 
   defp account_id_from_token(token), do: ReqLLM.Providers.OpenAICodex.account_id_from_token(token)
 

@@ -159,8 +159,29 @@ defmodule LLMProxy.Protocol.Request do
 
   defp anthropic_message(message), do: openai_message(message)
 
+  defp responses_message(%{"type" => "function_call_output"} = item) do
+    {:ok, Context.tool_result(item["call_id"] || "", item["output"] || "")}
+  end
+
+  defp responses_message(%{"type" => "function_call"} = item) do
+    with {:ok, tool_calls} <- responses_tool_calls(item) do
+      {:ok, Context.assistant([], tool_calls: tool_calls, metadata: response_metadata(item))}
+    end
+  end
+
+  defp responses_message(%{"role" => "system", "content" => content}) do
+    with {:ok, parts} <- content_parts(content, :responses), do: {:ok, Context.system(parts)}
+  end
+
   defp responses_message(%{"role" => "user", "content" => content}) do
     with {:ok, parts} <- content_parts(content, :responses), do: {:ok, Context.user(parts)}
+  end
+
+  defp responses_message(%{"role" => "assistant"} = item) do
+    with {:ok, parts} <- content_parts(item["content"] || "", :responses),
+         {:ok, tool_calls} <- responses_tool_calls(item) do
+      {:ok, Context.assistant(parts, tool_calls: tool_calls, metadata: response_metadata(item))}
+    end
   end
 
   defp responses_message(message), do: openai_message(message)
@@ -190,7 +211,8 @@ defmodule LLMProxy.Protocol.Request do
     {:ok, ContentPart.text(text)}
   end
 
-  defp content_part(%{"type" => "input_text", "text" => text}, :responses) when is_binary(text) do
+  defp content_part(%{"type" => type, "text" => text}, :responses)
+       when type in ["input_text", "output_text"] and is_binary(text) do
     {:ok, ContentPart.text(text)}
   end
 
@@ -273,6 +295,20 @@ defmodule LLMProxy.Protocol.Request do
 
   defp tool_calls(_calls), do: error("invalid_tool_calls", "tool_calls must be a list")
 
+  defp responses_tool_calls(%{"type" => "function_call"} = item) do
+    {:ok,
+     [
+       ToolCall.new(
+         item["call_id"] || item["id"],
+         item["name"] || "unknown",
+         arguments_json(item["arguments"])
+       )
+     ]}
+  end
+
+  defp responses_tool_calls(%{"tool_calls" => calls}), do: tool_calls(calls)
+  defp responses_tool_calls(_item), do: {:ok, nil}
+
   defp tool_call(%{"id" => id, "function" => %{"name" => name, "arguments" => arguments}})
        when is_binary(name) and is_binary(arguments) do
     {:ok, ToolCall.new(id, name, arguments)}
@@ -285,6 +321,13 @@ defmodule LLMProxy.Protocol.Request do
 
   defp tool_call(%ToolCall{} = call), do: {:ok, call}
   defp tool_call(_call), do: error("invalid_tool_call", "Malformed tool call")
+
+  defp response_metadata(%{"id" => id}) when is_binary(id), do: %{response_id: id}
+  defp response_metadata(_item), do: %{}
+
+  defp arguments_json(arguments) when is_binary(arguments), do: arguments
+  defp arguments_json(arguments) when is_map(arguments), do: Jason.encode!(arguments)
+  defp arguments_json(_arguments), do: "{}"
 
   defp tool_result_only?(content) when is_list(content) and content != [] do
     Enum.all?(content, &(&1["type"] == "tool_result"))
