@@ -6,7 +6,7 @@ defmodule LLMProxy.Plugs.QuotaCheck do
 
   import Plug.Conn
 
-  alias LLMProxy.Storage
+  alias LLMProxy.{HTTP, Storage}
 
   def init(opts), do: opts
 
@@ -19,8 +19,7 @@ defmodule LLMProxy.Plugs.QuotaCheck do
 
       {:error, reason} ->
         conn
-        |> put_resp_content_type("application/json")
-        |> send_resp(429, Jason.encode!(%{error: reason}))
+        |> HTTP.send_json(429, %{error: reason})
         |> halt()
     end
   end

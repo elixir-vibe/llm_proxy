@@ -15,31 +15,34 @@ defmodule LLMProxy.Storage.Migrations do
   use Ecto.Migration
 
   def up(opts \\ []) do
-    migrator(opts).up(opts)
+    migrator(opts).up()
   end
 
   def down(opts \\ []) do
-    migrator(opts).down(opts)
+    migrator(opts).down()
   end
 
   @doc false
   def migrator(opts \\ []) do
     repo = Keyword.get_lazy(opts, :repo, fn -> repo() end)
-
-    case repo.__adapter__() do
-      Ecto.Adapters.Postgres -> LLMProxy.Storage.Migrations.Postgres
-      Ecto.Adapters.SQLite3 -> LLMProxy.Storage.Migrations.SQLite
-      Ecto.Adapters.MyXQL -> LLMProxy.Storage.Migrations.MyXQL
-      Ecto.Adapters.QuackDB -> quackdb_migrator()
-      other -> raise "Ecto adapter #{inspect(other)} is not supported by LLMProxy migrations"
-    end
+    ensure_supported_adapter!(repo.__adapter__())
+    LLMProxy.Storage.Migrations.Schema
   end
 
-  defp quackdb_migrator do
+  defp ensure_supported_adapter!(adapter)
+       when adapter in [Ecto.Adapters.Postgres, Ecto.Adapters.SQLite3, Ecto.Adapters.MyXQL] do
+    :ok
+  end
+
+  defp ensure_supported_adapter!(Ecto.Adapters.QuackDB) do
     if Code.ensure_loaded?(Ecto.Adapters.QuackDB) do
-      LLMProxy.Storage.Migrations.QuackDB
+      :ok
     else
       raise "Ecto adapter #{inspect(Ecto.Adapters.QuackDB)} is not supported by LLMProxy migrations"
     end
+  end
+
+  defp ensure_supported_adapter!(other) do
+    raise "Ecto adapter #{inspect(other)} is not supported by LLMProxy migrations"
   end
 end

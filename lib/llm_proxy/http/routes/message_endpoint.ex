@@ -8,13 +8,14 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
 
   alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
-  alias LLMProxy.HTTP.Routes.{Helpers, Passthrough}
+  alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.Routes.Passthrough
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.{Event, SSEWriter}
-  alias LLMProxy.TokenPool.RateLimit
+  alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Trace
   alias LLMProxy.Usage
 
@@ -94,7 +95,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
     usage = provider.extract_usage(response)
     UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
-    Helpers.send_json(conn, 200, response)
+    HTTP.send_json(conn, 200, response)
   end
 
   defp handle_stream(conn, provider, stream, api_key, model, token, trace_id) do
@@ -156,7 +157,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
     is_rate_limit =
       String.contains?(error_msg, "429") || String.contains?(error_msg, "rate_limit")
 
-    if is_rate_limit && token, do: RateLimit.mark_rate_limited(token)
+    if is_rate_limit && token, do: TokenPool.mark_rate_limited(token)
     Logger.error("Stream error: #{error_msg}")
 
     error_event = %{
@@ -175,7 +176,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   end
 
   defp mark_rate_limited_if_needed(%Result{status: 429, token: token}) when not is_nil(token) do
-    RateLimit.mark_rate_limited(token)
+    TokenPool.mark_rate_limited(token)
   end
 
   defp mark_rate_limited_if_needed(_result), do: :ok
@@ -186,6 +187,6 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   defp error_type(_), do: "api_error"
 
   defp send_error(conn, status, type, message) do
-    Helpers.send_json(conn, status, %{type: "error", error: %{type: type, message: message}})
+    HTTP.send_json(conn, status, %{type: "error", error: %{type: type, message: message}})
   end
 end

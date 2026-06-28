@@ -5,20 +5,16 @@ defmodule LLMProxy.HTTP.Routes.ModelEndpoint do
 
   use Plug.Router
 
+  alias LLMProxy.HTTP
+
   plug(:match)
   plug(:dispatch)
 
   get "/" do
-    send_json(conn, 200, %{object: "list", data: LLMProxy.Providers.Registry.all_models()})
+    HTTP.send_json(conn, 200, %{object: "list", data: LLMProxy.Providers.Registry.all_models()})
   end
 
   match _ do
-    send_json(conn, 404, %{error: "Not found"})
-  end
-
-  defp send_json(conn, status, body) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(body))
+    HTTP.send_json(conn, 404, %{error: "Not found"})
   end
 end

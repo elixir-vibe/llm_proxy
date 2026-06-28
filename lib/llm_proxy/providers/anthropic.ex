@@ -7,7 +7,7 @@ defmodule LLMProxy.Providers.Anthropic do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol
-  alias LLMProxy.Providers.{ResponseHandler, Result, SSE, TokenAccess}
+  alias LLMProxy.Providers.{ResponseHandler, Result, TokenAccess}
   alias LLMProxy.Stream.Event
 
   @impl true
@@ -81,7 +81,7 @@ defmodule LLMProxy.Providers.Anthropic do
       {:ok, %{status: 200} = resp} ->
         stream =
           resp.body
-          |> SSE.parse_events()
+          |> ServerSentEvents.decode_stream()
           |> Stream.map(&to_stream_event/1)
           |> Stream.reject(&is_nil/1)
 

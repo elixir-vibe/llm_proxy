@@ -8,10 +8,12 @@ defmodule LLMProxy.TokenPool.Server do
 
   use GenServer
 
+  require Logger
+
   alias LLMProxy.Schemas.ProviderToken
   alias LLMProxy.Storage.Repo
-  alias LLMProxy.TokenPool.Picker
 
+  import Bitwise
   import Ecto.Query
 
   defmodule State do
@@ -36,6 +38,7 @@ defmodule LLMProxy.TokenPool.Server do
   def mark_rate_limited(token, cooldown_ms \\ LLMProxy.Config.token_cooldown_ms())
 
   def mark_rate_limited(%ProviderToken{id: id}, cooldown_ms) do
+    Logger.warning("Token #{id} marked as rate-limited")
     GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
   end
 
@@ -113,7 +116,7 @@ defmodule LLMProxy.TokenPool.Server do
 
   defp pick_available(tokens, user_id, state) do
     now = System.monotonic_time(:millisecond)
-    start_idx = Picker.pick_index(user_id, length(tokens))
+    start_idx = pick_index(user_id, length(tokens))
 
     tokens
     |> Stream.cycle()
@@ -129,6 +132,23 @@ defmodule LLMProxy.TokenPool.Server do
       nil -> :all_rate_limited
       token -> {:ok, token}
     end
+  end
+
+  defp pick_index(_user_id, pool_size) when pool_size <= 1, do: 0
+
+  defp pick_index(user_id, pool_size) do
+    rem(fnv1a(user_id), pool_size)
+  end
+
+  defp fnv1a(str) do
+    str
+    |> :binary.bin_to_list()
+    |> Enum.reduce(0x811C9DC5, fn byte, hash ->
+      hash
+      |> bxor(byte)
+      |> Kernel.*(0x01000193)
+      |> band(0xFFFFFFFF)
+    end)
   end
 
   defp get_enabled_tokens(provider, kind) do

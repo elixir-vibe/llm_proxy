@@ -56,7 +56,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
         moderate(conn, conn.assigns.api_key, attrs, trace_id)
 
       {:error, message} ->
-        send_json(conn, 400, %{error: message})
+        HTTP.send_json(conn, 400, %{error: message})
     end
   end
 
@@ -68,7 +68,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
         request_moderation(conn, attrs, token, trace_id)
 
       {:error, reason} ->
-        send_json(conn, 503, %{error: "No OpenAI token available: #{reason}"})
+        HTTP.send_json(conn, 503, %{error: "No OpenAI token available: #{reason}"})
     end
   end
 
@@ -81,11 +81,11 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
 
     case post_moderation(req, attrs, trace_id) do
       {:ok, %{status: status, body: response}} ->
-        send_json(conn, status, response)
+        HTTP.send_json(conn, status, response)
 
       {:error, exception} ->
         Logger.error("Moderation error: #{Exception.message(exception)}")
-        send_json(conn, 502, %{error: Exception.message(exception)})
+        HTTP.send_json(conn, 502, %{error: Exception.message(exception)})
     end
   end
 
@@ -100,12 +100,6 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   end
 
   match _ do
-    send_json(conn, 404, %{error: "Not found"})
-  end
-
-  defp send_json(conn, status, body) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(body))
+    HTTP.send_json(conn, 404, %{error: "Not found"})
   end
 end

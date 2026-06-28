@@ -3,13 +3,19 @@ defmodule LLMProxy.Cache.Runtime do
   Runtime dispatcher for optional cache adapters, cache-key generation, and cache writes.
   """
 
-  alias LLMProxy.Cache.{Key, Policy}
+  alias LLMProxy.Cache.Policy
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.Response
 
   @spec key(Request.t(), [Attempt.t()]) :: String.t()
-  def key(%Request{} = request, attempts), do: Key.build(request, attempts)
+  def key(%Request{} = request, attempts) when is_list(attempts) do
+    attempts = Enum.map(attempts, &attempt_key/1)
+
+    :sha256
+    |> :crypto.hash(:erlang.term_to_binary({request_key(request), attempts}))
+    |> Base.url_encode64(padding: false)
+  end
 
   @spec get(String.t(), LLMProxy.Cache.context()) :: {:hit, Response.t()} | :miss
   def get(key, context) when is_binary(key) do
@@ -51,6 +57,24 @@ defmodule LLMProxy.Cache.Runtime do
 
   @spec policy(Request.t(), LLMProxy.Cache.context()) :: Policy.t()
   def policy(%Request{} = request, context), do: Policy.resolve(request, context)
+
+  defp request_key(%Request{} = request) do
+    %{
+      protocol: request.protocol,
+      model: request.model,
+      messages: request.messages,
+      tools: request.tools,
+      tool_choice: request.tool_choice,
+      max_tokens: request.max_tokens,
+      temperature: request.temperature,
+      top_p: request.top_p,
+      stop: request.stop
+    }
+  end
+
+  defp attempt_key(%Attempt{provider: provider, model: model}) do
+    {provider.name(), model}
+  end
 
   defp put_response(module, key, response, context) do
     if function_exported?(module, :put, 3) do

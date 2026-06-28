@@ -7,7 +7,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   require Logger
 
   alias LLMProxy.Actor
-  alias LLMProxy.HTTP.Routes.Helpers
+  alias LLMProxy.HTTP
   alias LLMProxy.Plugs.{Auth, QuotaCheck}
   alias LLMProxy.Protocol.{OpenAI, Request}
   alias LLMProxy.Provider
@@ -25,7 +25,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   end
 
   match _ do
-    Helpers.send_json(conn, 404, %{error: "Not found"})
+    HTTP.send_json(conn, 404, %{error: "Not found"})
   end
 
   defp handle_chat(conn) do
@@ -43,7 +43,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
         end
 
       {:error, %Request.Error{} = error} ->
-        Helpers.send_json(conn, 400, %{error: %{code: error.code, message: error.message}})
+        HTTP.send_json(conn, 400, %{error: %{code: error.code, message: error.message}})
     end
   end
 
@@ -56,7 +56,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
            usage_metadata: Map.to_list(meta)
          ) do
       {:ok, response} ->
-        Helpers.send_json(conn, 200, LLMProxy.Response.to_openai(response))
+        HTTP.send_json(conn, 200, LLMProxy.Response.to_openai(response))
 
       {:error, reason} ->
         handle_provider_error(conn, reason)
@@ -84,19 +84,19 @@ defmodule LLMProxy.HTTP.Routes.Chat do
          {:provider, %Result{error: error, status: status, provider: provider}}
        ) do
     log_provider_error(provider, error, status)
-    Helpers.send_json(conn, status, %{error: error})
+    HTTP.send_json(conn, status, %{error: error})
   end
 
   defp handle_provider_error(conn, {:permission, reason}) do
-    Helpers.send_json(conn, 403, %{error: reason})
+    HTTP.send_json(conn, 403, %{error: reason})
   end
 
   defp handle_provider_error(conn, {:not_found, reason}) do
-    Helpers.send_json(conn, 404, %{error: reason})
+    HTTP.send_json(conn, 404, %{error: reason})
   end
 
   defp handle_provider_error(conn, {:guardrail, reason}) do
-    Helpers.send_json(conn, 403, %{error: inspect(reason)})
+    HTTP.send_json(conn, 403, %{error: inspect(reason)})
   end
 
   defp finish_stream(conn, %Result{

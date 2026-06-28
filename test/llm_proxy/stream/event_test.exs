@@ -2,6 +2,20 @@ defmodule LLMProxy.Stream.EventTest do
   use ExUnit.Case, async: true
 
   alias LLMProxy.Stream.Event
+  alias LLMProxy.Usage
+
+  test "builds OpenAI stream events with usage from wire maps" do
+    event =
+      Event.from_openai_map(%{
+        "usage" => %{
+          "prompt_tokens" => 3,
+          "completion_tokens" => 2,
+          "prompt_tokens_details" => %{"cached_tokens" => 1}
+        }
+      })
+
+    assert event.usage == Usage.new(3, 2, 1, 0)
+  end
 
   test "builds Responses terminal events with usage" do
     event = Event.responses_terminal(:stop, "resp_123", %{input_tokens: 2, output_tokens: 3})

@@ -3,6 +3,14 @@ defmodule LLMProxy.HTTP do
   Req client factory that applies LLMProxy's HTTP instrumentation and test plug configuration.
   """
 
+  import Plug.Conn
+
+  def send_json(conn, status, body) do
+    conn
+    |> put_resp_content_type("application/json")
+    |> send_resp(status, Jason.encode!(body))
+  end
+
   def new(opts) do
     opts
     |> maybe_put_test_plug()

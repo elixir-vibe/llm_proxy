@@ -14,13 +14,11 @@ defmodule LLMProxy.Provider do
 
   alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
-  alias LLMProxy.Auth.AccessControl
   alias LLMProxy.Cache.Runtime, as: CacheRuntime
   alias LLMProxy.GuardrailPipeline
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Caller, Registry, Result}
   alias LLMProxy.Providers.Routing.Attempt
-  alias LLMProxy.ReqLLM.Model
   alias LLMProxy.Response
   alias LLMProxy.Stream.Event
   alias LLMProxy.Telemetry
@@ -47,7 +45,7 @@ defmodule LLMProxy.Provider do
          {:ok, api_key} <- fetch_api_key(actor),
          :ok <- check_quota(actor, api_key),
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
-         :ok <- AccessControl.check_model_access(api_key, request.model),
+         :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request.model) do
       Logger.debug(
@@ -78,7 +76,7 @@ defmodule LLMProxy.Provider do
          {:ok, api_key} <- fetch_api_key(actor),
          :ok <- check_quota(actor, api_key),
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
-         :ok <- AccessControl.check_model_access(api_key, request.model),
+         :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request.model) do
       Logger.debug(
@@ -139,7 +137,7 @@ defmodule LLMProxy.Provider do
   @impl ReqLLM.Provider
   def prepare_request(:chat, model, messages, opts) do
     with {:ok, context} <- ReqLLM.Context.normalize(messages, opts),
-         {:ok, request} <- chat_request(context, Keyword.put(opts, :model, Model.id(model))) do
+         {:ok, request} <- chat_request(context, Keyword.put(opts, :model, model_id(model))) do
       req =
         Req.new()
         |> Req.Request.prepend_request_steps(llm_proxy_provider: &run_req_llm/1)
@@ -165,6 +163,10 @@ defmodule LLMProxy.Provider do
 
   @impl ReqLLM.Provider
   def decode_response(request_response), do: request_response
+
+  defp model_id(%{model: model}) when is_binary(model), do: model
+  defp model_id(%{id: id}) when is_binary(id), do: id
+  defp model_id(model) when is_binary(model), do: model
 
   defp request_from_context(%ReqLLM.Context{messages: messages}, opts) do
     model = Keyword.fetch!(opts, :model)
@@ -250,6 +252,9 @@ defmodule LLMProxy.Provider do
   defp check_quota(%Actor{kind: :master}, _api_key), do: :ok
   defp check_quota(_actor, api_key), do: LLMProxy.Storage.check_quota(api_key)
 
+  defp check_model_access(%{id: "master"}, _model), do: :ok
+  defp check_model_access(api_key, model), do: LLMProxy.Storage.check_model_access(api_key, model)
+
   defp call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
     start = System.monotonic_time(:millisecond)
 
@@ -306,7 +311,7 @@ defmodule LLMProxy.Provider do
          {:ok, api_key} <- fetch_api_key(actor),
          :ok <- check_quota(actor, api_key),
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
-         :ok <- AccessControl.check_model_access(api_key, request.model),
+         :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request.model) do
       Logger.debug(

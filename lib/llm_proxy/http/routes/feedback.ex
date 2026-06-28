@@ -4,7 +4,7 @@ defmodule LLMProxy.HTTP.Routes.Feedback do
   """
   use Plug.Router
 
-  alias LLMProxy.HTTP.Routes.Helpers
+  alias LLMProxy.HTTP
   alias LLMProxy.Plugs.Auth
   alias LLMProxy.Storage
 
@@ -17,19 +17,19 @@ defmodule LLMProxy.HTTP.Routes.Feedback do
       {:ok, attrs} ->
         case Storage.record_trace_feedback(attrs) do
           {:ok, feedback} ->
-            Helpers.send_json(conn, 201, render_feedback(feedback))
+            HTTP.send_json(conn, 201, render_feedback(feedback))
 
           {:error, changeset} ->
-            Helpers.send_json(conn, 400, %{error: "Invalid feedback", details: errors(changeset)})
+            HTTP.send_json(conn, 400, %{error: "Invalid feedback", details: errors(changeset)})
         end
 
       {:error, reason} ->
-        Helpers.send_json(conn, 400, %{error: reason})
+        HTTP.send_json(conn, 400, %{error: reason})
     end
   end
 
   match _ do
-    Helpers.send_json(conn, 404, %{error: "Not found"})
+    HTTP.send_json(conn, 404, %{error: "Not found"})
   end
 
   defp feedback_attrs(api_key, params) do

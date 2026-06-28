@@ -22,6 +22,26 @@ defmodule LLMProxy.Stream.Event do
   def attach_usage(event, nil), do: event
   def attach_usage(%__MODULE__{} = event, usage), do: %{event | usage: usage}
 
+  @spec from_openai_sse(%{optional(:data) => term()}) :: t() | nil
+  def from_openai_sse(%{data: "[DONE]"}), do: nil
+
+  def from_openai_sse(%{data: data}) when is_binary(data) do
+    case Jason.decode(data) do
+      {:ok, parsed} -> from_openai_map(parsed)
+      {:error, _reason} -> nil
+    end
+  end
+
+  def from_openai_sse(%{data: data}) when is_map(data), do: from_openai_map(data)
+  def from_openai_sse(_event), do: nil
+
+  @spec from_openai_map(map()) :: t()
+  def from_openai_map(%{"usage" => usage} = parsed) when is_map(usage) do
+    new(parsed, usage: Usage.from_openai(usage))
+  end
+
+  def from_openai_map(parsed), do: new(parsed)
+
   @spec responses_output_text_delta(String.t()) :: t()
   def responses_output_text_delta(text) when is_binary(text) do
     new(%{"type" => "response.output_text.delta", "delta" => text})

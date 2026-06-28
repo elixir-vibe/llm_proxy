@@ -19,10 +19,10 @@ defmodule LLMProxy.Storage.MigrationsTest do
     def __adapter__, do: Ecto.Adapters.QuackDB
   end
 
-  test "dispatches migration modules by repo adapter" do
-    assert Migrations.migrator(repo: PostgresRepo) == LLMProxy.Storage.Migrations.Postgres
-    assert Migrations.migrator(repo: SQLiteRepo) == LLMProxy.Storage.Migrations.SQLite
-    assert Migrations.migrator(repo: MyXQLRepo) == LLMProxy.Storage.Migrations.MyXQL
-    assert Migrations.migrator(repo: QuackDBRepo) == LLMProxy.Storage.Migrations.QuackDB
+  test "accepts supported repo adapters" do
+    assert Migrations.migrator(repo: PostgresRepo) == LLMProxy.Storage.Migrations.Schema
+    assert Migrations.migrator(repo: SQLiteRepo) == LLMProxy.Storage.Migrations.Schema
+    assert Migrations.migrator(repo: MyXQLRepo) == LLMProxy.Storage.Migrations.Schema
+    assert Migrations.migrator(repo: QuackDBRepo) == LLMProxy.Storage.Migrations.Schema
   end
 end

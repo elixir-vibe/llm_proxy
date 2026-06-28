@@ -5,8 +5,8 @@ defmodule LLMProxy.HTTP.Router do
 
   use Plug.Router
 
+  alias LLMProxy.HTTP
   alias LLMProxy.HTTP.Routes.Dynamic
-  alias LLMProxy.HTTP.Routes.Helpers
   alias LLMProxy.HTTP.RouteSpec
 
   plug(Plug.RequestId, assign_as: :request_id)
@@ -21,7 +21,7 @@ defmodule LLMProxy.HTTP.Router do
   plug(:dispatch)
 
   get "/health" do
-    Helpers.send_json(conn, 200, %{status: "ok", version: "0.1.0"})
+    HTTP.send_json(conn, 200, %{status: "ok", version: "0.1.0"})
   end
 
   for {path, plug} <- RouteSpec.routes() do
@@ -30,7 +30,7 @@ defmodule LLMProxy.HTTP.Router do
 
   match _ do
     case Dynamic.dispatch(conn) do
-      nil -> Helpers.send_json(conn, 404, %{error: "Not found"})
+      nil -> HTTP.send_json(conn, 404, %{error: "Not found"})
       conn -> conn
     end
   end

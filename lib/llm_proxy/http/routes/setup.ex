@@ -5,6 +5,7 @@ defmodule LLMProxy.HTTP.Routes.Setup do
   use Plug.Router
 
   alias LLMProxy.Config
+  alias LLMProxy.HTTP
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Storage
 
@@ -31,19 +32,19 @@ defmodule LLMProxy.HTTP.Routes.Setup do
         |> send_resp(200, String.replace(script, "__PROXY_URL__", base_url(conn)))
 
       {:error, _} ->
-        send_json(conn, 404, %{error: "Install script not found"})
+        HTTP.send_json(conn, 404, %{error: "Install script not found"})
     end
   end
 
   get "/models" do
-    send_json(conn, 200, Registry.all_models())
+    HTTP.send_json(conn, 200, Registry.all_models())
   end
 
   get "/config" do
     with_auth(conn, fn key_param, api_key ->
       sorted_models = allowed_models(api_key)
 
-      send_json(conn, 200, %{
+      HTTP.send_json(conn, 200, %{
         providers: %{
           "llm-proxy" => %{
             baseUrl: base_url(conn),
@@ -58,7 +59,7 @@ defmodule LLMProxy.HTTP.Routes.Setup do
 
   get "/env" do
     with_auth(conn, fn key_param, _api_key ->
-      send_json(conn, 200, %{"PROVIDER_API_KEY" => key_param})
+      HTTP.send_json(conn, 200, %{"PROVIDER_API_KEY" => key_param})
     end)
   end
 
@@ -90,7 +91,7 @@ defmodule LLMProxy.HTTP.Routes.Setup do
   end
 
   match _ do
-    send_json(conn, 404, %{error: "Not found"})
+    HTTP.send_json(conn, 404, %{error: "Not found"})
   end
 
   defp with_auth(conn, fun) do
@@ -101,7 +102,7 @@ defmodule LLMProxy.HTTP.Routes.Setup do
          api_key when not is_nil(api_key) <- Storage.find_key(auth.api_key) do
       fun.(auth.api_key, api_key)
     else
-      _ -> send_json(conn, 401, %{error: "Invalid API key"})
+      _ -> HTTP.send_json(conn, 401, %{error: "Invalid API key"})
     end
   end
 
@@ -150,11 +151,5 @@ defmodule LLMProxy.HTTP.Routes.Setup do
           _ -> "http://localhost:4000"
         end
     end
-  end
-
-  defp send_json(conn, status, body) do
-    conn
-    |> put_resp_content_type("application/json")
-    |> send_resp(status, Jason.encode!(body))
   end
 end
