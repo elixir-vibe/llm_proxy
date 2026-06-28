@@ -69,7 +69,7 @@ defmodule LLMProxy.Providers.Caller do
   defp try_call([%Attempt{} = attempt | rest], body, user_id, last_error) do
     if CircuitBreaker.available?(attempt) do
       Telemetry.emit([:routing, :attempt, :start], attempt)
-      call_body = prepare_body(body, attempt.provider, attempt.model)
+      call_body = Protocol.provider_request_body(body, attempt.provider, attempt.model)
 
       attempt
       |> invoke(:call, [call_body, user_id])
@@ -111,27 +111,6 @@ defmodule LLMProxy.Providers.Caller do
 
   defp handle_call_result({:error, _result} = error, _attempt, _rest, _body, _user_id), do: error
 
-  defp prepare_body(%Request{} = request, provider, model) do
-    request = %{request | model: model, body: Map.put(request.body, "model", model)}
-
-    case provider_protocol(provider) do
-      :anthropic ->
-        Protocol.Anthropic.request_body(
-          request,
-          max_tokens: LLMProxy.Config.provider_conversion_default("anthropic", :max_tokens)
-        )
-
-      :openai ->
-        Protocol.OpenAI.request_body(request)
-    end
-  end
-
-  defp provider_protocol(provider) do
-    if function_exported?(provider, :native_protocol, 0),
-      do: provider.native_protocol(),
-      else: :openai
-  end
-
   defp try_stream([], _body, _user_id, nil) do
     {:error, Result.error("No healthy deployments available", 503, nil)}
   end
@@ -141,7 +120,7 @@ defmodule LLMProxy.Providers.Caller do
   defp try_stream([%Attempt{} = attempt | rest], body, user_id, last_error) do
     if CircuitBreaker.available?(attempt) do
       Telemetry.emit([:routing, :stream_attempt, :start], attempt)
-      stream_body = prepare_body(body, attempt.provider, attempt.model)
+      stream_body = Protocol.provider_request_body(body, attempt.provider, attempt.model)
 
       attempt
       |> invoke(:stream, [stream_body, user_id])
