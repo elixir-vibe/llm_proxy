@@ -39,12 +39,12 @@ defmodule LLMProxy.Config.TOMLTest do
                 %{
                   name: "codex",
                   routes: [
-                    %{to: "openai-codex", model: "gpt-5.3-codex-spark", timeout: 15000}
+                    %{to: "openai-codex", model: "gpt-5.3-codex-spark", timeout_ms: 15000}
                   ]
                 },
                 %{
                   name: "fast",
-                  routing: "lowest_cost",
+                  routing: :lowest_cost,
                   routes: [%{to: "openai", model: "gpt-4o-mini", order: 1}]
                 }
               ]

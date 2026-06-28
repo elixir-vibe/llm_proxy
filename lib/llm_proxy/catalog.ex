@@ -13,20 +13,16 @@ defmodule LLMProxy.Catalog do
     load(LLMProxy.Config.catalog())
   end
 
-  @spec load([Model.t() | map() | keyword()]) :: :ok
+  @spec load([Model.t()]) :: :ok
   def load(models) when is_list(models) do
-    catalog =
-      models
-      |> Enum.map(&normalize_model/1)
-      |> Map.new(fn %Model{name: name} = model -> {name, model} end)
+    catalog = Map.new(models, fn %Model{name: name} = model -> {name, model} end)
 
     :persistent_term.put(@catalog_key, catalog)
     :ok
   end
 
-  @spec put_model(Model.t() | map() | keyword()) :: :ok
-  def put_model(model) do
-    %Model{name: name} = model = normalize_model(model)
+  @spec put_model(Model.t()) :: :ok
+  def put_model(%Model{name: name} = model) do
     catalog = :persistent_term.get(@catalog_key, %{})
     :persistent_term.put(@catalog_key, Map.put(catalog, name, model))
     :ok
@@ -71,9 +67,6 @@ defmodule LLMProxy.Catalog do
       %{id: name, object: "model", owned_by: owner(deployments)}
     end)
   end
-
-  defp normalize_model(%Model{} = model), do: model
-  defp normalize_model(attrs), do: Model.new(attrs)
 
   defp route(:lowest_cost, _name, deployments), do: LowestCost.order(deployments)
   defp route(:round_robin, name, deployments), do: RoundRobin.order(name, deployments)

@@ -2,6 +2,7 @@ defmodule LLMProxy.ProviderCatalogTest do
   use ExUnit.Case
 
   alias LLMProxy.Catalog
+  alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
@@ -40,10 +41,14 @@ defmodule LLMProxy.ProviderCatalogTest do
     Catalog.load([])
     Registry.register(Provider)
 
-    Catalog.put_model(%{
-      name: "public-catalog-model",
-      deployments: [%{provider: Provider, upstream_model: "upstream-catalog-model"}]
-    })
+    Catalog.put_model(
+      Model.new!(
+        name: "public-catalog-model",
+        deployments: [
+          Deployment.new!(provider: Provider, upstream_model: "upstream-catalog-model")
+        ]
+      )
+    )
 
     on_exit(fn -> Catalog.load([]) end)
 

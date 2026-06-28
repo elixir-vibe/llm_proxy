@@ -1,28 +1,21 @@
 defmodule LLMProxy.ModelDB do
   @moduledoc false
 
-  @provider_ids %{
-    "anthropic" => :anthropic,
-    "openai" => :openai,
-    "openai-codex" => :openai_codex,
-    "openrouter" => :openrouter
-  }
-
   @known_providers [:openai, :openai_codex, :anthropic, :openrouter]
 
-  @spec provider_id(module() | atom() | String.t() | nil) :: atom() | nil
+  @spec provider_id(module() | atom() | nil) :: atom() | nil
   def provider_id(nil), do: nil
-  def provider_id(provider) when is_binary(provider), do: Map.get(@provider_ids, provider)
+  def provider_id(:openai), do: :openai
+  def provider_id(:openai_codex), do: :openai_codex
+  def provider_id(:anthropic), do: :anthropic
+  def provider_id(:openrouter), do: :openrouter
+  def provider_id(LLMProxy.Providers.OpenAI), do: :openai
+  def provider_id(LLMProxy.Providers.OpenAICodex), do: :openai_codex
+  def provider_id(LLMProxy.Providers.Anthropic), do: :anthropic
+  def provider_id(LLMProxy.Providers.OpenRouter), do: :openrouter
+  def provider_id(_provider), do: nil
 
-  def provider_id(provider) when is_atom(provider) do
-    cond do
-      provider in Map.values(@provider_ids) -> provider
-      function_exported?(provider, :name, 0) -> provider_id(provider.name())
-      true -> nil
-    end
-  end
-
-  @spec provider_model_ids(atom() | String.t()) :: [String.t()]
+  @spec provider_model_ids(atom()) :: [String.t()]
   def provider_model_ids(provider) do
     provider
     |> provider_id()
@@ -34,19 +27,11 @@ defmodule LLMProxy.ModelDB do
     _error in [ArgumentError, RuntimeError] -> []
   end
 
-  @spec pricing(String.t(), module() | atom() | String.t() | nil) :: map() | nil
+  @spec pricing(String.t(), module() | atom() | nil) :: LLMProxy.Pricing.Rates.t() | nil
   def pricing(model, provider \\ nil) when is_binary(model) do
     case find_model(model, provider) do
-      {:ok, llm_db_model} ->
-        llm_db_model
-        |> cost_from_model()
-        |> case do
-          nil -> cost_from_pricing_components(llm_db_model.pricing)
-          cost -> cost
-        end
-
-      _error ->
-        nil
+      {:ok, llm_db_model} -> rates_from_model(llm_db_model)
+      {:error, _reason} -> nil
     end
   end
 
@@ -78,37 +63,38 @@ defmodule LLMProxy.ModelDB do
   defp model_id(%{model: model}) when is_binary(model), do: model
   defp model_id(%{id: id}), do: id
 
-  defp cost_from_model(%{cost: cost}) when is_map(cost) do
-    %{
-      "input" => Map.get(cost, :input) || Map.get(cost, "input") || 0,
-      "output" => Map.get(cost, :output) || Map.get(cost, "output") || 0,
-      "cache_read" => Map.get(cost, :cache_read) || Map.get(cost, "cache_read") || 0,
-      "cache_write" => Map.get(cost, :cache_write) || Map.get(cost, "cache_write") || 0
-    }
+  defp rates_from_model(%{pricing: %{components: components}}) when is_list(components) do
+    Enum.reduce(components, LLMProxy.Pricing.Rates.zero(), &put_component_rate/2)
   end
 
-  defp cost_from_model(_model), do: nil
-
-  defp cost_from_pricing_components(%{components: components}) when is_list(components) do
-    Enum.reduce(components, zero_cost(), fn component, acc ->
-      case {Map.get(component, :kind) || Map.get(component, "kind"),
-            Map.get(component, :id) || Map.get(component, "id")} do
-        {"token", "token.input"} -> put_rate(acc, "input", component)
-        {"token", "token.output"} -> put_rate(acc, "output", component)
-        {"token", "token.cache_read"} -> put_rate(acc, "cache_read", component)
-        {"token", "token.cache_write"} -> put_rate(acc, "cache_write", component)
-        _other -> acc
-      end
-    end)
+  defp rates_from_model(%{cost: cost}) when is_map(cost) do
+    LLMProxy.Pricing.Rates.new(
+      input: cost.input || 0,
+      output: cost.output || 0,
+      cache_read: cost.cache_read || 0,
+      cache_write: cost.cache_write || 0
+    )
   end
 
-  defp cost_from_pricing_components(_pricing), do: nil
+  defp rates_from_model(_model), do: nil
 
-  defp zero_cost, do: %{"input" => 0, "output" => 0, "cache_read" => 0, "cache_write" => 0}
+  defp put_component_rate(%{kind: "token", id: "token.input"} = component, rates),
+    do: put_rate(rates, :input, component)
 
-  defp put_rate(cost, key, component) do
-    per = Map.get(component, :per) || Map.get(component, "per") || 1
-    rate = Map.get(component, :rate) || Map.get(component, "rate") || 0
-    Map.put(cost, key, rate * 1_000_000 / per)
+  defp put_component_rate(%{kind: "token", id: "token.output"} = component, rates),
+    do: put_rate(rates, :output, component)
+
+  defp put_component_rate(%{kind: "token", id: "token.cache_read"} = component, rates),
+    do: put_rate(rates, :cache_read, component)
+
+  defp put_component_rate(%{kind: "token", id: "token.cache_write"} = component, rates),
+    do: put_rate(rates, :cache_write, component)
+
+  defp put_component_rate(_component, rates), do: rates
+
+  defp put_rate(rates, key, %{per: per, rate: rate}) when is_number(per) and is_number(rate) do
+    LLMProxy.Pricing.Rates.put(rates, key, rate * 1_000_000 / per)
   end
+
+  defp put_rate(rates, _key, _component), do: rates
 end

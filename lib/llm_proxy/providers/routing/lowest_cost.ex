@@ -13,11 +13,8 @@ defmodule LLMProxy.Providers.Routing.LowestCost do
 
   defp cost(%{provider: provider, upstream_model: model}) do
     case ModelDB.pricing(model, provider) do
-      %{"input" => input, "output" => output} when is_number(input) and is_number(output) ->
-        input + output
-
-      _pricing ->
-        :infinity
+      %LLMProxy.Pricing.Rates{} = rates -> rates.input + rates.output
+      nil -> :infinity
     end
   end
 end

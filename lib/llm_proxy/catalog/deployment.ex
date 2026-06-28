@@ -1,17 +1,18 @@
 defmodule LLMProxy.Catalog.Deployment do
-  @moduledoc false
+  @moduledoc """
+  Internal catalog deployment target for a public model alias.
+  """
 
-  defstruct [
-    :provider,
-    :upstream_model,
-    order: 1,
-    token_pool: nil,
-    timeout_ms: nil,
-    failure_threshold: nil,
-    cooldown_ms: nil,
-    weight: 1,
-    metadata: %{}
-  ]
+  @enforce_keys [:provider, :upstream_model]
+  defstruct provider: nil,
+            upstream_model: nil,
+            order: 1,
+            token_pool: nil,
+            timeout_ms: nil,
+            failure_threshold: nil,
+            cooldown_ms: nil,
+            weight: 1,
+            metadata: %{}
 
   @type t :: %__MODULE__{
           provider: module(),
@@ -25,35 +26,19 @@ defmodule LLMProxy.Catalog.Deployment do
           metadata: map()
         }
 
-  @spec new(map() | keyword()) :: t()
-  def new(attrs) when is_list(attrs), do: attrs |> Map.new() |> new()
-
-  def new(attrs) when is_map(attrs) do
+  @spec new!(keyword()) :: t()
+  def new!(attrs) when is_list(attrs) do
     %__MODULE__{
-      provider: fetch!(attrs, :provider, "provider"),
-      upstream_model: fetch!(attrs, :upstream_model, "upstream_model"),
-      order: get(attrs, :order, "order", 1),
-      token_pool: get(attrs, :token_pool, "token_pool", nil),
-      timeout_ms: get(attrs, :timeout_ms, "timeout_ms", nil),
+      provider: Keyword.fetch!(attrs, :provider),
+      upstream_model: Keyword.fetch!(attrs, :upstream_model),
+      order: Keyword.get(attrs, :order, 1),
+      token_pool: Keyword.get(attrs, :token_pool),
+      timeout_ms: Keyword.get(attrs, :timeout_ms),
       failure_threshold:
-        get(
-          attrs,
-          :failure_threshold,
-          "failure_threshold",
-          LLMProxy.Config.deployment_failure_threshold()
-        ),
-      cooldown_ms:
-        get(attrs, :cooldown_ms, "cooldown_ms", LLMProxy.Config.deployment_cooldown_ms()),
-      weight: get(attrs, :weight, "weight", 1),
-      metadata: get(attrs, :metadata, "metadata", %{})
+        Keyword.get(attrs, :failure_threshold, LLMProxy.Config.deployment_failure_threshold()),
+      cooldown_ms: Keyword.get(attrs, :cooldown_ms, LLMProxy.Config.deployment_cooldown_ms()),
+      weight: Keyword.get(attrs, :weight, 1),
+      metadata: Keyword.get(attrs, :metadata, %{})
     }
-  end
-
-  defp fetch!(attrs, atom_key, string_key) do
-    Map.get(attrs, atom_key) || Map.fetch!(attrs, string_key)
-  end
-
-  defp get(attrs, atom_key, string_key, default) do
-    Map.get(attrs, atom_key, Map.get(attrs, string_key, default))
   end
 end

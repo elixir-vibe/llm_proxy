@@ -2,5 +2,6 @@ defmodule LLMProxy.Providers.OpenAI do
   @moduledoc false
 
   use LLMProxy.Providers.OpenAICompatibleProvider,
-    name: "openai"
+    name: "openai",
+    provider_id: :openai
 end

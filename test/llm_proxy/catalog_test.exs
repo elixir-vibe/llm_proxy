@@ -24,14 +24,9 @@ defmodule LLMProxy.CatalogTest do
     :ok
   end
 
-  test "loads catalog models from maps" do
+  test "loads catalog models" do
     Catalog.load([
-      %{
-        "name" => "fast",
-        "deployments" => [
-          %{"provider" => Provider, "upstream_model" => "upstream-model", "order" => 2}
-        ]
-      }
+      model("fast", [deployment(Provider, "upstream-model", order: 2)])
     ])
 
     assert %Model{
@@ -44,10 +39,7 @@ defmodule LLMProxy.CatalogTest do
   end
 
   test "provider registry resolves catalog aliases to upstream deployments" do
-    Catalog.put_model(%{
-      name: "fast",
-      deployments: [%{provider: Provider, upstream_model: "upstream-model"}]
-    })
+    Catalog.put_model(model("fast", [deployment(Provider, "upstream-model")]))
 
     assert {:ok, {Provider, "upstream-model"}} = Registry.resolve_model("fast")
 
@@ -58,13 +50,12 @@ defmodule LLMProxy.CatalogTest do
   end
 
   test "catalog deployments are ordered by strategy" do
-    Catalog.put_model(%{
-      name: "ordered",
-      deployments: [
-        %{provider: Provider, upstream_model: "second-upstream-model", order: 2},
-        %{provider: Provider, upstream_model: "upstream-model", order: 1}
-      ]
-    })
+    Catalog.put_model(
+      model("ordered", [
+        deployment(Provider, "second-upstream-model", order: 2),
+        deployment(Provider, "upstream-model", order: 1)
+      ])
+    )
 
     assert {:ok,
             [
@@ -74,14 +65,13 @@ defmodule LLMProxy.CatalogTest do
   end
 
   test "round robin strategy rotates deployments within order groups" do
-    Catalog.put_model(%{
-      name: "round-robin",
-      routing_strategy: :round_robin,
-      deployments: [
-        %{provider: Provider, upstream_model: "upstream-model"},
-        %{provider: Provider, upstream_model: "second-upstream-model"}
-      ]
-    })
+    Catalog.put_model(
+      model(
+        "round-robin",
+        [deployment(Provider, "upstream-model"), deployment(Provider, "second-upstream-model")],
+        routing_strategy: :round_robin
+      )
+    )
 
     assert {:ok,
             [
@@ -97,14 +87,16 @@ defmodule LLMProxy.CatalogTest do
   end
 
   test "weighted shuffle keeps order groups and all deployments" do
-    Catalog.put_model(%{
-      name: "weighted",
-      routing_strategy: "weighted_shuffle",
-      deployments: [
-        %{provider: Provider, upstream_model: "second-upstream-model", order: 2, weight: 10},
-        %{provider: Provider, upstream_model: "upstream-model", order: 1, weight: 1}
-      ]
-    })
+    Catalog.put_model(
+      model(
+        "weighted",
+        [
+          deployment(Provider, "second-upstream-model", order: 2, weight: 10),
+          deployment(Provider, "upstream-model", order: 1, weight: 1)
+        ],
+        routing_strategy: :weighted_shuffle
+      )
+    )
 
     assert {:ok,
             [
@@ -114,14 +106,13 @@ defmodule LLMProxy.CatalogTest do
   end
 
   test "lowest cost strategy orders deployments by LLMDB pricing" do
-    Catalog.put_model(%{
-      name: "cheap",
-      routing_strategy: :lowest_cost,
-      deployments: [
-        %{provider: OpenAI, upstream_model: "gpt-4o"},
-        %{provider: Anthropic, upstream_model: "claude-3-haiku-20240307"}
-      ]
-    })
+    Catalog.put_model(
+      model(
+        "cheap",
+        [deployment(OpenAI, "gpt-4o"), deployment(Anthropic, "claude-3-haiku-20240307")],
+        routing_strategy: :lowest_cost
+      )
+    )
 
     assert {:ok,
             [
@@ -132,12 +123,8 @@ defmodule LLMProxy.CatalogTest do
 
   test "all models includes visible aliases and hides hidden aliases" do
     Catalog.load([
-      %{name: "visible", deployments: [%{provider: Provider, upstream_model: "upstream-model"}]},
-      %{
-        name: "hidden",
-        hidden: true,
-        deployments: [%{provider: Provider, upstream_model: "upstream-model"}]
-      }
+      model("visible", [deployment(Provider, "upstream-model")]),
+      model("hidden", [deployment(Provider, "upstream-model")], hidden: true)
     ])
 
     ids = Registry.all_models() |> Enum.map(& &1.id)
@@ -145,5 +132,13 @@ defmodule LLMProxy.CatalogTest do
     assert "visible" in ids
     refute "hidden" in ids
     assert "upstream-model" in ids
+  end
+
+  defp model(name, deployments, opts \\ []) do
+    Model.new!(Keyword.merge([name: name, deployments: deployments], opts))
+  end
+
+  defp deployment(provider, upstream_model, opts \\ []) do
+    Deployment.new!(Keyword.merge([provider: provider, upstream_model: upstream_model], opts))
   end
 end

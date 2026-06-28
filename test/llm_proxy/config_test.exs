@@ -34,12 +34,12 @@ defmodule LLMProxy.ConfigTest do
 
     Application.put_env(:llm_proxy, :models,
       codex: [
-        route: [to: :openai_codex, model: "gpt-5.3-codex-spark"]
+        routes: [[to: :openai_codex, model: "gpt-5.3-codex-spark"]]
       ],
       fast: [
         routing: :lowest_cost,
         routes: [
-          [to: :openai, model: "gpt-4o-mini", timeout: 15_000],
+          [to: :openai, model: "gpt-4o-mini", timeout_ms: 15_000],
           [to: :anthropic, model: "claude-3-haiku-20240307", order: 2]
         ]
       ]
@@ -59,19 +59,23 @@ defmodule LLMProxy.ConfigTest do
            ] = fast.deployments
   end
 
-  test "keeps existing catalog config compatible" do
+  test "catalog config accepts strict model structs" do
     Application.put_env(:llm_proxy, :models, [])
 
-    Application.put_env(:llm_proxy, :catalog, [
-      %{
-        "name" => "legacy",
-        "deployments" => [
-          %{"provider" => "openai-codex", "upstream_model" => "gpt-5.3-codex-spark"}
+    model =
+      LLMProxy.Catalog.Model.new!(
+        name: "strict",
+        deployments: [
+          LLMProxy.Catalog.Deployment.new!(
+            provider: OpenAICodex,
+            upstream_model: "gpt-5.3-codex-spark"
+          )
         ]
-      }
-    ])
+      )
 
-    assert [%{name: "legacy", deployments: [%{provider: OpenAICodex}]}] = Config.catalog()
+    Application.put_env(:llm_proxy, :catalog, [model])
+
+    assert [^model] = Config.catalog()
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:llm_proxy, key)

@@ -2,6 +2,7 @@ defmodule LLMProxy.SafeRPCTest do
   use ExUnit.Case, async: true
 
   alias Incant.Service.{Entry, RegistryServer}
+  alias LLMProxy.Catalog.{Deployment, Model}
 
   defmodule Server do
     use SafeRPC.Adapter.Server, service: LLMProxy
@@ -13,10 +14,10 @@ defmodule LLMProxy.SafeRPCTest do
 
   setup do
     LLMProxy.Catalog.load([
-      %{
+      Model.new!(
         name: "rpc-test-model",
-        deployments: [%{provider: __MODULE__, upstream_model: "upstream"}]
-      }
+        deployments: [Deployment.new!(provider: __MODULE__, upstream_model: "upstream")]
+      )
     ])
 
     :ok

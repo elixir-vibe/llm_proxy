@@ -2,6 +2,7 @@ defmodule LLMProxy.ProviderResilienceTest do
   use ExUnit.Case
 
   alias LLMProxy.Catalog
+  alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Providers.CircuitBreaker
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Providers.Routing.Attempt
@@ -115,13 +116,12 @@ defmodule LLMProxy.ProviderResilienceTest do
   end
 
   test "deployment timeout falls back to next deployment" do
-    Catalog.put_model(%{
-      name: "timeout-model",
-      deployments: [
-        %{provider: TimeoutProvider, upstream_model: "slow-model", timeout_ms: 1},
-        %{provider: TimeoutProvider, upstream_model: "fast-model"}
-      ]
-    })
+    Catalog.put_model(
+      model("timeout-model", [
+        deployment(TimeoutProvider, "slow-model", timeout_ms: 1),
+        deployment(TimeoutProvider, "fast-model")
+      ])
+    )
 
     {:ok, key, _raw_key} = Storage.create_key("timeout-user")
 
@@ -131,18 +131,12 @@ defmodule LLMProxy.ProviderResilienceTest do
   end
 
   test "circuit breaker opens and skips unhealthy deployments" do
-    Catalog.put_model(%{
-      name: "circuit-model",
-      deployments: [
-        %{
-          provider: CircuitProvider,
-          upstream_model: "broken-model",
-          failure_threshold: 1,
-          cooldown_ms: 1_000
-        },
-        %{provider: CircuitProvider, upstream_model: "healthy-model"}
-      ]
-    })
+    Catalog.put_model(
+      model("circuit-model", [
+        deployment(CircuitProvider, "broken-model", failure_threshold: 1, cooldown_ms: 1_000),
+        deployment(CircuitProvider, "healthy-model")
+      ])
+    )
 
     {:ok, key, _raw_key} = Storage.create_key("circuit-user")
 
@@ -157,17 +151,11 @@ defmodule LLMProxy.ProviderResilienceTest do
   end
 
   test "half-open circuit closes after successful cooldown probe" do
-    Catalog.put_model(%{
-      name: "recovery-circuit-model",
-      deployments: [
-        %{
-          provider: RecoveryProvider,
-          upstream_model: "recovery-model",
-          failure_threshold: 1,
-          cooldown_ms: 0
-        }
-      ]
-    })
+    Catalog.put_model(
+      model("recovery-circuit-model", [
+        deployment(RecoveryProvider, "recovery-model", failure_threshold: 1, cooldown_ms: 0)
+      ])
+    )
 
     {:ok, key, _raw_key} = Storage.create_key("recovery-user")
 
@@ -183,14 +171,17 @@ defmodule LLMProxy.ProviderResilienceTest do
   end
 
   test "provider responses include trace id" do
-    Catalog.put_model(%{
-      name: "trace-model",
-      deployments: [%{provider: CircuitProvider, upstream_model: "healthy-model"}]
-    })
+    Catalog.put_model(model("trace-model", [deployment(CircuitProvider, "healthy-model")]))
 
     {:ok, key, _raw_key} = Storage.create_key("trace-user")
 
     assert {:ok, response} = LLMProxy.chat("hello", model: "trace-model", api_key: key)
     assert is_binary(response.trace_id)
+  end
+
+  defp model(name, deployments), do: Model.new!(name: name, deployments: deployments)
+
+  defp deployment(provider, upstream_model, opts \\ []) do
+    Deployment.new!(Keyword.merge([provider: provider, upstream_model: upstream_model], opts))
   end
 end

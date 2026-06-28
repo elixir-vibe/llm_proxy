@@ -10,6 +10,7 @@ defmodule LLMProxy.Providers.OpenAICompatibleProvider do
   defmacro __using__(opts) do
     name = Keyword.fetch!(opts, :name)
     models = Keyword.get(opts, :models)
+    provider_id = Keyword.get(opts, :provider_id)
     config_key = Keyword.get(opts, :config_key, name)
     title = Keyword.get(opts, :title)
     referer = Keyword.get(opts, :http_referer)
@@ -17,6 +18,7 @@ defmodule LLMProxy.Providers.OpenAICompatibleProvider do
     quote bind_quoted: [
             name: name,
             models: models,
+            provider_id: provider_id,
             config_key: config_key,
             title: title,
             referer: referer
@@ -27,6 +29,7 @@ defmodule LLMProxy.Providers.OpenAICompatibleProvider do
 
       @provider_name name
       @provider_models models
+      @provider_id provider_id
       @provider_config_key config_key
       @provider_title title
       @provider_referer referer
@@ -40,7 +43,7 @@ defmodule LLMProxy.Providers.OpenAICompatibleProvider do
       @impl true
       if is_nil(@provider_models) do
         @impl true
-        def models, do: LLMProxy.ModelDB.provider_model_ids(String.to_atom(@provider_name))
+        def models, do: LLMProxy.ModelDB.provider_model_ids(@provider_id)
       else
         @impl true
         def models, do: @provider_models

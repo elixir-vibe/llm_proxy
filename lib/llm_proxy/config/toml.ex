@@ -53,6 +53,7 @@ defmodule LLMProxy.Config.TOML do
   defp model(model) when is_map(model) do
     model
     |> normalize_keys()
+    |> normalize_model_values()
     |> Map.update(:routes, [], &routes/1)
   end
 
@@ -61,7 +62,12 @@ defmodule LLMProxy.Config.TOML do
   defp routes(routes) when is_list(routes), do: Enum.map(routes, &route/1)
   defp routes(_routes), do: []
 
-  defp route(route) when is_map(route), do: normalize_keys(route)
+  defp route(route) when is_map(route) do
+    route
+    |> normalize_keys()
+    |> normalize_route_values()
+  end
+
   defp route(_route), do: %{}
 
   @known_keys %{
@@ -93,10 +99,32 @@ defmodule LLMProxy.Config.TOML do
     Map.new(map, fn {key, value} -> {normalize_key(key), normalize_value(value)} end)
   end
 
-  defp normalize_value(value) when is_map(value), do: normalize_keys(value)
-  defp normalize_value(value) when is_list(value), do: Enum.map(value, &normalize_value/1)
+  defp normalize_value(value) when is_map(value), do: value
+  defp normalize_value(value) when is_list(value), do: value
   defp normalize_value(value), do: value
 
-  defp normalize_key(key) when is_binary(key), do: Map.get(@known_keys, key, key)
-  defp normalize_key(key), do: key
+  defp normalize_model_values(%{routing: routing} = model),
+    do: %{model | routing: routing_strategy!(routing)}
+
+  defp normalize_model_values(model), do: model
+
+  defp normalize_route_values(%{timeout: timeout} = route) do
+    route
+    |> Map.delete(:timeout)
+    |> Map.put(:timeout_ms, timeout)
+  end
+
+  defp normalize_route_values(route), do: route
+
+  defp routing_strategy!("ordered"), do: :ordered
+  defp routing_strategy!("shuffle"), do: :shuffle
+  defp routing_strategy!("round_robin"), do: :round_robin
+  defp routing_strategy!("weighted_shuffle"), do: :weighted_shuffle
+  defp routing_strategy!("lowest_cost"), do: :lowest_cost
+
+  defp routing_strategy!(routing) do
+    raise ArgumentError, "invalid TOML catalog routing strategy #{inspect(routing)}"
+  end
+
+  defp normalize_key(key) when is_binary(key), do: Map.fetch!(@known_keys, key)
 end

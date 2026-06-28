@@ -1,9 +1,9 @@
 defmodule LLMProxy.ModelDBTest do
   use ExUnit.Case, async: true
 
-  test "maps proxy provider modules and names to LLMDB provider ids" do
+  test "maps proxy provider modules and atoms to LLMDB provider ids" do
     assert LLMProxy.ModelDB.provider_id(LLMProxy.Providers.OpenAI) == :openai
-    assert LLMProxy.ModelDB.provider_id("anthropic") == :anthropic
+    assert LLMProxy.ModelDB.provider_id(:anthropic) == :anthropic
     assert LLMProxy.ModelDB.provider_id(:openrouter) == :openrouter
   end
 
@@ -19,8 +19,8 @@ defmodule LLMProxy.ModelDBTest do
   test "gets pricing from LLMDB" do
     pricing = LLMProxy.ModelDB.pricing("gpt-4o", :openai)
 
-    assert is_map(pricing)
-    assert is_number(pricing["input"])
-    assert is_number(pricing["output"])
+    assert %LLMProxy.Pricing.Rates{} = pricing
+    assert is_number(pricing.input)
+    assert is_number(pricing.output)
   end
 end

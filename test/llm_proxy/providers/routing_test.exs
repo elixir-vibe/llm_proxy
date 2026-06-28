@@ -2,6 +2,7 @@ defmodule LLMProxy.Providers.RoutingTest do
   use ExUnit.Case
 
   alias LLMProxy.Catalog
+  alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
@@ -43,13 +44,15 @@ defmodule LLMProxy.Providers.RoutingTest do
     Catalog.load([])
     Registry.register(Provider)
 
-    Catalog.put_model(%{
-      name: "routed-model",
-      deployments: [
-        %{provider: Provider, upstream_model: "primary-routing-model", order: 1},
-        %{provider: Provider, upstream_model: "secondary-routing-model", order: 2}
-      ]
-    })
+    Catalog.put_model(
+      Model.new!(
+        name: "routed-model",
+        deployments: [
+          Deployment.new!(provider: Provider, upstream_model: "primary-routing-model", order: 1),
+          Deployment.new!(provider: Provider, upstream_model: "secondary-routing-model", order: 2)
+        ]
+      )
+    )
 
     on_exit(fn -> Catalog.load([]) end)
 

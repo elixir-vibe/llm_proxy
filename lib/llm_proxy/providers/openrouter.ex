@@ -3,6 +3,7 @@ defmodule LLMProxy.Providers.OpenRouter do
 
   use LLMProxy.Providers.OpenAICompatibleProvider,
     name: "openrouter",
+    provider_id: :openrouter,
     http_referer: "",
     title: "LLM Proxy"
 end

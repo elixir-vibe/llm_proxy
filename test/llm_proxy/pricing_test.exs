@@ -13,7 +13,7 @@ defmodule LLMProxy.PricingTest do
 
       cost = Pricing.calculate_cost("gpt-4o", usage, :openai)
 
-      expected = (1000 * pricing["input"] + 500 * pricing["output"]) / 1_000_000
+      expected = (1000 * pricing.input + 500 * pricing.output) / 1_000_000
       assert_in_delta cost, expected, 0.0000001
     end
 
@@ -31,8 +31,8 @@ defmodule LLMProxy.PricingTest do
         cost = Pricing.calculate_cost("claude-sonnet-4-20250514", usage, :anthropic)
 
         expected =
-          (1000 * pricing["input"] + 500 * pricing["output"] +
-             2000 * pricing["cache_read"] + 300 * pricing["cache_write"]) / 1_000_000
+          (1000 * pricing.input + 500 * pricing.output +
+             2000 * pricing.cache_read + 300 * pricing.cache_write) / 1_000_000
 
         assert_in_delta cost, expected, 0.0000001
       end
@@ -42,9 +42,9 @@ defmodule LLMProxy.PricingTest do
   describe "get_pricing/1" do
     test "returns pricing for known models" do
       pricing = Pricing.get_pricing("gpt-4o", :openai)
-      assert is_map(pricing)
-      assert is_number(pricing["input"])
-      assert is_number(pricing["output"])
+      assert %LLMProxy.Pricing.Rates{} = pricing
+      assert is_number(pricing.input)
+      assert is_number(pricing.output)
     end
 
     test "returns nil for unknown model" do

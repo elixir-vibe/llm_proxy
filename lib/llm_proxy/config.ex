@@ -63,7 +63,7 @@ defmodule LLMProxy.Config do
     configured_catalog = Application.get_env(:llm_proxy, :catalog, [])
     configured_models = Application.get_env(:llm_proxy, :models, [])
 
-    normalize_catalog(configured_catalog) ++ normalize_models(configured_models)
+    LLMProxy.Config.Catalog.parse(configured_catalog, configured_models)
   end
 
   def provider_config(provider) when is_atom(provider),
@@ -138,67 +138,6 @@ defmodule LLMProxy.Config do
 
   defp normalize_providers(_providers), do: %{}
 
-  defp normalize_catalog(catalog) when is_list(catalog) do
-    Enum.map(catalog, &normalize_catalog_model/1)
-  end
-
-  defp normalize_catalog(_catalog), do: []
-
-  defp normalize_models(models) when is_list(models) do
-    Enum.map(models, fn
-      {name, config} -> normalize_named_model(name, config)
-      config when is_map(config) -> normalize_catalog_model(config)
-    end)
-  end
-
-  defp normalize_models(models) when is_map(models) do
-    Enum.map(models, fn {name, config} -> normalize_named_model(name, config) end)
-  end
-
-  defp normalize_models(_models), do: []
-
-  defp normalize_named_model(name, config) do
-    config
-    |> normalize_value()
-    |> Map.put_new(:name, model_name(name))
-    |> normalize_catalog_model()
-  end
-
-  defp normalize_catalog_model(model) when is_list(model),
-    do: model |> Map.new() |> normalize_catalog_model()
-
-  defp normalize_catalog_model(model) when is_map(model) do
-    model = normalize_value(model)
-
-    deployments =
-      cond do
-        Map.has_key?(model, :deployments) -> Map.get(model, :deployments)
-        Map.has_key?(model, :routes) -> Map.get(model, :routes)
-        Map.has_key?(model, :route) -> [Map.get(model, :route)]
-        true -> []
-      end
-
-    model
-    |> Map.drop([:routes, :route, :routing])
-    |> maybe_rename(:routing_strategy, Map.get(model, :routing))
-    |> Map.put(:deployments, Enum.map(List.wrap(deployments), &normalize_deployment/1))
-  end
-
-  defp normalize_deployment(deployment) when is_list(deployment),
-    do: deployment |> Map.new() |> normalize_deployment()
-
-  defp normalize_deployment(deployment) when is_map(deployment) do
-    deployment = normalize_value(deployment)
-    provider = Map.get(deployment, :provider) || Map.get(deployment, :to)
-    upstream_model = Map.get(deployment, :upstream_model) || Map.get(deployment, :model)
-
-    deployment
-    |> Map.drop([:to, :model, :timeout])
-    |> Map.put(:provider, provider_module(provider))
-    |> Map.put(:upstream_model, upstream_model)
-    |> maybe_rename(:timeout_ms, Map.get(deployment, :timeout))
-  end
-
   defp normalize_value(value) when is_list(value) do
     if Keyword.keyword?(value) do
       value
@@ -250,32 +189,6 @@ defmodule LLMProxy.Config do
   defp normalize_key(key) when is_binary(key), do: Map.get(@known_config_keys, key, key)
   defp normalize_key(key), do: key
 
-  defp maybe_rename(map, _key, nil), do: map
-  defp maybe_rename(map, key, value), do: Map.put(map, key, value)
-
-  defp provider_module(module) when is_atom(module) do
-    cond do
-      function_exported?(module, :name, 0) -> module
-      module == :openai -> LLMProxy.Providers.OpenAI
-      module == :openai_codex -> LLMProxy.Providers.OpenAICodex
-      module == :anthropic -> LLMProxy.Providers.Anthropic
-      module == :openrouter -> LLMProxy.Providers.OpenRouter
-      true -> module
-    end
-  end
-
-  defp provider_module(provider) when is_binary(provider) do
-    case provider_name(provider) do
-      "openai" -> LLMProxy.Providers.OpenAI
-      "openai-codex" -> LLMProxy.Providers.OpenAICodex
-      "anthropic" -> LLMProxy.Providers.Anthropic
-      "openrouter" -> LLMProxy.Providers.OpenRouter
-      _other -> raise ArgumentError, "unknown LLMProxy provider #{inspect(provider)}"
-    end
-  end
-
-  defp provider_module(provider), do: provider
-
   defp provider_name(provider) when is_atom(provider) do
     case provider do
       LLMProxy.Providers.OpenAI -> "openai"
@@ -288,9 +201,6 @@ defmodule LLMProxy.Config do
   end
 
   defp provider_name(provider) when is_binary(provider), do: String.replace(provider, "_", "-")
-
-  defp model_name(name) when is_atom(name), do: Atom.to_string(name)
-  defp model_name(name), do: to_string(name)
 
   defp deep_merge(left, right) do
     Map.merge(left, right, fn _key, left_value, right_value ->

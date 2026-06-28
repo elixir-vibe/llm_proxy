@@ -2,6 +2,7 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   use ExUnit.Case
 
   alias LLMProxy.{Catalog, ModelDB}
+  alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Providers.{OpenAICodex, Registry}
   alias LLMProxy.Providers.Routing.Attempt
   alias ReqLLM.StreamChunk
@@ -18,10 +19,14 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   test "Codex routes through existing catalog deployments" do
     Catalog.load([])
 
-    Catalog.put_model(%{
-      name: "codex",
-      deployments: [%{provider: OpenAICodex, upstream_model: "gpt-5.3-codex-spark"}]
-    })
+    Catalog.put_model(
+      Model.new!(
+        name: "codex",
+        deployments: [
+          Deployment.new!(provider: OpenAICodex, upstream_model: "gpt-5.3-codex-spark")
+        ]
+      )
+    )
 
     assert {:ok, [%Attempt{provider: OpenAICodex, model: "gpt-5.3-codex-spark"}]} =
              Registry.resolve_attempts("codex")
