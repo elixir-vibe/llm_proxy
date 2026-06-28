@@ -1,7 +1,14 @@
 defmodule LLMProxy.Providers.Result do
-  @moduledoc false
+  @moduledoc """
+  Provider execution result tagged by response kind.
+
+  Providers return this struct from native and compatibility calls so routing,
+  fallback, HTTP route rendering, and token accounting can branch on an explicit
+  `:kind` instead of inferring meaning from nullable fields.
+  """
 
   @type kind :: :response | :stream | :error
+  @type token :: map() | nil
 
   @enforce_keys [:kind]
   defstruct [
@@ -22,21 +29,22 @@ defmodule LLMProxy.Providers.Result do
           stream: Enumerable.t() | nil,
           error: String.t() | nil,
           status: pos_integer() | nil,
-          token: map() | nil,
+          token: token(),
           retry_after_ms: non_neg_integer() | nil,
           provider: module() | nil,
           model: String.t() | nil
         }
 
-  @spec response(map(), map() | nil) :: t()
+  @spec response(map(), token()) :: t()
   def response(body, token) when is_map(body),
     do: %__MODULE__{kind: :response, response: body, token: token}
 
-  @spec stream(Enumerable.t(), map() | nil) :: t()
+  @spec stream(Enumerable.t(), token()) :: t()
   def stream(stream, token), do: %__MODULE__{kind: :stream, stream: stream, token: token}
 
-  @spec error(String.t(), pos_integer(), map() | nil, keyword()) :: t()
-  def error(error, status, token, opts \\ []) when is_binary(error) and is_integer(status) do
+  @spec error(String.t(), pos_integer(), token(), keyword()) :: t()
+  def error(error, status, token, opts \\ [])
+      when is_binary(error) and is_integer(status) and status > 0 do
     %__MODULE__{
       kind: :error,
       error: error,
