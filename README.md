@@ -125,7 +125,13 @@ config :llm_proxy,
 
 Custom storage modules implement `LLMProxy.Storage.Adapter`.
 
-To install or upgrade the storage schema in a host repo, include LLMProxy's normal Ecto migration path when migrating:
+To install or upgrade the storage schema in a host repo, run the Igniter installer:
+
+```bash
+mix igniter.install llm_proxy
+```
+
+The installer adds a `mix llm_proxy.migrate` alias that includes both the host application's migration path and LLMProxy's dependency migration path. Without the installer, pass both paths directly:
 
 ```bash
 mix ecto.migrate \

@@ -10,6 +10,16 @@ defmodule LLMProxy.MixProject do
       aliases: aliases(),
       deps: deps(),
       releases: releases(),
+      elixirc_options: [
+        no_warn_undefined: [
+          {Igniter, :add_notice, 2},
+          {Igniter.Code.Common, :nodes_equal?, 2},
+          {Igniter.Code.List, :replace_in_list, 3},
+          {Igniter.Mix.Task.Info, :__struct__, 1},
+          {Igniter.Project.TaskAliases, :add_alias, 4},
+          {Igniter.Project.TaskAliases, :modify_existing_alias, 3}
+        ]
+      ],
       dialyzer: [plt_add_apps: [:mix]],
       test_coverage: [
         summary: [threshold: 85],
@@ -38,6 +48,7 @@ defmodule LLMProxy.MixProject do
   defp deps do
     [
       {:release_kit, "~> 0.3.0", runtime: false},
+      {:igniter, "~> 0.8", optional: true},
       {:phoenix, "~> 1.8", optional: true},
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sql, "~> 3.13"},
