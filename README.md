@@ -125,16 +125,15 @@ config :llm_proxy,
 
 Custom storage modules implement `LLMProxy.Storage.Adapter`.
 
-To install the storage schema in a host repo, create a migration that delegates to LLMProxy:
+To install or upgrade the storage schema in a host repo, include LLMProxy's normal Ecto migration path when migrating:
 
-```elixir
-defmodule MyApp.Repo.Migrations.AddLLMProxy do
-  use Ecto.Migration
-
-  def up, do: LLMProxy.Storage.Migrations.up()
-  def down, do: LLMProxy.Storage.Migrations.down()
-end
+```bash
+mix ecto.migrate \
+  --migrations-path priv/repo/migrations \
+  --migrations-path deps/llm_proxy/priv/repo/migrations
 ```
+
+Release code can do the same through `Ecto.Migrator.run/4` by passing both migration directories. LLMProxy does not provide a second migration DSL; `priv/repo/migrations/*.exs` is the migration source of truth.
 
 Route groups:
 
