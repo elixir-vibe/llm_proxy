@@ -40,7 +40,7 @@ defmodule LLMProxy.MixProject do
 
   def application do
     [
-      extra_applications: [:logger],
+      extra_applications: [:logger, :req],
       mod: {LLMProxy.Application, []}
     ]
   end
@@ -58,6 +58,7 @@ defmodule LLMProxy.MixProject do
       # these encoder fixes to avoid local OpenAI/Anthropic wire-format patches.
       {:req_llm,
        git: "https://github.com/dannote/req_llm.git", branch: "fix/provider-context-encoding"},
+      {:req, "~> 0.6"},
       {:llm_db, "~> 2026.3", runtime: false},
       {:dotenvy, "~> 1.1"},
       {:toml, "~> 0.7"},

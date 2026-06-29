@@ -41,6 +41,8 @@ defmodule LLMProxy.ReleaseTasks do
   end
 
   defp run_codex_login do
+    ensure_http_client_started()
+
     verifier = CodexLogin.new_verifier()
     state = CodexLogin.new_state()
     challenge = CodexLogin.pkce_challenge(verifier)
@@ -90,6 +92,13 @@ defmodule LLMProxy.ReleaseTasks do
 
       result
     end)
+  end
+
+  @doc false
+  @spec ensure_http_client_started() :: :ok
+  def ensure_http_client_started do
+    {:ok, _apps} = Application.ensure_all_started(:req)
+    :ok
   end
 
   defp print_codex_login_help do
