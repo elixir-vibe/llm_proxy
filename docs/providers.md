@@ -62,6 +62,8 @@ Standalone releases can run `bin/codex_login` for an interactive OAuth flow:
 bin/codex_login
 ```
 
+Run it with the same runtime environment as the service so standalone config and storage settings are available. If the release uses exclusive local storage such as a managed DuckDB/QuackDB process, stop the running service while `codex_login` persists the token, then start it again.
+
 The command prints the ChatGPT/Codex authorization URL, accepts a pasted redirect URL or authorization code, exchanges it server-side, and stores the resulting OAuth token in `provider_tokens`. Before a token is present, Codex requests fail with `No available OpenAI Codex OAuth tokens: no_tokens`. After login, refreshed credentials are persisted automatically.
 
 ## Custom providers
