@@ -16,10 +16,16 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
     filter(:name, :text)
     filter(:trace_requests, :boolean)
 
-    action(:show_usage)
-    action(:rotate, confirm: true)
-    action(:delete, confirm: true, destructive: true)
+    action(:delete, confirm: true, destructive: true, callback: {__MODULE__, :delete})
   end
 
   def index(params, _context), do: LLMProxy.Storage.list_keys(params)
+
+  def delete(%{id: id}, _assigns) do
+    case LLMProxy.Storage.delete_key(id) do
+      {:ok, _key} -> {:ok, Incant.ActionResult.refresh()}
+      {:error, :not_found} -> {:error, "API key not found"}
+      {:error, reason} -> {:error, inspect(reason)}
+    end
+  end
 end

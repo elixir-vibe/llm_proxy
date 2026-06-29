@@ -21,7 +21,6 @@ defmodule LLMProxy.Admin.Resources.Trace do
     filter(:timestamp, :date_range)
 
     row_detail(:payload, label: "Request/response")
-    action(:open_feedback)
   end
 
   def index(params, _context), do: LLMProxy.Storage.get_traces(params)

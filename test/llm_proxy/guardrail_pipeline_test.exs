@@ -107,6 +107,15 @@ defmodule LLMProxy.GuardrailPipelineTest do
              LLMProxy.chat("hello", model: "guardrail-model", api_key: key)
   end
 
+  test "guardrail config rejects non-module entries" do
+    Application.put_env(:llm_proxy, :guardrails, ["not-a-module"])
+    {:ok, key, _raw_key} = Storage.create_key("guardrail-invalid-user")
+
+    assert_raise ArgumentError, ~r/guardrails must be module atoms/, fn ->
+      LLMProxy.chat("hello", model: "guardrail-model", api_key: key)
+    end
+  end
+
   test "after_response can modify provider responses" do
     Application.put_env(:llm_proxy, :guardrails, [ResponseGuardrail])
     {:ok, key, _raw_key} = Storage.create_key("guardrail-response-user")

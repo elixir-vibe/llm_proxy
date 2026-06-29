@@ -50,10 +50,13 @@ defmodule LLMProxy.Cache.Policy do
   defp policy(config) when is_list(config), do: config |> Map.new() |> policy()
 
   defp policy(config) when is_map(config) do
-    %__MODULE__{
-      enabled: get(config, :enabled, "enabled", true),
-      ttl_ms: get(config, :ttl_ms, "ttl_ms", nil)
-    }
+    enabled = get(config, :enabled, "enabled", true)
+    ttl_ms = get(config, :ttl_ms, "ttl_ms", nil)
+
+    validate_enabled!(enabled)
+    validate_ttl_ms!(ttl_ms)
+
+    %__MODULE__{enabled: enabled, ttl_ms: ttl_ms}
   end
 
   defp policy(_config), do: %__MODULE__{}
@@ -70,12 +73,28 @@ defmodule LLMProxy.Cache.Policy do
     cond do
       metadata["cache"] == false -> %{policy | enabled: false}
       metadata["no_cache"] == true -> %{policy | enabled: false}
-      is_integer(metadata["cache_ttl_ms"]) -> %{policy | ttl_ms: metadata["cache_ttl_ms"]}
+      valid_ttl_ms?(metadata["cache_ttl_ms"]) -> %{policy | ttl_ms: metadata["cache_ttl_ms"]}
       true -> policy
     end
   end
 
   defp apply_request_metadata(policy, _request), do: policy
+
+  defp validate_enabled!(enabled) when is_boolean(enabled), do: :ok
+
+  defp validate_enabled!(enabled) do
+    raise ArgumentError, "cache policy enabled must be a boolean, got: #{inspect(enabled)}"
+  end
+
+  defp validate_ttl_ms!(nil), do: :ok
+  defp validate_ttl_ms!(ttl_ms) when is_integer(ttl_ms) and ttl_ms > 0, do: :ok
+
+  defp validate_ttl_ms!(ttl_ms) do
+    raise ArgumentError,
+          "cache policy ttl_ms must be a positive integer or nil, got: #{inspect(ttl_ms)}"
+  end
+
+  defp valid_ttl_ms?(ttl_ms), do: is_integer(ttl_ms) and ttl_ms > 0
 
   defp get(map, atom_key, string_key, default),
     do: Map.get(map, atom_key, Map.get(map, string_key, default))

@@ -120,6 +120,36 @@ defmodule LLMProxy.CacheTest do
     assert Store.ttl_ms() == 60_000
   end
 
+  test "cache policy rejects invalid configured values" do
+    Application.put_env(:llm_proxy, :cache_policy, enabled: "yes")
+    {:ok, key, _raw_key} = Storage.create_key("cache-invalid-enabled-user")
+
+    assert_raise ArgumentError, ~r/enabled must be a boolean/, fn ->
+      LLMProxy.chat("hello", model: "cache-model", api_key: key)
+    end
+
+    Application.put_env(:llm_proxy, :cache_policy, ttl_ms: 0)
+
+    assert_raise ArgumentError, ~r/ttl_ms must be a positive integer or nil/, fn ->
+      LLMProxy.chat("hello", model: "cache-model", api_key: key)
+    end
+  end
+
+  test "invalid per-request cache ttl metadata is ignored" do
+    Application.put_env(:llm_proxy, :cache_policy, ttl_ms: 60_000)
+    {:ok, key, _raw_key} = Storage.create_key("cache-invalid-metadata-ttl-user")
+
+    assert {:ok, response} =
+             LLMProxy.chat("hello",
+               model: "cache-model",
+               metadata: %{"cache_ttl_ms" => -1},
+               api_key: key
+             )
+
+    assert response.cache_ttl_ms == 60_000
+    assert Store.ttl_ms() == 60_000
+  end
+
   test "cache policy can disable a model" do
     Application.put_env(:llm_proxy, :cache_policy, models: %{"cache-model" => [enabled: false]})
 

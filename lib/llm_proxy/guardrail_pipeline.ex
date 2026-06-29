@@ -47,5 +47,12 @@ defmodule LLMProxy.GuardrailPipeline do
     :llm_proxy
     |> Application.get_env(:guardrails, [])
     |> List.wrap()
+    |> Enum.map(&validate_guardrail!/1)
+  end
+
+  defp validate_guardrail!(guardrail) when is_atom(guardrail), do: guardrail
+
+  defp validate_guardrail!(guardrail) do
+    raise ArgumentError, "guardrails must be module atoms, got: #{inspect(guardrail)}"
   end
 end
