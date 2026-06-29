@@ -7,6 +7,8 @@ defmodule LLMProxy.Config.TOML do
   create atoms from arbitrary TOML keys.
   """
 
+  alias LLMProxy.Catalog.Model
+
   @type decoded :: [providers: map(), models: [map()]]
   @type reason :: Toml.reason()
 
@@ -107,7 +109,7 @@ defmodule LLMProxy.Config.TOML do
   defp normalize_value(_key, value), do: value
 
   defp normalize_model_values(%{routing: routing} = model),
-    do: %{model | routing: routing_strategy!(routing)}
+    do: %{model | routing: Model.routing_strategy!(routing)}
 
   defp normalize_model_values(model), do: model
 
@@ -118,16 +120,6 @@ defmodule LLMProxy.Config.TOML do
   end
 
   defp normalize_route_values(route), do: route
-
-  defp routing_strategy!("ordered"), do: :ordered
-  defp routing_strategy!("shuffle"), do: :shuffle
-  defp routing_strategy!("round_robin"), do: :round_robin
-  defp routing_strategy!("weighted_shuffle"), do: :weighted_shuffle
-  defp routing_strategy!("lowest_cost"), do: :lowest_cost
-
-  defp routing_strategy!(routing) do
-    raise ArgumentError, "invalid TOML catalog routing strategy #{inspect(routing)}"
-  end
 
   defp normalize_key(key) when is_binary(key), do: Map.fetch!(@known_keys, key)
 end

@@ -136,14 +136,12 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
           if String.contains?(error_msg, "429") && token,
             do: TokenPool.mark_rate_limited(token)
 
-          error_event =
-            Jason.encode!(%{type: "error", error: %{type: "api_error", message: error_msg}})
-
-          Plug.Conn.chunk(conn, "data: #{error_event}\n\n")
+          error_event = %{type: "error", error: %{type: "api_error", message: error_msg}}
+          SSEWriter.write_event(conn, error_event)
           {conn, zero_usage}
       end
 
-    Plug.Conn.chunk(conn, "data: [DONE]\n\n")
+    SSEWriter.write_done(conn)
     UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
     conn
   end

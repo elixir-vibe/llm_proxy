@@ -9,8 +9,6 @@ defmodule LLMProxy.Config.Catalog do
 
   alias LLMProxy.Catalog.{Deployment, Model}
 
-  @routing_strategies [:ordered, :shuffle, :round_robin, :weighted_shuffle, :lowest_cost]
-
   @spec parse(term(), term()) :: [Model.t()]
   def parse(catalog_config, models_config) do
     parse_catalog(catalog_config) ++ parse_models(models_config)
@@ -62,7 +60,7 @@ defmodule LLMProxy.Config.Catalog do
     Model.new!(
       name: Keyword.fetch!(config, :name),
       hidden: Keyword.get(config, :hidden, false),
-      routing_strategy: routing_strategy!(Keyword.get(config, :routing, :ordered)),
+      routing_strategy: Model.routing_strategy!(Keyword.get(config, :routing, :ordered)),
       deployments: config |> Keyword.get(:routes, []) |> routes!(),
       metadata: Keyword.get(config, :metadata, %{})
     )
@@ -72,7 +70,7 @@ defmodule LLMProxy.Config.Catalog do
     Model.new!(
       name: Map.fetch!(config, :name),
       hidden: Map.get(config, :hidden, false),
-      routing_strategy: routing_strategy!(Map.get(config, :routing, :ordered)),
+      routing_strategy: Model.routing_strategy!(Map.get(config, :routing, :ordered)),
       deployments: config |> Map.get(:routes, []) |> routes!(),
       metadata: Map.get(config, :metadata, %{})
     )
@@ -114,12 +112,6 @@ defmodule LLMProxy.Config.Catalog do
       weight: Map.get(route, :weight, 1),
       metadata: Map.get(route, :metadata, %{})
     )
-  end
-
-  defp routing_strategy!(strategy) when strategy in @routing_strategies, do: strategy
-
-  defp routing_strategy!(strategy) do
-    raise ArgumentError, "invalid catalog routing strategy #{inspect(strategy)}"
   end
 
   defp provider_module!(module) when is_atom(module) do
