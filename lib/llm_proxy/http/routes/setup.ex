@@ -14,6 +14,7 @@ defmodule LLMProxy.HTTP.Routes.Setup do
     Parsed setup endpoint authentication.
     """
 
+    @enforce_keys [:api_key]
     defstruct [:api_key]
 
     @type t :: %__MODULE__{api_key: String.t()}
@@ -146,9 +147,10 @@ defmodule LLMProxy.HTTP.Routes.Setup do
         url
 
       _ ->
-        case get_req_header(conn, "host") do
-          [host | _] -> "https://#{host}"
-          _ -> "http://localhost:4000"
+        if is_binary(conn.host) and conn.host != "" do
+          "https://#{conn.host}"
+        else
+          "http://localhost:4000"
         end
     end
   end

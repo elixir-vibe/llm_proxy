@@ -117,8 +117,10 @@ defmodule LLMProxy.HTTP.Routes.Chat do
       |> write_stream_event(OpenAI.stream_event(event.data, from_protocol, model))
     end)
     |> then(fn conn ->
-      {:ok, conn} = SSEWriter.write_done(conn)
-      conn
+      case SSEWriter.write_done(conn) do
+        {:ok, conn} -> conn
+        {:error, _reason} -> conn
+      end
     end)
   end
 

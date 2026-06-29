@@ -25,7 +25,7 @@ defmodule LLMProxy.HTTP.Routes.Dynamic do
     routes = :persistent_term.get(@registry_key, [])
 
     Enum.find_value(routes, fn {prefix, plug_module} ->
-      if String.starts_with?(path, prefix) do
+      if prefix_match?(path, prefix) do
         remaining = String.replace_prefix(path, prefix, "")
 
         remaining_segments =
@@ -41,5 +41,9 @@ defmodule LLMProxy.HTTP.Routes.Dynamic do
         plug_module.call(conn, plug_module.init([]))
       end
     end)
+  end
+
+  defp prefix_match?(path, prefix) do
+    path == prefix or String.starts_with?(path, prefix <> "/")
   end
 end

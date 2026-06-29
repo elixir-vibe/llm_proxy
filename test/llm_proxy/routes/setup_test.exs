@@ -62,6 +62,38 @@ defmodule LLMProxy.HTTP.Routes.SetupTest do
     assert extension_conn.resp_body =~ "setup-model"
   end
 
+  test "accepts bearer auth for config" do
+    {:ok, _key, raw_key} =
+      Storage.create_key("setup-bearer-user", %{allowed_models: ["setup-model"]})
+
+    conn =
+      Plug.Test.conn(:get, "/config")
+      |> Plug.Conn.put_req_header("authorization", "Bearer #{raw_key}")
+      |> Setup.call(Setup.init([]))
+
+    assert conn.status == 200
+
+    assert get_in(Jason.decode!(conn.resp_body), ["providers", "llm-proxy", "models"]) == [
+             %{"id" => "setup-model", "object" => "model", "owned_by" => "setup-provider"}
+           ]
+  end
+
+  test "uses request host when public url is not configured" do
+    Application.delete_env(:llm_proxy, :public_url)
+    {:ok, _key, raw_key} = Storage.create_key("setup-host-user")
+
+    %Plug.Conn{} = conn = Plug.Test.conn(:get, "/config?key=#{raw_key}")
+
+    conn =
+      %{conn | host: "llm.example"}
+      |> Setup.call(Setup.init([]))
+
+    assert conn.status == 200
+
+    assert get_in(Jason.decode!(conn.resp_body), ["providers", "llm-proxy", "baseUrl"]) ==
+             "https://llm.example"
+  end
+
   test "rejects invalid api keys" do
     conn = Plug.Test.conn(:get, "/config?key=missing") |> Setup.call(Setup.init([]))
     assert conn.status == 401

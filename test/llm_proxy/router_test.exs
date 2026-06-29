@@ -43,10 +43,16 @@ defmodule LLMProxy.RouterDynamicTest do
 
   test "dispatches dynamic routes and returns 404 otherwise" do
     dynamic_conn = Plug.Test.conn(:get, "/dynamic/test") |> Router.call(Router.init([]))
+
+    prefix_collision_conn =
+      Plug.Test.conn(:get, "/dynamicity/test") |> Router.call(Router.init([]))
+
     missing_conn = Plug.Test.conn(:get, "/missing") |> Router.call(Router.init([]))
 
     assert dynamic_conn.status == 200
     assert dynamic_conn.resp_body == "dynamic"
+    assert prefix_collision_conn.status == 404
+    assert Jason.decode!(prefix_collision_conn.resp_body) == %{"error" => "Not found"}
     assert missing_conn.status == 404
     assert Jason.decode!(missing_conn.resp_body) == %{"error" => "Not found"}
   end
