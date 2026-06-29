@@ -17,8 +17,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Cache.Runtime, as: CacheRuntime
   alias LLMProxy.GuardrailPipeline
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.Providers.{Caller, Registry, Result}
-  alias LLMProxy.Providers.Routing.Attempt
+  alias LLMProxy.Providers.{Attempt, Execution, Registry, Result}
   alias LLMProxy.Response
   alias LLMProxy.Stream.Event
   alias LLMProxy.Telemetry
@@ -299,7 +298,7 @@ defmodule LLMProxy.Provider do
       provider.name(),
       upstream_model,
       :call,
-      fn -> Caller.call_attempts(attempts, request, api_key.id) end,
+      fn -> Execution.call_attempts(attempts, request, api_key.id) end,
       %{"llm_proxy.trace_id" => trace_id}
     )
   end
@@ -352,11 +351,11 @@ defmodule LLMProxy.Provider do
   end
 
   defp invoke_native(:call_native, attempts, request, user_id, api_name) do
-    Caller.call_native_attempts(attempts, request, user_id, api_name)
+    Execution.call_native_attempts(attempts, request, user_id, api_name)
   end
 
   defp invoke_native(:stream_native, attempts, request, user_id, api_name) do
-    Caller.stream_native_attempts(attempts, request, user_id, api_name)
+    Execution.stream_native_attempts(attempts, request, user_id, api_name)
   end
 
   defp native_api_name(:anthropic_messages), do: "Messages API"
@@ -391,7 +390,7 @@ defmodule LLMProxy.Provider do
       provider.name(),
       upstream_model,
       :stream,
-      fn -> Caller.stream_attempts(attempts, request, api_key.id) end,
+      fn -> Execution.stream_attempts(attempts, request, api_key.id) end,
       %{"llm_proxy.trace_id" => trace_id}
     )
   end

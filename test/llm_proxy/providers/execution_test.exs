@@ -1,10 +1,10 @@
-defmodule LLMProxy.Providers.CallerTest do
+defmodule LLMProxy.Providers.ExecutionTest do
   use ExUnit.Case, async: true
 
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.Providers.{Caller, Result}
+  alias LLMProxy.Providers.Attempt
   alias LLMProxy.Providers.CircuitBreaker
-  alias LLMProxy.Providers.Routing.Attempt
+  alias LLMProxy.Providers.{Execution, Result}
   alias LLMProxy.Stream.Event
 
   defmodule SuccessProvider do
@@ -91,24 +91,24 @@ defmodule LLMProxy.Providers.CallerTest do
   describe "call/4 with no fallbacks" do
     test "returns success on first try" do
       assert {:ok, %Result{response: %{"ok" => true}, provider: SuccessProvider, model: "m"}} =
-               Caller.call(SuccessProvider, request("m"), "user", "m")
+               Execution.call(SuccessProvider, request("m"), "user", "m")
     end
 
     test "returns error when provider fails with non-retryable error" do
       assert {:error, %Result{status: 401}} =
-               Caller.call(AuthErrorProvider, request("m"), "user", "m")
+               Execution.call(AuthErrorProvider, request("m"), "user", "m")
     end
 
     test "returns error when provider fails with retryable error but no fallbacks" do
       assert {:error, %Result{status: 500}} =
-               Caller.call(FailProvider, request("m"), "user", "m")
+               Execution.call(FailProvider, request("m"), "user", "m")
     end
   end
 
   describe "call/4 protocol conversion" do
     test "converts OpenAI chat bodies to provider-native request format" do
       assert {:ok, %Result{response: %{"ok" => "anthropic"}, provider: NativeAnthropicProvider}} =
-               Caller.call(
+               Execution.call(
                  NativeAnthropicProvider,
                  request("claude"),
                  "user",
@@ -127,7 +127,7 @@ defmodule LLMProxy.Providers.CallerTest do
                 provider: FallbackProvider,
                 model: "fallback-model"
               }} =
-               Caller.call(FailProvider, request("m"), "user", "m")
+               Execution.call(FailProvider, request("m"), "user", "m")
     end
 
     test "tries fallbacks on rate limits" do
@@ -139,7 +139,7 @@ defmodule LLMProxy.Providers.CallerTest do
                 provider: FallbackProvider,
                 model: "fallback-model"
               }} =
-               Caller.call(RateLimitedProvider, request("m"), "user", "m")
+               Execution.call(RateLimitedProvider, request("m"), "user", "m")
     end
 
     test "uses retry-after as circuit breaker cooldown" do
@@ -148,7 +148,7 @@ defmodule LLMProxy.Providers.CallerTest do
       attempt = %Attempt{provider: RetryAfterProvider, model: "m", failure_threshold: 1}
 
       assert {:ok, %Result{provider: FallbackProvider}} =
-               Caller.call_attempts(
+               Execution.call_attempts(
                  [attempt, {FallbackProvider, "fallback-model"}],
                  request("m"),
                  "user"
@@ -161,7 +161,7 @@ defmodule LLMProxy.Providers.CallerTest do
   describe "native attempts" do
     test "send the upstream attempt model in native bodies" do
       assert {:ok, %Result{response: %{"ok" => true}, provider: NativeBodyProvider}} =
-               Caller.call_native_attempts(
+               Execution.call_native_attempts(
                  [%Attempt{provider: NativeBodyProvider, model: "upstream-native"}],
                  request("public-alias"),
                  "user",
@@ -188,7 +188,7 @@ defmodule LLMProxy.Providers.CallerTest do
       on_exit(fn -> :telemetry.detach(handler_id) end)
 
       assert {:ok, %Result{stream: [], provider: NativeBodyProvider}} =
-               Caller.stream_native_attempts(
+               Execution.stream_native_attempts(
                  [%Attempt{provider: NativeBodyProvider, model: "upstream-native"}],
                  stream_request("public-alias"),
                  "user",
@@ -203,12 +203,12 @@ defmodule LLMProxy.Providers.CallerTest do
   describe "stream/4 with no fallbacks" do
     test "returns success on first try" do
       assert {:ok, %Result{stream: [], provider: SuccessProvider, model: "m"}} =
-               Caller.stream(SuccessProvider, request("m"), "user", "m")
+               Execution.stream(SuccessProvider, request("m"), "user", "m")
     end
 
     test "returns error on non-retryable error" do
       assert {:error, %Result{status: 401}} =
-               Caller.stream(AuthErrorProvider, request("m"), "user", "m")
+               Execution.stream(AuthErrorProvider, request("m"), "user", "m")
     end
   end
 
@@ -222,7 +222,7 @@ defmodule LLMProxy.Providers.CallerTest do
                 provider: FallbackProvider,
                 model: "fallback-model"
               }} =
-               Caller.stream(FailProvider, request("m"), "user", "m")
+               Execution.stream(FailProvider, request("m"), "user", "m")
     end
   end
 

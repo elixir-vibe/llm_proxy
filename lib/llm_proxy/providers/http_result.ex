@@ -1,6 +1,6 @@
-defmodule LLMProxy.Providers.ResponseHandler do
+defmodule LLMProxy.Providers.HTTPResult do
   @moduledoc """
-  Converts upstream provider HTTP results into `LLMProxy.Providers.Result` values.
+  Converts upstream HTTP responses and exceptions into `LLMProxy.Providers.Result` values.
   """
 
   alias LLMProxy.Providers.Result

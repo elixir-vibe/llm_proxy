@@ -1,4 +1,4 @@
-defmodule LLMProxy.Providers.Routing.Attempt do
+defmodule LLMProxy.Providers.Attempt do
   @moduledoc """
   Normalized provider deployment attempt used by routing, fallback, cache keys, and circuit breakers.
   """

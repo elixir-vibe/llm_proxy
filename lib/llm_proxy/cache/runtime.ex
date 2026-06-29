@@ -5,7 +5,7 @@ defmodule LLMProxy.Cache.Runtime do
 
   alias LLMProxy.Cache.Policy
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.Providers.Routing.Attempt
+  alias LLMProxy.Providers.Attempt
   alias LLMProxy.Response
 
   @spec key(Request.t(), [Attempt.t()]) :: String.t()

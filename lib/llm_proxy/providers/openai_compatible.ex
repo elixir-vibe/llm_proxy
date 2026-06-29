@@ -6,7 +6,7 @@ defmodule LLMProxy.Providers.OpenAICompatible do
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol.OpenAI
 
-  alias LLMProxy.Providers.{ResponseHandler, Result}
+  alias LLMProxy.Providers.{HTTPResult, Result}
   alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
@@ -14,7 +14,7 @@ defmodule LLMProxy.Providers.OpenAICompatible do
     with {:ok, token} <- pick_token(provider_name, user_id) do
       req = request(token, opts, into: nil)
 
-      ResponseHandler.post(req, body, token)
+      HTTPResult.post(req, body, token)
     end
   end
 
@@ -34,10 +34,10 @@ defmodule LLMProxy.Providers.OpenAICompatible do
           {:ok, Result.stream(stream, token)}
 
         {:ok, response} ->
-          ResponseHandler.handle_response(token, response)
+          HTTPResult.handle_response(token, response)
 
         {:error, exception} ->
-          ResponseHandler.handle_exception(exception)
+          HTTPResult.handle_exception(exception)
       end
     end
   end

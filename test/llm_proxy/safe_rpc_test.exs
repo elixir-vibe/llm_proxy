@@ -74,7 +74,7 @@ defmodule LLMProxy.SafeRPCTest do
     assert read.spec != nil
     assert run_action.spec != nil
 
-    for atom <- ["compact", "density", "options", "rotate", "select", "safe_rpc_reply"] do
+    for atom <- ["compact", "density", "options", "select", "safe_rpc_reply"] do
       assert atom in atoms
     end
   end

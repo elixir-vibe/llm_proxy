@@ -3,8 +3,8 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
 
   alias LLMProxy.{Catalog, ModelDB}
   alias LLMProxy.Catalog.{Deployment, Model}
+  alias LLMProxy.Providers.Attempt
   alias LLMProxy.Providers.{OpenAICodex, Registry}
-  alias LLMProxy.Providers.Routing.Attempt
   alias ReqLLM.StreamChunk
 
   test "identity and model discovery stays delegated" do

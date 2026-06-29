@@ -1,18 +1,18 @@
-defmodule LLMProxy.Providers.ResponseHandlerTest do
+defmodule LLMProxy.Providers.HTTPResultTest do
   use ExUnit.Case, async: true
 
-  alias LLMProxy.Providers.ResponseHandler
+  alias LLMProxy.Providers.HTTPResult
 
   describe "retry_after_ms/1" do
     test "parses retry-after seconds" do
-      assert ResponseHandler.retry_after_ms(%{"retry-after" => ["3"]}) == 3_000
+      assert HTTPResult.retry_after_ms(%{"retry-after" => ["3"]}) == 3_000
     end
 
     test "ignores unsupported retry-after values" do
-      assert ResponseHandler.retry_after_ms(%{"retry-after" => ["Wed, 21 Oct 2015 07:28:00 GMT"]}) ==
+      assert HTTPResult.retry_after_ms(%{"retry-after" => ["Wed, 21 Oct 2015 07:28:00 GMT"]}) ==
                nil
 
-      assert ResponseHandler.retry_after_ms(%{}) == nil
+      assert HTTPResult.retry_after_ms(%{}) == nil
     end
   end
 
@@ -28,15 +28,15 @@ defmodule LLMProxy.Providers.ResponseHandlerTest do
       {:ok, token} = LLMProxy.Storage.add_token("openai", "api-key", "token")
 
       assert {:error, %LLMProxy.Providers.Result{status: 429, token: ^token}} =
-               ResponseHandler.handle_response(token, 429, %{"error" => "slow down"})
+               HTTPResult.handle_response(token, 429, %{"error" => "slow down"})
     end
 
     test "keeps nil-token rate limits as provider errors" do
       assert {:error, %LLMProxy.Providers.Result{status: 429, token: nil}} =
-               ResponseHandler.handle_response(nil, 429, %{"error" => "slow down"})
+               HTTPResult.handle_response(nil, 429, %{"error" => "slow down"})
 
       assert {:error, %LLMProxy.Providers.Result{status: 429, token: nil, retry_after_ms: 3_000}} =
-               ResponseHandler.handle_response(nil, %{
+               HTTPResult.handle_response(nil, %{
                  status: 429,
                  body: %{"error" => "slow down"},
                  headers: %{"retry-after" => ["3"]}
@@ -47,32 +47,32 @@ defmodule LLMProxy.Providers.ResponseHandlerTest do
   describe "handle_exception/1" do
     test "wraps exceptions" do
       assert {:error, %LLMProxy.Providers.Result{status: 502, error: "boom"}} =
-               ResponseHandler.handle_exception(%RuntimeError{message: "boom"})
+               HTTPResult.handle_exception(%RuntimeError{message: "boom"})
     end
   end
 
   describe "extract/1" do
     test "extracts nested error message" do
       body = %{"error" => %{"message" => "Rate limit exceeded"}}
-      assert ResponseHandler.extract(body) == "Rate limit exceeded"
+      assert HTTPResult.extract(body) == "Rate limit exceeded"
     end
 
     test "extracts string error" do
       body = %{"error" => "Something went wrong"}
-      assert ResponseHandler.extract(body) == "Something went wrong"
+      assert HTTPResult.extract(body) == "Something went wrong"
     end
 
     test "returns binary body as-is" do
-      assert ResponseHandler.extract("raw error text") == "raw error text"
+      assert HTTPResult.extract("raw error text") == "raw error text"
     end
 
     test "inspects other values" do
       body = %{"status" => "fail"}
-      assert ResponseHandler.extract(body) == inspect(body)
+      assert HTTPResult.extract(body) == inspect(body)
     end
 
     test "inspects nil" do
-      assert ResponseHandler.extract(nil) == "nil"
+      assert HTTPResult.extract(nil) == "nil"
     end
   end
 end

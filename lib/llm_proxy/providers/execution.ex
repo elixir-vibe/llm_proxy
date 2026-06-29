@@ -1,6 +1,6 @@
-defmodule LLMProxy.Providers.Caller do
+defmodule LLMProxy.Providers.Execution do
   @moduledoc """
-  Wraps provider calls with retry and fallback logic.
+  Executes provider attempts with timeout, retry, fallback, telemetry, and circuit-breaker handling.
 
   On retryable errors (5xx, timeout, connection errors), tries fallback
   providers configured via `config :llm_proxy, :fallbacks`.
@@ -12,10 +12,10 @@ defmodule LLMProxy.Providers.Caller do
   alias LLMProxy.Config
   alias LLMProxy.Protocol
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.Providers.Attempt
   alias LLMProxy.Providers.CircuitBreaker
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Providers.Result
-  alias LLMProxy.Providers.Routing.Attempt
   alias LLMProxy.Telemetry
 
   @retryable_statuses [500, 502, 503, 504, 529]

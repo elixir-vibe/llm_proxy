@@ -7,7 +7,7 @@ defmodule LLMProxy.Providers.Anthropic do
 
   alias LLMProxy.HTTP
   alias LLMProxy.Protocol
-  alias LLMProxy.Providers.{ResponseHandler, Result}
+  alias LLMProxy.Providers.{HTTPResult, Result}
   alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
@@ -73,7 +73,7 @@ defmodule LLMProxy.Providers.Anthropic do
         receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
       )
 
-    ResponseHandler.post(req, body, token)
+    HTTPResult.post(req, body, token)
   end
 
   defp do_stream(body, token) do
@@ -96,10 +96,10 @@ defmodule LLMProxy.Providers.Anthropic do
         {:ok, Result.stream(stream, token)}
 
       {:ok, response} ->
-        ResponseHandler.handle_response(token, response)
+        HTTPResult.handle_response(token, response)
 
       {:error, exception} ->
-        ResponseHandler.handle_exception(exception)
+        HTTPResult.handle_exception(exception)
     end
   end
 
