@@ -13,7 +13,7 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuthTest do
     expires = rounded_future_expires_ms()
 
     assert {:ok, %OAuth{} = credentials} =
-             OAuth.parse_refreshed(%{
+             OAuth.from_refresh_response(%{
                "access" => "new-access",
                "refresh" => "new-refresh",
                "expires" => expires,
@@ -34,13 +34,19 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuthTest do
   end
 
   test "rejects atom-keyed or incomplete refresh responses" do
-    assert {:error, message} =
-             OAuth.parse_refreshed(%{access: "new-access", refresh: "new-refresh", expires: 1})
+    assert {:error, {:invalid_refresh_response, _reason}} =
+             OAuth.from_refresh_response(%{
+               access: "new-access",
+               refresh: "new-refresh",
+               expires: 1
+             })
 
-    assert message =~ "must include access, refresh, and expires"
-
     assert {:error, message} =
-             OAuth.parse_refreshed(%{"access" => "", "refresh" => "new-refresh", "expires" => 1})
+             OAuth.from_refresh_response(%{
+               "access" => "",
+               "refresh" => "new-refresh",
+               "expires" => 1
+             })
 
     assert message =~ "access must be a non-empty string"
   end

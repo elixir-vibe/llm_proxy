@@ -56,6 +56,8 @@ access_token|refresh_token|expires_unix_ms|account_id
 
 `account_id` is optional. Refreshed credentials are stored back into `provider_tokens` as `token`, `refresh_token`, `expires_at`, and `account_id`.
 
+Standalone releases can run `bin/codex_login` for an interactive OAuth flow. The command prints the ChatGPT/Codex authorization URL, accepts a pasted redirect URL or authorization code, exchanges it server-side, and stores the resulting OAuth token in `provider_tokens`.
+
 ## Custom providers
 
 Implement `LLMProxy.Providers.Behaviour` when the upstream is not OpenAI-compatible:

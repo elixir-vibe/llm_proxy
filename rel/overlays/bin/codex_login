@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$SCRIPT_DIR/llm_proxy" eval 'LLMProxy.ReleaseTasks.codex_login(System.argv())' -- "$@"

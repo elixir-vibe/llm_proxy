@@ -9,6 +9,25 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
 
   alias LLMProxy.Schemas.ProviderToken
 
+  defmodule RefreshResponse do
+    @moduledoc """
+    ReqLLM OpenAI Codex OAuth refresh response.
+
+    This struct is the JSON boundary for refresh credentials returned by ReqLLM.
+    """
+
+    use JSONCodec, case: :camel, fast_path: :json
+
+    defstruct [:access, :refresh, :expires, :account_id]
+
+    @type t :: %__MODULE__{
+            access: String.t(),
+            refresh: String.t(),
+            expires: pos_integer(),
+            account_id: String.t() | nil
+          }
+  end
+
   @refresh_skew_seconds 60
 
   @enforce_keys [:access, :refresh, :expires_at]
@@ -45,7 +64,7 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
 
   defp refresh(%ProviderToken{} = token, refresh_fun) do
     with {:ok, refreshed} <- refresh_fun.(refresh_request(token), []),
-         {:ok, credentials} <- parse_refreshed(refreshed) do
+         {:ok, credentials} <- from_refresh_response(refreshed) do
       LLMProxy.Storage.update_token_oauth(token.id, storage_attrs(credentials))
     end
   end
@@ -54,24 +73,36 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
     %{access: token.token, refresh: token.refresh_token, expires: expires_ms(token.expires_at)}
   end
 
-  @spec parse_refreshed(map()) :: {:ok, t()} | {:error, String.t()}
-  def parse_refreshed(%{"access" => access, "refresh" => refresh, "expires" => expires} = payload) do
+  @spec new(String.t(), String.t(), DateTime.t(), String.t() | nil) ::
+          {:ok, t()} | {:error, String.t()}
+  def new(access, refresh, %DateTime{} = expires_at, account_id \\ nil) do
     with :ok <- require_non_empty_string(access, "access"),
          :ok <- require_non_empty_string(refresh, "refresh"),
-         {:ok, expires_at} <- parse_expires(expires),
-         {:ok, account_id} <- optional_string(Map.get(payload, "accountId"), "accountId") do
+         {:ok, account_id} <- optional_string(account_id, "accountId") do
       {:ok,
        %__MODULE__{
          access: access,
          refresh: refresh,
-         expires_at: expires_at,
+         expires_at: DateTime.truncate(expires_at, :second),
          account_id: account_id
        }}
     end
   end
 
-  def parse_refreshed(_payload) do
-    {:error, "OpenAI OAuth refresh response must include access, refresh, and expires"}
+  @spec from_refresh_response(map()) :: {:ok, t()} | {:error, term()}
+  def from_refresh_response(refreshed) when is_map(refreshed) do
+    with :ok <- require_json_object!(refreshed),
+         {:ok, response} <- RefreshResponse.from_map(refreshed) do
+      new(
+        response.access,
+        response.refresh,
+        expires_datetime(response.expires),
+        response.account_id
+      )
+    else
+      {:error, %JSONCodec.Error{} = reason} -> {:error, {:invalid_refresh_response, reason}}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @spec storage_attrs(t()) :: map()
@@ -93,13 +124,16 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
   defp expires_ms(nil), do: nil
   defp expires_ms(%DateTime{} = expires_at), do: DateTime.to_unix(expires_at, :millisecond)
 
-  defp parse_expires(expires) when is_integer(expires) do
-    {:ok, expires |> DateTime.from_unix!(:millisecond) |> DateTime.truncate(:second)}
+  defp expires_datetime(expires) when is_integer(expires) do
+    expires |> DateTime.from_unix!(:millisecond) |> DateTime.truncate(:second)
   end
 
-  defp parse_expires(expires) do
-    {:error,
-     "OpenAI OAuth refresh response expires must be a Unix millisecond integer, got: #{inspect(expires)}"}
+  defp require_json_object!(map) do
+    if Enum.all?(Map.keys(map), &is_binary/1) do
+      :ok
+    else
+      {:error, {:invalid_refresh_response, :non_string_json_key}}
+    end
   end
 
   defp require_non_empty_string(value, _field) when is_binary(value) and value != "", do: :ok
