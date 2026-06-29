@@ -17,15 +17,13 @@ defmodule LLMProxy.Providers.ResponseHandler do
   def handle_response(token, %{status: status, body: body, headers: headers}) do
     retry_after_ms = retry_after_ms(headers)
 
-    if status == 429,
-      do:
-        TokenPool.mark_rate_limited(token, retry_after_ms || LLMProxy.Config.token_cooldown_ms())
+    mark_rate_limited(status, token, retry_after_ms)
 
     result(extract(body), status, token, retry_after_ms: retry_after_ms)
   end
 
   def handle_response(token, status, body) do
-    if status == 429, do: TokenPool.mark_rate_limited(token)
+    mark_rate_limited(status, token, nil)
     result(extract(body), status, token)
   end
 
@@ -48,6 +46,12 @@ defmodule LLMProxy.Providers.ResponseHandler do
   def extract(%{"error" => message}) when is_binary(message), do: message
   def extract(body) when is_binary(body), do: body
   def extract(body), do: inspect(body)
+
+  defp mark_rate_limited(429, token, retry_after_ms) when not is_nil(token) do
+    TokenPool.mark_rate_limited(token, retry_after_ms || LLMProxy.Config.token_cooldown_ms())
+  end
+
+  defp mark_rate_limited(_status, _token, _retry_after_ms), do: :ok
 
   defp parse_retry_after(nil), do: nil
 

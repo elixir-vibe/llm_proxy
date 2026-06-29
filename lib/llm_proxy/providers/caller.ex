@@ -202,13 +202,13 @@ defmodule LLMProxy.Providers.Caller do
          {:ok, result},
          attempt,
          rest,
-         _function,
+         function,
          _request,
          _user_id,
          _api_name
        ) do
     CircuitBreaker.success(attempt)
-    Telemetry.emit([:routing, :native_attempt, :stop], attempt)
+    Telemetry.emit([:routing, native_event(function), :stop], attempt)
 
     if rest != [] do
       Logger.info("Fallback to #{attempt.provider.name()}/#{attempt.model} succeeded (native)")
@@ -264,7 +264,7 @@ defmodule LLMProxy.Providers.Caller do
          api_name
        ) do
     CircuitBreaker.failure(attempt, retry_after(error))
-    Telemetry.emit([:routing, :native_attempt, :exception], attempt, %{status: status})
+    Telemetry.emit([:routing, native_event(function), :exception], attempt, %{status: status})
 
     Logger.warning(
       "#{attempt.provider.name()}/#{attempt.model} returned #{status}, trying fallback (native)"

@@ -71,6 +71,9 @@ defmodule LLMProxy.Providers.CallerTest do
 
     def call_native(%{"model" => "upstream-native"}, _user_id),
       do: {:ok, Result.response(%{"ok" => true}, nil)}
+
+    def stream_native(%{"model" => "upstream-native", "stream" => true}, _user_id),
+      do: {:ok, Result.stream([], nil)}
   end
 
   setup do
@@ -165,6 +168,36 @@ defmodule LLMProxy.Providers.CallerTest do
                  "Native API"
                )
     end
+
+    test "emits native stream telemetry on the native stream event family" do
+      handler_id = {__MODULE__, self(), :native_stream_telemetry}
+      parent = self()
+
+      :telemetry.attach_many(
+        handler_id,
+        [
+          [:llm_proxy, :routing, :native_stream_attempt, :start],
+          [:llm_proxy, :routing, :native_stream_attempt, :stop]
+        ],
+        fn event, measurements, metadata, _config ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, %Result{stream: [], provider: NativeBodyProvider}} =
+               Caller.stream_native_attempts(
+                 [%Attempt{provider: NativeBodyProvider, model: "upstream-native"}],
+                 stream_request("public-alias"),
+                 "user",
+                 "Native API"
+               )
+
+      assert_receive {:telemetry, [:llm_proxy, :routing, :native_stream_attempt, :start], _, _}
+      assert_receive {:telemetry, [:llm_proxy, :routing, :native_stream_attempt, :stop], _, _}
+    end
   end
 
   describe "stream/4 with no fallbacks" do
@@ -191,6 +224,11 @@ defmodule LLMProxy.Providers.CallerTest do
               }} =
                Caller.stream(FailProvider, request("m"), "user", "m")
     end
+  end
+
+  defp stream_request(model) do
+    request = request(model)
+    %{request | stream: true, body: Map.put(request.body, "stream", true)}
   end
 
   defp request(model) do

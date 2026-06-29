@@ -30,6 +30,18 @@ defmodule LLMProxy.Providers.ResponseHandlerTest do
       assert {:error, %LLMProxy.Providers.Result{status: 429, token: ^token}} =
                ResponseHandler.handle_response(token, 429, %{"error" => "slow down"})
     end
+
+    test "keeps nil-token rate limits as provider errors" do
+      assert {:error, %LLMProxy.Providers.Result{status: 429, token: nil}} =
+               ResponseHandler.handle_response(nil, 429, %{"error" => "slow down"})
+
+      assert {:error, %LLMProxy.Providers.Result{status: 429, token: nil, retry_after_ms: 3_000}} =
+               ResponseHandler.handle_response(nil, %{
+                 status: 429,
+                 body: %{"error" => "slow down"},
+                 headers: %{"retry-after" => ["3"]}
+               })
+    end
   end
 
   describe "handle_exception/1" do
