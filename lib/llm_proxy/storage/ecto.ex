@@ -63,9 +63,27 @@ defmodule LLMProxy.Storage.Ecto do
         {:error, :not_found}
 
       key ->
-        Repo.delete_all(from(u in UsageLog, where: u.key_id == ^id))
-        Repo.delete(key)
+        delete_key_rows(key)
     end
+  end
+
+  defp delete_key_rows(%ApiKey{id: id} = key) do
+    Repo.transaction(fn ->
+      delete_trace_feedback_for_key(id)
+      Repo.delete_all(from(t in Trace, where: t.key_id == ^id))
+      Repo.delete_all(from(m in MessageLog, where: m.key_id == ^id))
+      Repo.delete_all(from(s in ServiceUsage, where: s.key_id == ^id))
+      Repo.delete_all(from(u in UsageLog, where: u.key_id == ^id))
+
+      case Repo.delete(key) do
+        {:ok, key} -> key
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
+  end
+
+  defp delete_trace_feedback_for_key(key_id) do
+    Repo.delete_all(from(f in TraceFeedback, where: f.key_id == ^key_id))
   end
 
   def update_key_usage(key, %{input: input, output: output} = usage) do
@@ -120,7 +138,7 @@ defmodule LLMProxy.Storage.Ecto do
   end
 
   def get_usage_in_window(key_id, window_ms) do
-    since = DateTime.add(DateTime.utc_now(), -window_ms, :millisecond)
+    since = window_start(window_ms)
 
     result =
       from(u in UsageLog,
@@ -136,7 +154,7 @@ defmodule LLMProxy.Storage.Ecto do
   end
 
   def get_message_count_in_window(key_id, window_ms) do
-    since = DateTime.add(DateTime.utc_now(), -window_ms, :millisecond)
+    since = window_start(window_ms)
 
     from(u in UsageLog,
       where: u.key_id == ^key_id and u.timestamp >= ^since,
@@ -146,7 +164,7 @@ defmodule LLMProxy.Storage.Ecto do
   end
 
   def get_cache_ratio_in_window(key_id, window_ms) do
-    since = DateTime.add(DateTime.utc_now(), -window_ms, :millisecond)
+    since = window_start(window_ms)
 
     result =
       from(u in UsageLog,
@@ -203,7 +221,7 @@ defmodule LLMProxy.Storage.Ecto do
       from(u in UsageLog,
         where:
           u.key_id == ^key.id and
-            u.timestamp >= ^DateTime.add(DateTime.utc_now(), -window_ms, :millisecond),
+            u.timestamp >= ^window_start(window_ms),
         select: coalesce(sum(u.cost_usd), 0.0)
       )
       |> Repo.one()
@@ -298,7 +316,7 @@ defmodule LLMProxy.Storage.Ecto do
   end
 
   def get_service_usage_in_window(key_id, service, window_ms) do
-    since = DateTime.add(DateTime.utc_now(), -window_ms, :millisecond)
+    since = window_start(window_ms)
 
     from(s in ServiceUsage,
       where: s.key_id == ^key_id and s.service == ^service and s.timestamp >= ^since,
@@ -752,6 +770,8 @@ defmodule LLMProxy.Storage.Ecto do
   end
 
   # --- Helpers ---
+
+  defp window_start(window_ms), do: DateTime.add(DateTime.utc_now(), -window_ms, :millisecond)
 
   defp apply_sort(query, sort, dir, allowed_fields) do
     fields = Map.new(allowed_fields, &{Atom.to_string(&1), &1})

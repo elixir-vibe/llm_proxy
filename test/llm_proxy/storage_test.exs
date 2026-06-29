@@ -50,19 +50,56 @@ defmodule LLMProxy.StorageTest do
       assert length(keys) == 2
     end
 
-    test "delete_key removes key and usage" do
+    test "delete_key removes key-owned storage rows" do
       {:ok, key, _} = Storage.create_key("deletable")
+      now = DateTime.utc_now()
 
       Storage.record_usage(%{
         key_id: key.id,
         model: "test",
         input_tokens: 100,
         output_tokens: 50,
-        timestamp: DateTime.utc_now()
+        timestamp: now
       })
 
+      Storage.record_service_usage(%{
+        key_id: key.id,
+        service: "exa",
+        endpoint: "/search",
+        timestamp: now
+      })
+
+      Storage.log_message(%{
+        key_id: key.id,
+        model: "test",
+        route: "chat",
+        user_message: "hello",
+        timestamp: now
+      })
+
+      {:ok, trace} =
+        Storage.record_trace(%{
+          key_id: key.id,
+          model: "test",
+          metadata: %{"trace_id" => "delete-key-trace"},
+          timestamp: now
+        })
+
+      {:ok, _feedback} =
+        Storage.record_trace_feedback(%{
+          request_id: "delete-key-trace",
+          key_id: key.id,
+          rating: "neutral"
+        })
+
       {:ok, _} = Storage.delete_key(key.id)
+
       assert Storage.list_keys() == []
+      assert Storage.get_usage_in_window(key.id, 60_000) == %{input: 0, output: 0}
+      assert Storage.get_service_usage_in_window(key.id, "exa", 60_000) == 0
+      assert Storage.get_messages(%{key_id: key.id}) == []
+      assert Storage.get_trace(trace.id) == nil
+      assert Storage.list_trace_feedback("delete-key-trace") == []
     end
 
     test "check_model_access with nil allowed_models allows everything" do

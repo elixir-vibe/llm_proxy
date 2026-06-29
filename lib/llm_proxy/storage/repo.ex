@@ -38,6 +38,8 @@ defmodule LLMProxy.Storage.Repo do
   def insert(changeset, opts \\ []), do: configured().insert(changeset, opts)
   def one(queryable, opts \\ []), do: configured().one(queryable, opts)
   def query(sql, params \\ [], opts \\ []), do: configured().query(sql, params, opts)
+  def rollback(value), do: configured().rollback(value)
+  def transaction(fun_or_multi, opts \\ []), do: configured().transaction(fun_or_multi, opts)
   def update(changeset, opts \\ []), do: configured().update(changeset, opts)
 
   def update_all(queryable, updates, opts \\ []),
