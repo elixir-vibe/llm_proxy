@@ -16,21 +16,27 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth.Login do
     This struct is the JSON boundary for `auth.openai.com/oauth/token`.
     """
 
-    use JSONCodec, fast_path: :json
+    use JSONCodec, strict: true, fast_path: :json
 
-    defstruct [:access_token, :refresh_token, :expires_in]
+    defstruct [:access_token, :refresh_token, :expires_at]
 
     @type t :: %__MODULE__{
             access_token: String.t(),
             refresh_token: String.t(),
-            expires_in: pos_integer()
+            expires_at: DateTime.t()
           }
+
+    codec(:expires_at, as: "expires_in", cast: :expires_datetime)
+
+    def expires_datetime(expires_in) when is_integer(expires_in) do
+      DateTime.utc_now() |> DateTime.add(expires_in, :second) |> DateTime.truncate(:second)
+    end
   end
 
   defmodule AuthClaims do
     @moduledoc "OpenAI auth claim payload embedded in the Codex access-token JWT."
 
-    use JSONCodec, fast_path: :json
+    use JSONCodec, strict: true, fast_path: :json
 
     defstruct [:chatgpt_account_id]
 
@@ -40,7 +46,7 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth.Login do
   defmodule AccessTokenClaims do
     @moduledoc "Codex access-token JWT claims used by LLMProxy."
 
-    use JSONCodec, fast_path: :json
+    use JSONCodec, strict: true, fast_path: :json
 
     defstruct [:auth]
 
@@ -126,22 +132,17 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth.Login do
   end
 
   def parse_token_response(body) when is_map(body) do
-    with :ok <- require_json_object!(body),
-         {:ok, response} <- TokenResponse.from_map(body) do
-      token_response_to_oauth(response)
-    else
-      {:error, %JSONCodec.Error{} = reason} -> {:error, {:invalid_token_response, reason}}
-      {:error, reason} -> {:error, reason}
+    case TokenResponse.from_map(body) do
+      {:ok, response} -> token_response_to_oauth(response)
+      {:error, reason} -> {:error, {:invalid_token_response, reason}}
     end
   end
 
   defp token_response_to_oauth(%TokenResponse{} = response) do
-    expires_at = DateTime.utc_now() |> DateTime.add(response.expires_in, :second)
-
     OAuth.new(
       response.access_token,
       response.refresh_token,
-      expires_at,
+      response.expires_at,
       account_id(response.access_token)
     )
   end
@@ -154,14 +155,6 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth.Login do
       auth.chatgpt_account_id
     else
       _ -> nil
-    end
-  end
-
-  defp require_json_object!(map) do
-    if Enum.all?(Map.keys(map), &is_binary/1) do
-      :ok
-    else
-      {:error, {:invalid_token_response, :non_string_json_key}}
     end
   end
 

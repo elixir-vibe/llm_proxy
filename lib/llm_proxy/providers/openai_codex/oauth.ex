@@ -16,16 +16,22 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
     This struct is the JSON boundary for refresh credentials returned by ReqLLM.
     """
 
-    use JSONCodec, case: :camel, fast_path: :json
+    use JSONCodec, case: :camel, strict: true, fast_path: :json
 
-    defstruct [:access, :refresh, :expires, :account_id]
+    defstruct [:access, :refresh, :expires_at, :account_id]
 
     @type t :: %__MODULE__{
             access: String.t(),
             refresh: String.t(),
-            expires: pos_integer(),
+            expires_at: DateTime.t(),
             account_id: String.t() | nil
           }
+
+    codec(:expires_at, as: "expires", cast: :expires_datetime)
+
+    def expires_datetime(expires) when is_integer(expires) do
+      expires |> DateTime.from_unix!(:millisecond) |> DateTime.truncate(:second)
+    end
   end
 
   @refresh_skew_seconds 60
@@ -91,17 +97,12 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
 
   @spec from_refresh_response(map()) :: {:ok, t()} | {:error, term()}
   def from_refresh_response(refreshed) when is_map(refreshed) do
-    with :ok <- require_json_object!(refreshed),
-         {:ok, response} <- RefreshResponse.from_map(refreshed) do
-      new(
-        response.access,
-        response.refresh,
-        expires_datetime(response.expires),
-        response.account_id
-      )
-    else
-      {:error, %JSONCodec.Error{} = reason} -> {:error, {:invalid_refresh_response, reason}}
-      {:error, reason} -> {:error, reason}
+    case RefreshResponse.from_map(refreshed) do
+      {:ok, response} ->
+        new(response.access, response.refresh, response.expires_at, response.account_id)
+
+      {:error, reason} ->
+        {:error, {:invalid_refresh_response, reason}}
     end
   end
 
@@ -123,18 +124,6 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
 
   defp expires_ms(nil), do: nil
   defp expires_ms(%DateTime{} = expires_at), do: DateTime.to_unix(expires_at, :millisecond)
-
-  defp expires_datetime(expires) when is_integer(expires) do
-    expires |> DateTime.from_unix!(:millisecond) |> DateTime.truncate(:second)
-  end
-
-  defp require_json_object!(map) do
-    if Enum.all?(Map.keys(map), &is_binary/1) do
-      :ok
-    else
-      {:error, {:invalid_refresh_response, :non_string_json_key}}
-    end
-  end
 
   defp require_non_empty_string(value, _field) when is_binary(value) and value != "", do: :ok
 
