@@ -3,7 +3,7 @@ defmodule LLMProxy.Providers.OpenRouter do
   Built-in OpenRouter provider backed by the shared OpenAI-compatible provider implementation.
   """
 
-  use LLMProxy.Providers.OpenAICompatibleProvider,
+  use LLMProxy.Providers.OpenAICompatible.Definition,
     name: "openrouter",
     provider_id: :openrouter,
     http_referer: "",

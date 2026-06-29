@@ -5,6 +5,7 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Providers.Attempt
   alias LLMProxy.Providers.{OpenAICodex, Registry}
+  alias LLMProxy.Providers.OpenAICodex.Events
   alias ReqLLM.StreamChunk
 
   test "identity and model discovery stays delegated" do
@@ -71,12 +72,12 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   end
 
   test "stream chunks are converted to Responses events" do
-    text_event = OpenAICodex.to_responses_event(StreamChunk.text("hi"))
+    text_event = Events.responses_event(StreamChunk.text("hi"))
     assert text_event.data["type"] == "response.output_text.delta"
     assert text_event.data["delta"] == "hi"
 
     terminal_event =
-      OpenAICodex.to_responses_event(
+      Events.responses_event(
         StreamChunk.meta(%{
           terminal?: true,
           finish_reason: :stop,
@@ -90,7 +91,7 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   end
 
   test "stream chunks are converted to OpenAI chat events" do
-    event = OpenAICodex.to_openai_chat_event(StreamChunk.text("hello"), "gpt-5.3-codex-spark")
+    event = Events.openai_chat_event(StreamChunk.text("hello"), "gpt-5.3-codex-spark")
 
     assert [%{"delta" => %{"content" => "hello"}}] = event.data["choices"]
     assert event.data["model"] == "gpt-5.3-codex-spark"

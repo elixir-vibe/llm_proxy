@@ -12,13 +12,12 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @behaviour LLMProxy.Providers.Behaviour
 
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.Providers.OpenAICodex.Events
   alias LLMProxy.Providers.Result
   alias LLMProxy.Response, as: ProxyResponse
-  alias LLMProxy.Stream.Event
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Usage
   alias ReqLLM.Providers.OpenAICodex, as: ReqLLMOpenAICodex
-  alias ReqLLM.StreamChunk
 
   @impl true
   def name, do: "openai-codex"
@@ -54,7 +53,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
     with {:ok, token} <- pick_token(user_id),
          {:ok, context} <- context_from_chat_body(body),
          {:ok, stream_response} <- generate(body["model"], context, token, stream?: true) do
-      stream = Stream.map(stream_response.stream, &to_openai_chat_event(&1, body["model"]))
+      stream = Stream.map(stream_response.stream, &Events.openai_chat_event(&1, body["model"]))
       {:ok, Result.stream(Stream.reject(stream, &is_nil/1), token)}
     end
   end
@@ -77,7 +76,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
     with {:ok, token} <- pick_token(user_id),
          {:ok, context} <- context_from_responses_body(body),
          {:ok, stream_response} <- generate(body["model"], context, token, stream?: true) do
-      stream = Stream.map(stream_response.stream, &to_responses_event/1)
+      stream = Stream.map(stream_response.stream, &Events.responses_event/1)
       {:ok, Result.stream(Stream.reject(stream, &is_nil/1), token)}
     end
   end
@@ -126,55 +125,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
       receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
     ]
   end
-
-  @doc false
-  def to_responses_event(%StreamChunk{type: :content, text: text}) when is_binary(text) do
-    Event.responses_output_text_delta(text)
-  end
-
-  def to_responses_event(%StreamChunk{type: :thinking, text: text}) when is_binary(text) do
-    Event.responses_reasoning_delta(text)
-  end
-
-  def to_responses_event(%StreamChunk{type: :tool_call} = chunk) do
-    index = Map.get(chunk.metadata, :index, 0)
-    id = Map.get(chunk.metadata, :id) || "call_#{System.unique_integer([:positive])}"
-
-    Event.responses_function_call_added(index, id, chunk.name, chunk.arguments || %{})
-  end
-
-  def to_responses_event(%StreamChunk{type: :meta, metadata: metadata}) do
-    if metadata[:terminal?] do
-      Event.responses_terminal(
-        metadata[:finish_reason],
-        metadata[:response_id] || "resp_#{System.unique_integer([:positive])}",
-        metadata[:usage]
-      )
-    end
-  end
-
-  def to_responses_event(_chunk), do: nil
-
-  @doc false
-  def to_openai_chat_event(%StreamChunk{type: :content, text: text}, model)
-      when is_binary(text) do
-    Event.openai_chat_content_delta(model, text)
-  end
-
-  def to_openai_chat_event(%StreamChunk{type: :tool_call} = chunk, model) do
-    index = Map.get(chunk.metadata, :index, 0)
-    id = Map.get(chunk.metadata, :id) || "call_#{System.unique_integer([:positive])}"
-
-    Event.openai_chat_tool_call_delta(index, id, chunk.name, chunk.arguments || %{}, model)
-  end
-
-  def to_openai_chat_event(%StreamChunk{type: :meta, metadata: metadata}, model) do
-    if metadata[:terminal?] do
-      Event.openai_chat_terminal(model, metadata[:finish_reason], metadata[:usage])
-    end
-  end
-
-  def to_openai_chat_event(_chunk, _model), do: nil
 
   defp pick_token(user_id) do
     case TokenPool.pick_token_by_kind(name(), "oauth", user_id) do

@@ -1,4 +1,4 @@
-defmodule LLMProxy.Providers.OpenAICompatibleProviderTest do
+defmodule LLMProxy.Providers.OpenAICompatible.DefinitionTest do
   use ExUnit.Case
 
   alias LLMProxy.Providers.Result
@@ -9,7 +9,7 @@ defmodule LLMProxy.Providers.OpenAICompatibleProviderTest do
   alias Req.Test, as: ReqTest
 
   defmodule Provider do
-    use LLMProxy.Providers.OpenAICompatibleProvider,
+    use LLMProxy.Providers.OpenAICompatible.Definition,
       name: "macro-openai-compatible",
       models: ["macro-model"],
       config_key: "macro-openai-compatible",

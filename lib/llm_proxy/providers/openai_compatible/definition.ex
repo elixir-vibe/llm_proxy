@@ -1,6 +1,6 @@
-defmodule LLMProxy.Providers.OpenAICompatibleProvider do
+defmodule LLMProxy.Providers.OpenAICompatible.Definition do
   @moduledoc """
-  Helper for defining OpenAI-compatible upstream providers.
+  Macro frontend for defining OpenAI-compatible upstream providers.
 
   The generated provider implements `LLMProxy.Providers.Behaviour` and delegates
   token selection, request execution, streaming, and usage extraction to the
