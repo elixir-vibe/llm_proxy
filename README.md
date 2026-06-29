@@ -133,7 +133,7 @@ mix ecto.migrate \
   --migrations-path deps/llm_proxy/priv/repo/migrations
 ```
 
-Release code can do the same through `Ecto.Migrator.run/4` by passing both migration directories. LLMProxy does not provide a second migration DSL; `priv/repo/migrations/*.exs` is the migration source of truth.
+Release code can do the same through `Ecto.Migrator.run/4` by passing both migration directories.
 
 Route groups:
 
