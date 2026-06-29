@@ -150,6 +150,45 @@ defmodule LLMProxy.CatalogTest do
     assert "upstream-model" in ids
   end
 
+  test "model constructor validates strict internal shape" do
+    assert_raise ArgumentError, ~r/name must be a non-empty string/, fn ->
+      Model.new!(name: "", deployments: [])
+    end
+
+    assert_raise ArgumentError, ~r/deployments must contain Deployment structs/, fn ->
+      Model.new!(name: "bad", deployments: [%{}])
+    end
+
+    assert_raise ArgumentError, ~r/hidden must be a boolean/, fn ->
+      Model.new!(name: "bad", hidden: "false", deployments: [])
+    end
+  end
+
+  test "deployment constructor validates routing parameters" do
+    assert_raise ArgumentError, ~r/upstream_model must be a non-empty string/, fn ->
+      Deployment.new!(provider: Provider, upstream_model: "")
+    end
+
+    assert_raise ArgumentError, ~r/order must be a positive integer/, fn ->
+      Deployment.new!(provider: Provider, upstream_model: "upstream-model", order: 0)
+    end
+
+    assert_raise ArgumentError, ~r/timeout_ms must be a positive integer/, fn ->
+      Deployment.new!(provider: Provider, upstream_model: "upstream-model", timeout_ms: 0)
+    end
+
+    assert %Deployment{cooldown_ms: 0} =
+             Deployment.new!(provider: Provider, upstream_model: "upstream-model", cooldown_ms: 0)
+
+    assert_raise ArgumentError, ~r/cooldown_ms must be a non-negative integer/, fn ->
+      Deployment.new!(provider: Provider, upstream_model: "upstream-model", cooldown_ms: -1)
+    end
+
+    assert_raise ArgumentError, ~r/metadata must be a map/, fn ->
+      Deployment.new!(provider: Provider, upstream_model: "upstream-model", metadata: [])
+    end
+  end
+
   defp model(name, deployments, opts \\ []) do
     Model.new!(Keyword.merge([name: name, deployments: deployments], opts))
   end

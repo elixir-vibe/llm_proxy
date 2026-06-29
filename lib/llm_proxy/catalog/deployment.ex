@@ -28,17 +28,77 @@ defmodule LLMProxy.Catalog.Deployment do
 
   @spec new!(keyword()) :: t()
   def new!(attrs) when is_list(attrs) do
+    provider = Keyword.fetch!(attrs, :provider)
+    upstream_model = Keyword.fetch!(attrs, :upstream_model)
+    order = Keyword.get(attrs, :order, 1)
+    timeout_ms = Keyword.get(attrs, :timeout_ms)
+
+    failure_threshold =
+      Keyword.get(attrs, :failure_threshold) || LLMProxy.Config.deployment_failure_threshold()
+
+    cooldown_ms = Keyword.get(attrs, :cooldown_ms) || LLMProxy.Config.deployment_cooldown_ms()
+    weight = Keyword.get(attrs, :weight, 1)
+    metadata = Keyword.get(attrs, :metadata, %{})
+
+    validate_provider!(provider)
+    validate_non_empty_string!(:upstream_model, upstream_model)
+    validate_positive_integer!(:order, order)
+    validate_optional_positive_integer!(:timeout_ms, timeout_ms)
+    validate_positive_integer!(:failure_threshold, failure_threshold)
+    validate_non_negative_integer!(:cooldown_ms, cooldown_ms)
+    validate_positive_integer!(:weight, weight)
+    validate_map!(:metadata, metadata)
+
     %__MODULE__{
-      provider: Keyword.fetch!(attrs, :provider),
-      upstream_model: Keyword.fetch!(attrs, :upstream_model),
-      order: Keyword.get(attrs, :order, 1),
+      provider: provider,
+      upstream_model: upstream_model,
+      order: order,
       token_pool: Keyword.get(attrs, :token_pool),
-      timeout_ms: Keyword.get(attrs, :timeout_ms),
-      failure_threshold:
-        Keyword.get(attrs, :failure_threshold, LLMProxy.Config.deployment_failure_threshold()),
-      cooldown_ms: Keyword.get(attrs, :cooldown_ms, LLMProxy.Config.deployment_cooldown_ms()),
-      weight: Keyword.get(attrs, :weight, 1),
-      metadata: Keyword.get(attrs, :metadata, %{})
+      timeout_ms: timeout_ms,
+      failure_threshold: failure_threshold,
+      cooldown_ms: cooldown_ms,
+      weight: weight,
+      metadata: metadata
     }
+  end
+
+  defp validate_provider!(provider) when is_atom(provider), do: :ok
+
+  defp validate_provider!(provider) do
+    raise ArgumentError,
+          "catalog deployment provider must be a module atom, got: #{inspect(provider)}"
+  end
+
+  defp validate_non_empty_string!(_field, value) when is_binary(value) and value != "", do: :ok
+
+  defp validate_non_empty_string!(field, value) do
+    raise ArgumentError,
+          "catalog deployment #{field} must be a non-empty string, got: #{inspect(value)}"
+  end
+
+  defp validate_positive_integer!(_field, value) when is_integer(value) and value > 0, do: :ok
+
+  defp validate_positive_integer!(field, value) do
+    raise ArgumentError,
+          "catalog deployment #{field} must be a positive integer, got: #{inspect(value)}"
+  end
+
+  defp validate_optional_positive_integer!(_field, nil), do: :ok
+
+  defp validate_optional_positive_integer!(field, value),
+    do: validate_positive_integer!(field, value)
+
+  defp validate_non_negative_integer!(_field, value) when is_integer(value) and value >= 0,
+    do: :ok
+
+  defp validate_non_negative_integer!(field, value) do
+    raise ArgumentError,
+          "catalog deployment #{field} must be a non-negative integer, got: #{inspect(value)}"
+  end
+
+  defp validate_map!(_field, value) when is_map(value), do: :ok
+
+  defp validate_map!(field, value) do
+    raise ArgumentError, "catalog deployment #{field} must be a map, got: #{inspect(value)}"
   end
 end

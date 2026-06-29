@@ -79,6 +79,18 @@ defmodule LLMProxy.ConfigTest do
     assert [^model] = Config.catalog()
   end
 
+  test "models config rejects invalid deployment values" do
+    Application.put_env(:llm_proxy, :catalog, [])
+
+    Application.put_env(:llm_proxy, :models,
+      bad: [routes: [[to: :openai, model: "gpt-4o", weight: 0]]]
+    )
+
+    assert_raise ArgumentError, ~r/weight must be a positive integer/, fn ->
+      Config.catalog()
+    end
+  end
+
   defp restore_env(key, nil), do: Application.delete_env(:llm_proxy, key)
   defp restore_env(key, value), do: Application.put_env(:llm_proxy, key, value)
 end
