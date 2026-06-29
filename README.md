@@ -295,7 +295,7 @@ Environment variables can be loaded from `.env` through Dotenvy.
 | `DATABASE_PATH` | DuckDB database path for standalone QuackDB storage in prod, default `./llm_proxy.duckdb` |
 | `PUBLIC_URL` | Public base URL used by setup helpers and provider headers |
 | `OPENAI_API_KEYS` | Comma-separated OpenAI API keys |
-| `OPENAI_CODEX_TOKENS` | Comma-separated ChatGPT/OpenAI OAuth access tokens for Codex subscription backend |
+| `OPENAI_CODEX_TOKENS` | Comma-separated ChatGPT/OpenAI OAuth tokens for Codex. Plain access tokens are accepted; refreshable entries use `access|refresh|expires_ms|account_id` (`account_id` optional). |
 | `ANTHROPIC_API_KEYS` | Comma-separated Anthropic API keys |
 | `OPENROUTER_API_KEYS` | Comma-separated OpenRouter API keys |
 | `LLM_FALLBACKS` | JSON map of model fallback chains |

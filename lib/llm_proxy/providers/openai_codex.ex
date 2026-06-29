@@ -12,7 +12,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @behaviour LLMProxy.Providers.Behaviour
 
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.Providers.OpenAICodex.Events
+  alias LLMProxy.Providers.OpenAICodex.{Events, OAuth}
   alias LLMProxy.Providers.Result
   alias LLMProxy.Response, as: ProxyResponse
   alias LLMProxy.TokenPool.Server, as: TokenPool
@@ -126,12 +126,23 @@ defmodule LLMProxy.Providers.OpenAICodex do
     ]
   end
 
+  @doc false
+  def refresh_token_if_needed(
+        token,
+        refresh_fun \\ &ReqLLMOpenAICodex.refresh_oauth_credentials/2
+      ) do
+    OAuth.refresh_if_needed(token, refresh_fun)
+  end
+
   defp pick_token(user_id) do
     case TokenPool.pick_token_by_kind(name(), "oauth", user_id) do
-      {:ok, token} -> {:ok, token}
+      {:ok, token} -> normalize_token_refresh(refresh_token_if_needed(token))
       {:error, reason} -> provider_error("No available OpenAI Codex OAuth tokens: #{reason}", 503)
     end
   end
+
+  defp normalize_token_refresh({:ok, token}), do: {:ok, token}
+  defp normalize_token_refresh({:error, reason}), do: provider_error(to_string(reason), 503)
 
   defp generate(model, %ReqLLM.Context{} = context, token, stream?: false) do
     model_spec = "openai_codex:#{model}"

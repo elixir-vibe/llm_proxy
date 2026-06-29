@@ -39,6 +39,7 @@ defmodule LLMProxy.Storage do
   def remove_token(id), do: adapter().remove_token(id)
   def set_token_enabled(id, enabled), do: adapter().set_token_enabled(id, enabled)
   def update_token_proxy(id, proxy), do: adapter().update_token_proxy(id, proxy)
+  def update_token_oauth(id, attrs), do: adapter().update_token_oauth(id, attrs)
   def seed_tokens_from_env(entries), do: adapter().seed_tokens_from_env(entries)
 
   def log_message(attrs), do: adapter().log_message(attrs)

@@ -81,6 +81,9 @@ defmodule LLMProxy.Storage.Migrations do
       add(:token, :string, null: false)
       add(:label, :string)
       add(:proxy, :string)
+      add(:refresh_token, :string)
+      add(:expires_at, :utc_datetime)
+      add(:account_id, :string)
       add(:enabled, :boolean, default: true, null: false)
       add(:added_at, :utc_datetime, null: false)
     end

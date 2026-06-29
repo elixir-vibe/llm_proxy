@@ -4,11 +4,11 @@
 
 ## OpenAI-compatible providers
 
-For providers that expose `/chat/completions`, use `LLMProxy.Providers.OpenAICompatibleProvider`:
+For providers that expose `/chat/completions`, use `LLMProxy.Providers.OpenAICompatible.Definition`:
 
 ```elixir
 defmodule MyApp.LLM.MyProvider do
-  use LLMProxy.Providers.OpenAICompatibleProvider,
+  use LLMProxy.Providers.OpenAICompatible.Definition,
     name: "my-provider",
     models: ["my-model"],
     config_key: "my-provider"
@@ -37,7 +37,7 @@ Optional headers can be set through config or macro defaults:
 
 ```elixir
 defmodule MyApp.LLM.OpenRouterLike do
-  use LLMProxy.Providers.OpenAICompatibleProvider,
+  use LLMProxy.Providers.OpenAICompatible.Definition,
     name: "openrouter-like",
     http_referer: "https://my-app.example",
     title: "My App"
@@ -45,6 +45,16 @@ end
 ```
 
 Token-level `proxy` values override the configured base URL, so deployments can route through provider-specific gateways.
+
+## OpenAI Codex OAuth tokens
+
+`openai-codex` uses OAuth provider tokens. Plain access-token entries are supported but cannot be refreshed. Refreshable entries use this seed format:
+
+```text
+access_token|refresh_token|expires_unix_ms|account_id
+```
+
+`account_id` is optional. Refreshed credentials are stored back into `provider_tokens` as `token`, `refresh_token`, `expires_at`, and `account_id`.
 
 ## Custom providers
 
@@ -54,21 +64,22 @@ Implement `LLMProxy.Providers.Behaviour` when the upstream is not OpenAI-compati
 defmodule MyApp.LLM.CustomProvider do
   @behaviour LLMProxy.Providers.Behaviour
 
-  alias LLMProxy.Providers.{Result, TokenAccess}
+  alias LLMProxy.Providers.Result
+  alias LLMProxy.TokenPool.Server, as: TokenPool
 
   def name, do: "custom"
   def native_protocol, do: :openai
   def models, do: ["custom-model"]
 
   def call(body, user_id) do
-    with {:ok, token} <- TokenAccess.pick_token(name(), user_id) do
+    with {:ok, token} <- TokenPool.pick_token(name(), user_id) do
       # perform upstream request
       {:ok, Result.response(%{}, token)}
     end
   end
 
   def stream(body, user_id) do
-    with {:ok, token} <- TokenAccess.pick_token(name(), user_id) do
+    with {:ok, token} <- TokenPool.pick_token(name(), user_id) do
       {:ok, Result.stream([], token)}
     end
   end
@@ -78,13 +89,12 @@ defmodule MyApp.LLM.CustomProvider do
 end
 ```
 
-Useful provider helpers:
+Useful provider modules:
 
-- `LLMProxy.Providers.TokenAccess` — token selection with structured errors.
-- `LLMProxy.Providers.Errors` — provider error extraction, retry-after parsing, rate-limit marking.
-- `LLMProxy.Providers.ResponseHandler` — common JSON POST response handling.
-- `LLMProxy.Providers.SSE` — SSE parsing.
-- `LLMProxy.Providers.OpenAIStream` — OpenAI-compatible stream event conversion.
+- `LLMProxy.Providers.Execution` — attempt execution, fallback, timeout, telemetry, and circuit-breaker handling.
+- `LLMProxy.Providers.HTTPResult` — common HTTP response-to-result conversion and retry-after parsing.
+- `LLMProxy.Providers.Result` — explicit response, stream, and error result variants.
+- `LLMProxy.Providers.OpenAICompatible` — shared OpenAI-compatible `/chat/completions` client.
 
 ## Native passthrough
 

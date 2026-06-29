@@ -415,6 +415,16 @@ defmodule LLMProxy.Storage.Ecto do
     end
   end
 
+  def update_token_oauth(id, attrs) do
+    case Repo.get(ProviderToken, id) do
+      nil ->
+        {:error, :not_found}
+
+      token ->
+        token |> ProviderToken.changeset(Map.take(attrs, oauth_token_fields())) |> Repo.update()
+    end
+  end
+
   def seed_tokens_from_env(entries) do
     Enum.each(entries, &seed_token_entry/1)
   end
@@ -428,9 +438,20 @@ defmodule LLMProxy.Storage.Ecto do
       |> MapSet.new()
 
     tokens
-    |> Enum.reject(&MapSet.member?(existing, &1))
-    |> Enum.each(&add_token(provider, kind, &1, %{label: "env"}))
+    |> Enum.map(&normalize_seed_token/1)
+    |> Enum.reject(&MapSet.member?(existing, &1.token))
+    |> Enum.each(fn token ->
+      add_token(provider, kind, token.token, Map.put(token.opts, :label, "env"))
+    end)
   end
+
+  defp normalize_seed_token(token) when is_binary(token), do: %{token: token, opts: %{}}
+
+  defp normalize_seed_token(%{token: token} = attrs) when is_binary(token) do
+    %{token: token, opts: Map.take(attrs, oauth_token_fields())}
+  end
+
+  defp oauth_token_fields, do: [:token, :refresh_token, :expires_at, :account_id]
 
   # --- Message Log ---
 

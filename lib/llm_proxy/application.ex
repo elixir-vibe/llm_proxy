@@ -109,9 +109,7 @@ defmodule LLMProxy.Application do
         tokens =
           provider
           |> LLMProxy.Config.provider_value(config_key, "")
-          |> String.split(",", trim: true)
-          |> Enum.map(&String.trim/1)
-          |> Enum.reject(&(&1 == ""))
+          |> token_entries(provider)
 
         %{provider: provider, kind: kind, tokens: tokens}
       end)
@@ -121,4 +119,87 @@ defmodule LLMProxy.Application do
       LLMProxy.Storage.seed_tokens_from_env(entries)
     end
   end
+
+  defp token_entries(value, "openai-codex") when is_list(value),
+    do: Enum.map(value, &codex_token_entry/1)
+
+  defp token_entries(value, _provider) when is_list(value), do: Enum.map(value, &to_string/1)
+
+  defp token_entries(value, "openai-codex") when is_binary(value) do
+    value
+    |> split_tokens()
+    |> Enum.map(&codex_token_entry/1)
+  end
+
+  defp token_entries(value, _provider) when is_binary(value), do: split_tokens(value)
+  defp token_entries(_value, _provider), do: []
+
+  defp split_tokens(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp codex_token_entry(%{token: token} = attrs) when is_binary(token) do
+    attrs
+    |> Map.take([:token, :refresh_token, :expires_at, :account_id])
+    |> normalize_expires_at()
+  end
+
+  defp codex_token_entry(token) when is_binary(token) do
+    case String.split(token, "|", parts: 4) do
+      [access, refresh, expires, account_id] ->
+        %{
+          token: access,
+          refresh_token: blank_to_nil(refresh),
+          expires_at: parse_expires_at(expires),
+          account_id: blank_to_nil(account_id)
+        }
+
+      [access, refresh, expires] ->
+        %{
+          token: access,
+          refresh_token: blank_to_nil(refresh),
+          expires_at: parse_expires_at(expires)
+        }
+
+      [access, refresh] ->
+        %{token: access, refresh_token: blank_to_nil(refresh)}
+
+      [access] ->
+        %{token: access}
+    end
+  end
+
+  defp normalize_expires_at(%{expires_at: expires_at} = attrs),
+    do: %{attrs | expires_at: parse_expires_at(expires_at)}
+
+  defp normalize_expires_at(attrs), do: attrs
+
+  defp parse_expires_at(nil), do: nil
+  defp parse_expires_at(%DateTime{} = expires_at), do: DateTime.truncate(expires_at, :second)
+
+  defp parse_expires_at(expires_at) when is_integer(expires_at) do
+    expires_at |> DateTime.from_unix!(:millisecond) |> DateTime.truncate(:second)
+  end
+
+  defp parse_expires_at(expires_at) when is_binary(expires_at) do
+    cond do
+      expires_at == "" ->
+        nil
+
+      match?({_integer, ""}, Integer.parse(expires_at)) ->
+        expires_at |> String.to_integer() |> parse_expires_at()
+
+      true ->
+        case DateTime.from_iso8601(expires_at) do
+          {:ok, datetime, _offset} -> DateTime.truncate(datetime, :second)
+          {:error, _reason} -> nil
+        end
+    end
+  end
+
+  defp blank_to_nil(""), do: nil
+  defp blank_to_nil(value), do: value
 end

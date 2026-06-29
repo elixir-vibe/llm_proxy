@@ -26,6 +26,7 @@ defmodule LLMProxy.Storage.FacadeTest do
     def remove_token(id), do: {:ok, id}
     def set_token_enabled(id, enabled), do: {:ok, {id, enabled}}
     def update_token_proxy(id, proxy), do: {:ok, {id, proxy}}
+    def update_token_oauth(id, attrs), do: {:ok, {id, attrs}}
     def seed_tokens_from_env(_entries), do: :ok
     def log_message(attrs), do: {:ok, attrs}
     def get_messages(opts), do: [opts]
