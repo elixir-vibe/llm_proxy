@@ -149,7 +149,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
     case ReqLLM.generate_text(model_spec, context, req_llm_opts(token, false)) do
       {:ok, response} -> {:ok, response}
-      {:error, reason} -> provider_error(Exception.message(reason), 502)
+      {:error, reason} -> provider_error(error_message(reason), 502)
     end
   rescue
     exception in [ArgumentError, RuntimeError] ->
@@ -161,12 +161,15 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
     case ReqLLM.stream_text(model_spec, context, req_llm_opts(token, true)) do
       {:ok, response} -> {:ok, response}
-      {:error, reason} -> provider_error(Exception.message(reason), 502)
+      {:error, reason} -> provider_error(error_message(reason), 502)
     end
   rescue
     exception in [ArgumentError, RuntimeError] ->
       provider_error(Exception.message(exception), 502)
   end
+
+  defp error_message(%_{} = exception), do: Exception.message(exception)
+  defp error_message(reason), do: inspect(reason)
 
   defp maybe_put(list, _key, nil) when is_list(list), do: list
   defp maybe_put(list, key, value) when is_list(list), do: Keyword.put(list, key, value)
