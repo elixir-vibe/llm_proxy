@@ -56,7 +56,13 @@ access_token|refresh_token|expires_unix_ms|account_id
 
 `account_id` is optional. Refreshed credentials are stored back into `provider_tokens` as `token`, `refresh_token`, `expires_at`, and `account_id`.
 
-Standalone releases can run `bin/codex_login` for an interactive OAuth flow. The command prints the ChatGPT/Codex authorization URL, accepts a pasted redirect URL or authorization code, exchanges it server-side, and stores the resulting OAuth token in `provider_tokens`.
+Standalone releases can run `bin/codex_login` for an interactive OAuth flow:
+
+```bash
+bin/codex_login
+```
+
+The command prints the ChatGPT/Codex authorization URL, accepts a pasted redirect URL or authorization code, exchanges it server-side, and stores the resulting OAuth token in `provider_tokens`. Before a token is present, Codex requests fail with `No available OpenAI Codex OAuth tokens: no_tokens`. After login, refreshed credentials are persisted automatically.
 
 ## Custom providers
 
