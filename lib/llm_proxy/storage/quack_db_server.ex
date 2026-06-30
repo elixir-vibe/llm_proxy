@@ -23,10 +23,16 @@ defmodule LLMProxy.Storage.QuackDBServer do
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(options) do
-    with {:ok, pid} <- QuackDB.Server.start_link(options) do
+    with {:ok, pid} <- QuackDB.Server.start_link(server_options(options)) do
       configure_repo_from_server!(pid)
       {:ok, pid}
     end
+  end
+
+  @doc false
+  @spec server_options(keyword()) :: keyword()
+  def server_options(options) do
+    Keyword.delete(options, :uri)
   end
 
   defp configure_repo_from_server!(pid) do

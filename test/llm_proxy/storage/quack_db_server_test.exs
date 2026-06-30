@@ -16,6 +16,14 @@ defmodule LLMProxy.Storage.QuackDBServerTest do
     end)
   end
 
+  test "server_options/1 lets QuackDB derive the URI from the endpoint" do
+    assert QuackDBServer.server_options(
+             endpoint: "quack:localhost:9494",
+             uri: "http://127.0.0.1:9494",
+             database: ":memory:"
+           ) == [endpoint: "quack:localhost:9494", database: ":memory:"]
+  end
+
   test "update_repo_config/1 adds generated server credentials without dropping repo options" do
     Application.put_env(:llm_proxy, QuackDBRepo, priv: "priv/repo")
 

@@ -19,8 +19,7 @@ if config_env() == :prod do
       name: LLMProxy.QuackDBServer,
       duckdb: :managed,
       database: System.get_env("DATABASE_PATH", "./llm_proxy.duckdb"),
-      endpoint: System.get_env("QUACKDB_ENDPOINT", "quack:localhost:9494"),
-      uri: quackdb_uri
+      endpoint: System.get_env("QUACKDB_ENDPOINT", "quack:localhost:9494")
     ]
 
   config :llm_proxy, LLMProxy.Storage.Repo.QuackDB,
