@@ -51,7 +51,10 @@ defmodule LLMProxy.Admin.CodexOAuth do
       verifier: verifier
     }
 
-    Incant.ActionResult.job("codex_oauth", label: "OpenAI Codex OAuth", meta: %{oauth: result})
+    Incant.ActionResult.job("codex_oauth",
+      label: "OpenAI Codex OAuth",
+      meta: %{"oauth" => JSONCodec.dump(result)}
+    )
   end
 
   @spec complete(map(), map()) :: Incant.ActionResult.t()

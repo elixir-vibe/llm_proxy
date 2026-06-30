@@ -106,6 +106,28 @@ defmodule LLMProxy.SafeRPCTest do
     session = Incant.Service.Session.new(List.first(RegistryServer.list_entries(registry)))
     assert [_resource | _] = Incant.Session.list_surfaces(session, kind: :resource)
 
+    assert {:ok,
+            %Incant.ActionResult.Job{
+              id: "codex_oauth",
+              meta: %{
+                "oauth" => %{
+                  "authorization_url" => authorization_url,
+                  "state" => state,
+                  "verifier" => verifier
+                }
+              }
+            }} =
+             Incant.Service.Session.run_action(
+               session,
+               "provider_token",
+               "codex_oauth_start",
+               %{}
+             )
+
+    assert authorization_url =~ "https://auth.openai.com/oauth/authorize"
+    assert authorization_url =~ URI.encode_query(%{state: state})
+    assert is_binary(verifier)
+
     GenServer.stop(registry)
     GenServer.stop(server)
   end

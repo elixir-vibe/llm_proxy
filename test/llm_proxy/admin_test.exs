@@ -57,13 +57,18 @@ defmodule LLMProxy.AdminTest do
   end
 
   test "runs Codex OAuth start page action" do
-    assert {:ok, %ActionResult.Job{id: "codex_oauth", meta: %{oauth: oauth}}} =
+    assert {:ok, %ActionResult.Job{id: "codex_oauth", meta: %{"oauth" => oauth}}} =
              LLMProxy.Admin.run_action("provider_token", "codex_oauth_start", %{}, %{})
 
-    assert %LLMProxy.Admin.CodexOAuth.StartResult{} = oauth
-    assert oauth.authorization_url =~ "https://auth.openai.com/oauth/authorize"
-    assert oauth.authorization_url =~ URI.encode_query(%{state: oauth.state})
-    assert is_binary(oauth.verifier)
+    assert %{
+             "authorization_url" => authorization_url,
+             "state" => state,
+             "verifier" => verifier
+           } = oauth
+
+    assert authorization_url =~ "https://auth.openai.com/oauth/authorize"
+    assert authorization_url =~ URI.encode_query(%{state: state})
+    assert is_binary(verifier)
   end
 
   test "stores Codex OAuth credentials from live admin process" do
