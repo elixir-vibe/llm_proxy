@@ -28,7 +28,7 @@ config :release_kit, :artifact,
     "LLM_PROXY_RPC_SOCKET" => "/run/toys/llm-proxy/rpc.sock",
     "QUACKDB_BINARY_CACHE_DIR" => "/var/lib/toys/llm-proxy/duckdb-bin",
     "QUACKDB_ENDPOINT" => "quack:localhost:9494",
-    "QUACKDB_URI" => "http://localhost:9494",
+    "QUACKDB_URI" => "http://127.0.0.1:9494",
     "RELEASE_DISTRIBUTION" => "none"
   },
   env_secret: [
