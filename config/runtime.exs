@@ -9,7 +9,7 @@ if config_env() in [:dev, :prod] do
 end
 
 if config_env() == :prod do
-  quackdb_uri = System.get_env("QUACKDB_URI", "http://127.0.0.1:9494")
+  quackdb_uri = System.get_env("QUACKDB_URI", "http://localhost:9494")
 
   config :llm_proxy,
     repo: LLMProxy.Storage.Repo.QuackDB,
