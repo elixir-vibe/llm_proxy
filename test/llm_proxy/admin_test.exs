@@ -31,6 +31,14 @@ defmodule LLMProxy.AdminTest do
            ]
 
     assert Enum.map(api_key.table.actions, & &1.id) == ["delete"]
+
+    provider_token = Enum.find(contract.resources, &(&1.id == "provider_token"))
+
+    assert Enum.map(provider_token.table.page_actions, & &1.id) == [
+             "codex_oauth_start",
+             "codex_oauth_complete"
+           ]
+
     refute Map.has_key?(api_key.opts, :schema)
 
     assert [%{id: "operations", title: "Operations"} = dashboard] = contract.dashboards
@@ -46,6 +54,35 @@ defmodule LLMProxy.AdminTest do
            ]
 
     assert Enum.all?(dashboard.widgets, fn widget -> not Map.has_key?(widget.opts, :query) end)
+  end
+
+  test "runs Codex OAuth start page action" do
+    assert {:ok, %ActionResult.Job{id: "codex_oauth", meta: %{oauth: oauth}}} =
+             LLMProxy.Admin.run_action("provider_token", "codex_oauth_start", %{}, %{})
+
+    assert %LLMProxy.Admin.CodexOAuth.StartResult{} = oauth
+    assert oauth.authorization_url =~ "https://auth.openai.com/oauth/authorize"
+    assert oauth.authorization_url =~ URI.encode_query(%{state: oauth.state})
+    assert is_binary(oauth.verifier)
+  end
+
+  test "stores Codex OAuth credentials from live admin process" do
+    {:ok, credentials} =
+      LLMProxy.Providers.OpenAICodex.OAuth.new(
+        "access-token",
+        "refresh-token",
+        DateTime.utc_now() |> DateTime.add(3600, :second),
+        "account-123"
+      )
+
+    assert {:ok, token} = LLMProxy.Admin.CodexOAuth.store_credentials(credentials)
+
+    assert token.provider == "openai-codex"
+    assert token.kind == "oauth"
+    assert token.token == "access-token"
+    assert token.refresh_token == "refresh-token"
+    assert token.account_id == "account-123"
+    assert token.label == "codex-login"
   end
 
   test "runs implemented API key and token row actions" do

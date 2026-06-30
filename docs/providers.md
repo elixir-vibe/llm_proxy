@@ -56,15 +56,49 @@ access_token|refresh_token|expires_unix_ms|account_id
 
 `account_id` is optional. Refreshed credentials are stored back into `provider_tokens` as `token`, `refresh_token`, `expires_at`, and `account_id`.
 
-Standalone releases can run `bin/codex_login` for an interactive OAuth flow:
+Preferred standalone releases manage Codex OAuth through the live Incant admin API. This keeps token persistence inside the running service and avoids starting a second storage owner.
+
+Start the OAuth flow:
 
 ```bash
-bin/codex_login
+curl -sS -X POST \
+  -H 'content-type: application/json' \
+  -H 'accept: application/vnd.incant.admin+json' \
+  --data '{"payload": {}}' \
+  http://127.0.0.1:4000/incant/services/llm_proxy/surfaces/provider_token/actions/codex_oauth_start/runs
 ```
 
-Run it with the same runtime environment as the service so standalone config and storage settings are available. If the release uses exclusive local storage such as a managed DuckDB/QuackDB process, stop the running service while `codex_login` persists the token, then start it again.
+Open the returned `result.meta.oauth.authorization_url`. Keep the returned `state` and `verifier`; the verifier is sensitive and should be treated like an operator-only secret for the duration of the login.
 
-The command prints the ChatGPT/Codex authorization URL, accepts a pasted redirect URL or authorization code, exchanges it server-side, and stores the resulting OAuth token in `provider_tokens`. Before a token is present, Codex requests fail with `No available OpenAI Codex OAuth tokens: no_tokens`. After login, refreshed credentials are persisted automatically.
+Complete the flow with the pasted callback URL or authorization code:
+
+```bash
+curl -sS -X POST \
+  -H 'content-type: application/json' \
+  -H 'accept: application/vnd.incant.admin+json' \
+  --data '{
+    "payload": {
+      "input": {
+        "authorization_input": "PASTED_CALLBACK_URL_OR_CODE",
+        "state": "STATE_FROM_START",
+        "verifier": "VERIFIER_FROM_START"
+      }
+    }
+  }' \
+  http://127.0.0.1:4000/incant/services/llm_proxy/surfaces/provider_token/actions/codex_oauth_complete/runs
+```
+
+Verify the token through Incant rows or storage inspection:
+
+```bash
+curl -sS \
+  -H 'accept: application/vnd.incant.admin+json' \
+  http://127.0.0.1:4000/incant/services/llm_proxy/surfaces/provider_token/rows
+```
+
+Before a token is present, Codex requests fail with `No available OpenAI Codex OAuth tokens: no_tokens`. After login, refreshed credentials are persisted automatically.
+
+`bin/codex_login` remains available for local/manual recovery use, but it runs in a separate VM. If a release uses exclusive local storage such as a managed DuckDB/QuackDB process, prefer the live Incant flow above instead of stopping the service to run the helper.
 
 ## Custom providers
 

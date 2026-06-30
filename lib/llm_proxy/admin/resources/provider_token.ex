@@ -20,6 +20,18 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     action(:disable, confirm: true, callback: {__MODULE__, :disable})
     action(:enable, callback: {__MODULE__, :enable})
     action(:remove, confirm: true, destructive: true, callback: {__MODULE__, :remove})
+
+    actions do
+      page(:codex_oauth_start,
+        label: "Start Codex OAuth",
+        callback: {LLMProxy.Admin.CodexOAuth, :start}
+      )
+
+      page(:codex_oauth_complete,
+        label: "Complete Codex OAuth",
+        callback: {LLMProxy.Admin.CodexOAuth, :complete}
+      )
+    end
   end
 
   def index(params, _context), do: LLMProxy.Storage.list_tokens(params)
