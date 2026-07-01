@@ -34,11 +34,7 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     end
   end
 
-  def index(params, _context) do
-    params
-    |> LLMProxy.Storage.list_tokens()
-    |> Enum.map(&safe_row/1)
-  end
+  def index(params, _context), do: LLMProxy.Storage.list_tokens(params)
 
   def disable(%{id: id}, _assigns), do: set_enabled(id, false)
   def enable(%{id: id}, _assigns), do: set_enabled(id, true)
@@ -58,19 +54,4 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
       {:error, reason} -> {:error, inspect(reason)}
     end
   end
-
-  defp safe_row(token) do
-    %{
-      "id" => token.id,
-      "provider" => token.provider,
-      "kind" => token.kind,
-      "label" => token.label,
-      "enabled" => token.enabled,
-      "proxy" => token.proxy,
-      "added_at" => datetime(token.added_at)
-    }
-  end
-
-  defp datetime(%DateTime{} = datetime), do: DateTime.to_iso8601(datetime)
-  defp datetime(nil), do: nil
 end
