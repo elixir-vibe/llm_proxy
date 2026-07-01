@@ -49,6 +49,47 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     def to_openai_response(response, model), do: Map.put(response, "model", model)
   end
 
+  defmodule BlockingStreamProvider do
+    def name, do: "blocking-stream-chat"
+    def models, do: ["blocking-stream-chat-model"]
+
+    def stream(_body, _user_id) do
+      parent = Application.fetch_env!(:llm_proxy, :blocking_stream_parent)
+
+      stream =
+        Stream.resource(
+          fn -> :waiting end,
+          fn
+            :waiting ->
+              send(parent, {:blocking_stream_waiting, self()})
+
+              receive do
+                :release_blocking_stream ->
+                  event =
+                    Event.new(
+                      %{
+                        "id" => "blocking-chat",
+                        "choices" => [%{"delta" => %{"content" => "done"}}]
+                      },
+                      usage: LLMProxy.Usage.new(1, 1)
+                    )
+
+                  {[event], :done}
+              after
+                5_000 ->
+                  raise "blocking stream was not released"
+              end
+
+            :done ->
+              {:halt, :done}
+          end,
+          fn _ -> :ok end
+        )
+
+      {:ok, Result.stream(stream, nil)}
+    end
+  end
+
   defmodule FallbackChatProvider do
     alias LLMProxy.Protocol.OpenAI
 
@@ -72,10 +113,16 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
   setup do
     TestSupport.checkout_repo()
+    LLMProxy.Drain.cancel()
     Registry.register(FakeChatProvider)
+    Registry.register(BlockingStreamProvider)
     Registry.register(FallbackChatProvider)
 
-    on_exit(fn -> Application.delete_env(:llm_proxy, :fallbacks) end)
+    on_exit(fn ->
+      LLMProxy.Drain.cancel()
+      Application.delete_env(:llm_proxy, :blocking_stream_parent)
+      Application.delete_env(:llm_proxy, :fallbacks)
+    end)
 
     :ok
   end
@@ -128,6 +175,43 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 12
     assert updated_key.output_tokens == 7
+  end
+
+  test "stream remains active until the response stream finishes" do
+    Application.put_env(:llm_proxy, :blocking_stream_parent, self())
+    {:ok, _key, raw_key} = Storage.create_key("blocking-stream-user")
+
+    task =
+      Task.async(fn ->
+        receive do
+          :start_blocking_stream -> :ok
+        end
+
+        TestSupport.json_conn(:post, "/completions", %{
+          "model" => "blocking-stream-chat-model",
+          "stream" => true,
+          "messages" => [%{"role" => "user", "content" => "hello"}]
+        })
+        |> TestSupport.put_bearer(raw_key)
+        |> Chat.call(Chat.init([]))
+      end)
+
+    task_pid = task.pid
+    Ecto.Adapters.SQL.Sandbox.allow(LLMProxy.Storage.Repo.SQLite, self(), task_pid)
+    send(task_pid, :start_blocking_stream)
+
+    assert_receive {:blocking_stream_waiting, ^task_pid}
+    assert %{active: %{streams: 1, total: 1}, serving: true} = LLMProxy.Drain.status()
+    assert %{draining: true, ready: false} = LLMProxy.Drain.start()
+    assert {:error, :timeout} = LLMProxy.Drain.await_empty(10)
+
+    send(task.pid, :release_blocking_stream)
+    conn = Task.await(task)
+
+    assert conn.status == 200
+    assert conn.state == :chunked
+    assert :ok = LLMProxy.Drain.await_empty(100)
+    assert %{active: %{streams: 0, total: 0}, serving: false} = LLMProxy.Drain.status()
   end
 
   test "tracks usage and response model for fallback provider" do

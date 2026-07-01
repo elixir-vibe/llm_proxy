@@ -7,7 +7,7 @@ defmodule LLMProxy.Drain.Server do
 
   defstruct draining: false,
             active: %{},
-            waiters: []
+            waiters: %{}
 
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -30,10 +30,11 @@ defmodule LLMProxy.Drain.Server do
   def leave(ref), do: GenServer.call(__MODULE__, {:leave, ref})
 
   @spec await_empty(timeout()) :: :ok | {:error, :timeout}
-  def await_empty(timeout \\ 30_000) do
-    GenServer.call(__MODULE__, :await_empty, timeout)
-  catch
-    :exit, {:timeout, _call} -> {:error, :timeout}
+  def await_empty(timeout \\ 30_000)
+  def await_empty(:infinity), do: GenServer.call(__MODULE__, {:await_empty, :infinity}, :infinity)
+
+  def await_empty(timeout) when is_integer(timeout) and timeout >= 0 do
+    GenServer.call(__MODULE__, {:await_empty, timeout}, timeout + 1_000)
   end
 
   @impl true
@@ -74,21 +75,47 @@ defmodule LLMProxy.Drain.Server do
     {:reply, :ok, maybe_reply_waiters(state)}
   end
 
-  def handle_call(:await_empty, from, state) do
+  def handle_call({:await_empty, timeout}, from, state) do
     if map_size(state.active) == 0 do
       {:reply, :ok, state}
     else
-      {:noreply, %{state | waiters: [from | state.waiters]}}
+      ref = make_ref()
+      timer = await_timer(ref, timeout)
+      {:noreply, %{state | waiters: Map.put(state.waiters, ref, {from, timer})}}
+    end
+  end
+
+  @impl true
+  def handle_info({:await_empty_timeout, ref}, state) do
+    case Map.pop(state.waiters, ref) do
+      {{from, _timer}, waiters} ->
+        GenServer.reply(from, {:error, :timeout})
+        {:noreply, %{state | waiters: waiters}}
+
+      {nil, _waiters} ->
+        {:noreply, state}
     end
   end
 
   defp maybe_reply_waiters(%{active: active, waiters: waiters} = state)
-       when map_size(active) == 0 and waiters != [] do
-    Enum.each(waiters, &GenServer.reply(&1, :ok))
-    %{state | waiters: []}
+       when map_size(active) == 0 and map_size(waiters) > 0 do
+    Enum.each(waiters, fn {_ref, {from, timer}} ->
+      cancel_timer(timer)
+      GenServer.reply(from, :ok)
+    end)
+
+    %{state | waiters: %{}}
   end
 
   defp maybe_reply_waiters(state), do: state
+
+  defp await_timer(_ref, :infinity), do: nil
+
+  defp await_timer(ref, timeout),
+    do: Process.send_after(self(), {:await_empty_timeout, ref}, timeout)
+
+  defp cancel_timer(nil), do: :ok
+  defp cancel_timer(timer), do: Process.cancel_timer(timer)
 
   defp status(state) do
     active = active_counts(state.active)

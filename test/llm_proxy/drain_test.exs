@@ -40,6 +40,23 @@ defmodule LLMProxy.DrainTest do
     assert :ok = Task.await(task)
   end
 
+  test "await_empty times out without poisoning later waits" do
+    assert {:ok, ref} = LLMProxy.Drain.enter(:agent, %{})
+    assert {:error, :timeout} = LLMProxy.Drain.await_empty(10)
+
+    parent = self()
+
+    task =
+      Task.async(fn ->
+        send(parent, :awaiting_after_timeout)
+        LLMProxy.Drain.await_empty(1_000)
+      end)
+
+    assert_receive :awaiting_after_timeout
+    assert :ok = LLMProxy.Drain.leave(ref)
+    assert :ok = Task.await(task)
+  end
+
   test "track leaves work after function returns" do
     assert :done = LLMProxy.Drain.track(:agent, %{}, fn -> :done end)
     assert %{active: %{total: 0}} = LLMProxy.Drain.status()

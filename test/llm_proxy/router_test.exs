@@ -48,6 +48,7 @@ defmodule LLMProxy.RouterDynamicTest do
     assert health_conn.status == 200
     assert Jason.decode!(health_conn.resp_body)["draining"] == true
     assert models_conn.status == 503
+    assert Plug.Conn.get_resp_header(models_conn, "retry-after") == ["30"]
     assert Jason.decode!(models_conn.resp_body)["error"]["code"] == "draining"
   end
 

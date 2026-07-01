@@ -39,6 +39,28 @@ defmodule LLMProxy.ReleaseTasksTest do
     GenServer.stop(server)
   end
 
+  test "drain await release task raises on timeout" do
+    socket =
+      Path.join(
+        System.tmp_dir!(),
+        "llm-proxy-release-drain-timeout-#{System.unique_integer([:positive])}.sock"
+      )
+
+    Application.put_env(:llm_proxy, :rpc_socket, socket)
+
+    {:ok, server} = LLMProxy.RPC.AdminServer.start_link(socket: socket)
+    {:ok, ref} = LLMProxy.Drain.enter(:agent, %{})
+
+    assert_raise RuntimeError, "LLMProxy drain timed out after 10ms", fn ->
+      ReleaseTasks.drain_await(10)
+    end
+
+    assert :ok = LLMProxy.Drain.leave(ref)
+    assert :ok = ReleaseTasks.drain_await(100)
+
+    GenServer.stop(server)
+  end
+
   test "Codex login release task starts Req Finch before token exchange" do
     Application.stop(:req)
     Application.stop(:finch)
