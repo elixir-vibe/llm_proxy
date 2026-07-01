@@ -26,7 +26,7 @@ defmodule LLMProxy.Compat.OpenAIChatTest do
     rendered = OpenAI.request_body(request)
 
     assert [assistant, tool] = rendered["messages"]
-    assert assistant["content"] == ""
+    assert assistant["content"] == nil
     assert get_in(assistant, ["tool_calls", Access.at(0), "id"]) == "call_weather"
 
     assert get_in(assistant, ["tool_calls", Access.at(0), "function", "arguments"]) ==
@@ -43,7 +43,12 @@ defmodule LLMProxy.Compat.OpenAIChatTest do
       "response_format" => %{
         "type" => "json_schema",
         "json_schema" => %{"name" => "answer", "schema" => %{"type" => "object"}}
-      }
+      },
+      "provider" => %{"order" => ["OpenAI"], "allow_fallbacks" => false},
+      "transforms" => ["middle-out"],
+      "reasoning" => %{"effort" => "low"},
+      "include_reasoning" => true,
+      "max_completion_tokens" => 123
     }
 
     assert {:ok, request} = Request.parse(:openai_chat, body)
@@ -51,6 +56,11 @@ defmodule LLMProxy.Compat.OpenAIChatTest do
 
     assert rendered["parallel_tool_calls"] == false
     assert rendered["response_format"] == body["response_format"]
+    assert rendered["provider"] == body["provider"]
+    assert rendered["transforms"] == body["transforms"]
+    assert rendered["reasoning"] == body["reasoning"]
+    assert rendered["include_reasoning"] == true
+    assert rendered["max_completion_tokens"] == 123
   end
 
   test "preserves image detail hints when parsing and rendering OpenAI image content" do

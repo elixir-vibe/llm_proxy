@@ -39,6 +39,18 @@ defmodule LLMProxy.Response do
         }
 
   @spec to_openai(t()) :: map()
+  def to_openai(
+        %__MODULE__{provider_response: %{"choices" => choices} = provider_response} = response
+      )
+      when is_list(choices) do
+    provider_response
+    |> Map.put("model", response.model)
+    |> update_in(["choices", Access.all(), "message"], fn
+      %{} = message -> Map.put_new(message, "role", "assistant")
+      message -> message
+    end)
+  end
+
   def to_openai(%__MODULE__{} = response) do
     to_openai_chat_completion(
       response.message,
@@ -100,8 +112,29 @@ defmodule LLMProxy.Response do
   def put_text(%__MODULE__{message: %ReqLLM.Response{} = message} = response, text)
       when is_binary(text) do
     assistant = %Message{role: :assistant, content: [ContentPart.text(text)]}
-    %{response | message: %{message | message: assistant}}
+
+    %{
+      response
+      | message: %{message | message: assistant},
+        provider_response: put_provider_text(response.provider_response, text)
+    }
   end
+
+  defp put_provider_text(%{"choices" => choices} = provider_response, text)
+       when is_list(choices) do
+    update_in(provider_response, ["choices", Access.all(), "message"], fn
+      %{} = message ->
+        message
+        |> Map.put("role", "assistant")
+        |> Map.put("content", text)
+        |> Map.delete("tool_calls")
+
+      message ->
+        message
+    end)
+  end
+
+  defp put_provider_text(provider_response, _text), do: provider_response
 
   defp openai_message(
          %Message{role: :assistant, content: content, tool_calls: tool_calls},

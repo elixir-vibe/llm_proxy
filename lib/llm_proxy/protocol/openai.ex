@@ -15,6 +15,26 @@ defmodule LLMProxy.Protocol.OpenAI do
   def protocol, do: :openai
 
   @spec request_body(Request.t()) :: map()
+  def request_body(%Request{
+        protocol: :openai_chat,
+        body: %{"messages" => _messages} = body,
+        model: model
+      }) do
+    Map.put(body, "model", model)
+  end
+
+  def request_body(%Request{
+        protocol: :openai_responses,
+        body: %{"input" => input} = body,
+        model: model
+      })
+      when is_list(input) do
+    body
+    |> Map.take(["parallel_tool_calls", "response_format"])
+    |> Map.put("messages", responses_input_to_openai_messages(input))
+    |> Map.put("model", model)
+  end
+
   def request_body(%Request{} = request) do
     %ReqLLM.Context{messages: request.messages}
     |> ReqLLMDefaults.encode_context_to_openai_format(request.model)
@@ -51,6 +71,48 @@ defmodule LLMProxy.Protocol.OpenAI do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp responses_input_to_openai_messages(input) do
+    Enum.map(input, fn
+      %{"role" => role, "content" => content} ->
+        %{"role" => role, "content" => responses_content_to_openai(content)}
+
+      item ->
+        item
+    end)
+  end
+
+  defp responses_content_to_openai(content) when is_list(content) do
+    Enum.map(content, &responses_content_part_to_openai/1)
+  end
+
+  defp responses_content_to_openai(content), do: content
+
+  defp responses_content_part_to_openai(%{"type" => "input_file", "file_id" => file_id})
+       when is_binary(file_id) do
+    %{"file" => %{"file_id" => file_id}}
+  end
+
+  defp responses_content_part_to_openai(%{
+         "type" => "input_file",
+         "filename" => filename,
+         "file_data" => file_data
+       }) do
+    %{"file" => %{"filename" => filename, "file_data" => file_data}}
+  end
+
+  defp responses_content_part_to_openai(%{"type" => "input_text", "text" => text}) do
+    %{"type" => "text", "text" => text}
+  end
+
+  defp responses_content_part_to_openai(
+         %{"type" => "input_image", "image_url" => image_url} = part
+       ) do
+    image_url = if is_map(image_url), do: image_url, else: %{"url" => image_url}
+    %{"type" => "image_url", "image_url" => Map.merge(image_url, Map.take(part, ["detail"]))}
+  end
+
+  defp responses_content_part_to_openai(part), do: part
 
   defp anthropic_stream_event(%{"type" => "message_start", "message" => message}, model) do
     chunk(message["id"], model, %{"role" => "assistant"})

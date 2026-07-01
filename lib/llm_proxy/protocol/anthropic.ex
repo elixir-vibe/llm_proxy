@@ -28,7 +28,28 @@ defmodule LLMProxy.Protocol.Anthropic do
   # --- OpenAI → Anthropic ---
 
   @spec request_body(Request.t(), keyword()) :: map()
-  def request_body(%Request{} = request, opts \\ []) do
+  def request_body(request, opts \\ [])
+
+  def request_body(
+        %Request{protocol: :anthropic_messages, body: %{"messages" => _messages} = body} = request,
+        opts
+      ) do
+    body
+    |> Map.put("model", request.model)
+    |> Map.put(
+      "max_tokens",
+      request.max_tokens || body["max_tokens"] || conversion_max_tokens(opts)
+    )
+    |> maybe_put_tools(request.tools)
+    |> maybe_put("temperature", request.temperature)
+    |> maybe_put("top_p", request.top_p)
+    |> maybe_put("stream", request.stream)
+    |> maybe_put("metadata", request.metadata)
+    |> maybe_put("stop_sequences", request.stop)
+    |> maybe_put("tool_choice", request.tool_choice)
+  end
+
+  def request_body(%Request{} = request, opts) do
     %ReqLLM.Context{messages: request.messages}
     |> AnthropicContext.encode_request(%{model: request.model})
     |> LLMProxy.Protocol.stringify_keys()
