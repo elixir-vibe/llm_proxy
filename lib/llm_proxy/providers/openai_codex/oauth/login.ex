@@ -52,7 +52,11 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth.Login do
 
     @type t :: %__MODULE__{auth: AuthClaims.t() | nil}
 
-    codec(:auth, as: "https://api.openai.com/auth")
+    codec(:auth, as: "https://api.openai.com/auth", cast: :cast_auth)
+
+    def cast_auth(%AuthClaims{} = auth), do: auth
+    def cast_auth(auth) when is_map(auth), do: AuthClaims.from_map!(auth)
+    def cast_auth(auth), do: auth
   end
 
   @client_id "app_EMoamEEZ73f0CkXaXp7hrann"

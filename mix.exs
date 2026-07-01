@@ -63,7 +63,7 @@ defmodule LLMProxy.MixProject do
       {:dotenvy, "~> 1.1"},
       {:toml, "~> 0.7"},
       {:jason, "~> 1.4"},
-      {:json_codec, "~> 0.2.1"},
+      {:json_codec, "~> 0.1.5"},
       {:incant, git: "git@github.com:elixir-vibe/incant.git", branch: "main"},
       {:safe_rpc, "~> 0.1.12"},
 
