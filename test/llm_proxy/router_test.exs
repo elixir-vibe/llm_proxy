@@ -21,6 +21,7 @@ defmodule LLMProxy.RouterDynamicTest do
   end
 
   setup do
+    LLMProxy.Drain.cancel()
     Registry.register(RouterProvider)
     Dynamic.init()
     Dynamic.register("/dynamic", DynamicRoute)
@@ -31,7 +32,23 @@ defmodule LLMProxy.RouterDynamicTest do
     conn = Plug.Test.conn(:get, "/health") |> Router.call(Router.init([]))
 
     assert conn.status == 200
-    assert Jason.decode!(conn.resp_body)["status"] == "ok"
+    body = Jason.decode!(conn.resp_body)
+    assert body["status"] == "ok"
+    assert body["ready"] == true
+    assert body["draining"] == false
+    assert body["active"] == %{"agents" => 0, "requests" => 0, "streams" => 0, "total" => 0}
+  end
+
+  test "health remains available while user routes reject during drain" do
+    LLMProxy.Drain.start()
+
+    health_conn = Plug.Test.conn(:get, "/health") |> Router.call(Router.init([]))
+    models_conn = Plug.Test.conn(:get, "/v1/models") |> Router.call(Router.init([]))
+
+    assert health_conn.status == 200
+    assert Jason.decode!(health_conn.resp_body)["draining"] == true
+    assert models_conn.status == 503
+    assert Jason.decode!(models_conn.resp_body)["error"]["code"] == "draining"
   end
 
   test "lists registered models" do

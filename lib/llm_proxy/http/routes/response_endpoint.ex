@@ -59,31 +59,37 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   defp responses_stream?(%Request{} = request), do: normalize_stream(request).stream
 
   defp dispatch_provider(conn, %Request{stream: true} = request, api_key, trace_id) do
-    case Provider.stream_native(request, Actor.from_api_key(api_key),
-           route: :responses,
-           trace_id: trace_id,
-           api_name: "Responses API"
-         ) do
-      {:ok, %Result{kind: :stream} = result} ->
-        Passthrough.send_result(conn, result, api_key, trace_id, passthrough_result_handler())
+    LLMProxy.Drain.track(:stream, request_meta(conn, trace_id, :responses), fn ->
+      case Provider.stream_native(request, Actor.from_api_key(api_key),
+             route: :responses,
+             trace_id: trace_id,
+             api_name: "Responses API"
+           ) do
+        {:ok, %Result{kind: :stream} = result} ->
+          Passthrough.send_result(conn, result, api_key, trace_id, passthrough_result_handler())
 
-      {:error, reason} ->
-        handle_provider_error(conn, reason)
-    end
+        {:error, reason} ->
+          handle_provider_error(conn, reason)
+      end
+    end)
+    |> handle_drain_race(conn)
   end
 
   defp dispatch_provider(conn, %Request{} = request, api_key, trace_id) do
-    case Provider.call_native(request, Actor.from_api_key(api_key),
-           route: :responses,
-           trace_id: trace_id,
-           api_name: "Responses API"
-         ) do
-      {:ok, %Result{kind: :response} = result} ->
-        Passthrough.send_result(conn, result, api_key, trace_id, passthrough_result_handler())
+    LLMProxy.Drain.track(:request, request_meta(conn, trace_id, :responses), fn ->
+      case Provider.call_native(request, Actor.from_api_key(api_key),
+             route: :responses,
+             trace_id: trace_id,
+             api_name: "Responses API"
+           ) do
+        {:ok, %Result{kind: :response} = result} ->
+          Passthrough.send_result(conn, result, api_key, trace_id, passthrough_result_handler())
 
-      {:error, reason} ->
-        handle_provider_error(conn, reason)
-    end
+        {:error, reason} ->
+          handle_provider_error(conn, reason)
+      end
+    end)
+    |> handle_drain_race(conn)
   end
 
   defp passthrough_result_handler do
@@ -171,6 +177,18 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
 
   defp tracking_opts(provider, trace_id) do
     %{provider: provider.name(), metadata: %{"trace_id" => trace_id}}
+  end
+
+  defp handle_drain_race({:error, :draining}, conn) do
+    conn
+    |> Plug.Conn.put_resp_header("retry-after", "30")
+    |> send_error(503, "draining", "LLMProxy is draining and not accepting new requests")
+  end
+
+  defp handle_drain_race(result, _conn), do: result
+
+  defp request_meta(conn, trace_id, route) do
+    %{method: conn.method, path: conn.request_path, request_id: trace_id, route: route}
   end
 
   defp send_error(conn, status, type, message) do

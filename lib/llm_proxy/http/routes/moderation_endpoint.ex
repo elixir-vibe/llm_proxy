@@ -73,20 +73,23 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   end
 
   defp request_moderation(conn, %CreateRequest{} = attrs, token, trace_id) do
-    req =
-      HTTP.new(
-        url: "https://api.openai.com/v1/moderations",
-        headers: [{"authorization", "Bearer #{token.token}"}]
-      )
+    LLMProxy.Drain.track(:request, request_meta(conn, trace_id, :moderations), fn ->
+      req =
+        HTTP.new(
+          url: "https://api.openai.com/v1/moderations",
+          headers: [{"authorization", "Bearer #{token.token}"}]
+        )
 
-    case post_moderation(req, attrs, trace_id) do
-      {:ok, %{status: status, body: response}} ->
-        HTTP.send_json(conn, status, response)
+      case post_moderation(req, attrs, trace_id) do
+        {:ok, %{status: status, body: response}} ->
+          HTTP.send_json(conn, status, response)
 
-      {:error, exception} ->
-        Logger.error("Moderation error: #{Exception.message(exception)}")
-        HTTP.send_json(conn, 502, %{error: Exception.message(exception)})
-    end
+        {:error, exception} ->
+          Logger.error("Moderation error: #{Exception.message(exception)}")
+          HTTP.send_json(conn, 502, %{error: Exception.message(exception)})
+      end
+    end)
+    |> handle_drain_race(conn)
   end
 
   defp post_moderation(req, %CreateRequest{} = attrs, trace_id) do
@@ -97,6 +100,20 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
       fn -> Req.post(req, json: %{input: attrs.input, model: attrs.model}) end,
       %{"llm_proxy.trace_id" => trace_id}
     )
+  end
+
+  defp handle_drain_race({:error, :draining}, conn) do
+    conn
+    |> Plug.Conn.put_resp_header("retry-after", "30")
+    |> HTTP.send_json(503, %{
+      error: %{code: "draining", message: "LLMProxy is draining and not accepting new requests"}
+    })
+  end
+
+  defp handle_drain_race(result, _conn), do: result
+
+  defp request_meta(conn, trace_id, route) do
+    %{method: conn.method, path: conn.request_path, request_id: trace_id, route: route}
   end
 
   match _ do

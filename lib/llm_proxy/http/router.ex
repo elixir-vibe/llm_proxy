@@ -17,11 +17,22 @@ defmodule LLMProxy.HTTP.Router do
     json_decoder: Jason
   )
 
+  plug(LLMProxy.Plugs.Drain)
+
   plug(:match)
   plug(:dispatch)
 
   get "/health" do
-    HTTP.send_json(conn, 200, %{status: "ok", version: "0.1.0"})
+    drain = LLMProxy.Drain.status()
+
+    HTTP.send_json(conn, 200, %{
+      status: "ok",
+      version: "0.1.0",
+      ready: drain.ready,
+      draining: drain.draining,
+      serving: drain.serving,
+      active: drain.active
+    })
   end
 
   for {path, plug} <- RouteSpec.routes() do

@@ -50,33 +50,39 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   defp handle_non_stream(conn, api_key, %Request{} = request, meta) do
     {conn, request_id} = Trace.ensure_conn(conn)
 
-    case Provider.call(request, Actor.from_api_key(api_key),
-           route: :chat,
-           trace_id: request_id,
-           usage_metadata: Map.to_list(meta)
-         ) do
-      {:ok, response} ->
-        HTTP.send_json(conn, 200, LLMProxy.Response.to_openai(response))
+    LLMProxy.Drain.track(:request, request_meta(conn, request_id, :chat), fn ->
+      case Provider.call(request, Actor.from_api_key(api_key),
+             route: :chat,
+             trace_id: request_id,
+             usage_metadata: Map.to_list(meta)
+           ) do
+        {:ok, response} ->
+          HTTP.send_json(conn, 200, LLMProxy.Response.to_openai(response))
 
-      {:error, reason} ->
-        handle_provider_error(conn, reason)
-    end
+        {:error, reason} ->
+          handle_provider_error(conn, reason)
+      end
+    end)
+    |> handle_drain_race(conn)
   end
 
   defp handle_stream(conn, api_key, %Request{} = request, meta) do
     {conn, request_id} = Trace.ensure_conn(conn)
 
-    case Provider.stream(request, Actor.from_api_key(api_key),
-           route: :chat,
-           trace_id: request_id,
-           usage_metadata: Map.to_list(meta)
-         ) do
-      {:ok, %Result{kind: :stream} = result} ->
-        finish_stream(conn, result)
+    LLMProxy.Drain.track(:stream, request_meta(conn, request_id, :chat), fn ->
+      case Provider.stream(request, Actor.from_api_key(api_key),
+             route: :chat,
+             trace_id: request_id,
+             usage_metadata: Map.to_list(meta)
+           ) do
+        {:ok, %Result{kind: :stream} = result} ->
+          finish_stream(conn, result)
 
-      {:error, reason} ->
-        handle_provider_error(conn, reason)
-    end
+        {:error, reason} ->
+          handle_provider_error(conn, reason)
+      end
+    end)
+    |> handle_drain_race(conn)
   end
 
   defp handle_provider_error(
@@ -137,6 +143,21 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     if function_exported?(provider, :native_protocol, 0),
       do: provider.native_protocol(),
       else: :openai
+  end
+
+  defp handle_drain_race({:error, :draining}, conn), do: drain_rejected(conn)
+  defp handle_drain_race(result, _conn), do: result
+
+  defp drain_rejected(conn) do
+    conn
+    |> Plug.Conn.put_resp_header("retry-after", "30")
+    |> HTTP.send_json(503, %{
+      error: %{code: "draining", message: "LLMProxy is draining and not accepting new requests"}
+    })
+  end
+
+  defp request_meta(conn, request_id, route) do
+    %{method: conn.method, path: conn.request_path, request_id: request_id, route: route}
   end
 
   defp log_provider_error(nil, error, status),

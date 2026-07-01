@@ -26,6 +26,7 @@ defmodule LLMProxy.Application do
     children =
       storage_children() ++
         [
+          LLMProxy.Drain,
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
           LLMProxy.TokenPool.Server

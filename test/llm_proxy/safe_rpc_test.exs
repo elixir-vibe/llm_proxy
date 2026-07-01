@@ -142,6 +142,22 @@ defmodule LLMProxy.SafeRPCTest do
     GenServer.stop(server)
   end
 
+  test "real LLMProxy RPC server dispatches admin and ops services on one socket" do
+    LLMProxy.Drain.cancel()
+    socket = socket_path("composite")
+    {:ok, server} = LLMProxy.RPC.AdminServer.start_link(socket: socket)
+
+    assert {:ok, %SafeRPC.Descriptor{modules: modules}} = SafeRPC.describe(socket)
+    assert Map.has_key?(modules, LLMProxy.Admin)
+    assert Map.has_key?(modules, LLMProxy.Ops)
+
+    assert {:ok, %{draining: false}} = SafeRPC.call(socket, {LLMProxy.Ops, :drain_status})
+    assert {:ok, %{draining: true}} = SafeRPC.call(socket, {LLMProxy.Ops, :drain_start})
+    assert {:ok, %{draining: false}} = SafeRPC.call(socket, {LLMProxy.Ops, :drain_cancel})
+
+    GenServer.stop(server)
+  end
+
   defp socket_path(name) do
     Path.join(
       System.tmp_dir!(),

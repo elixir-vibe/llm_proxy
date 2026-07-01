@@ -30,6 +30,42 @@ defmodule LLMProxy.ReleaseTasks do
     :ok
   end
 
+  @doc "Start deployment drain mode on the running LLMProxy service."
+  @spec drain_start() :: :ok
+  def drain_start do
+    {:ok, status} = ops_call({LLMProxy.Ops, :drain_start})
+    IO.puts("LLMProxy drain started: #{inspect(status)}")
+    :ok
+  end
+
+  @doc "Cancel deployment drain mode on the running LLMProxy service."
+  @spec drain_cancel() :: :ok
+  def drain_cancel do
+    {:ok, status} = ops_call({LLMProxy.Ops, :drain_cancel})
+    IO.puts("LLMProxy drain canceled: #{inspect(status)}")
+    :ok
+  end
+
+  @doc "Print deployment drain status from the running LLMProxy service."
+  @spec drain_status() :: :ok
+  def drain_status do
+    {:ok, status} = ops_call({LLMProxy.Ops, :drain_status})
+    IO.puts(inspect(status, pretty: true))
+    :ok
+  end
+
+  @doc "Wait for active work on the running LLMProxy service to reach zero."
+  @spec drain_await(timeout()) :: :ok
+  def drain_await(timeout_ms \\ 1_800_000) do
+    case ops_call({LLMProxy.Ops, :drain_await}, %{timeout_ms: timeout_ms},
+           timeout: timeout_ms + 1_000
+         ) do
+      :ok -> :ok
+      {:error, :timeout} -> raise "LLMProxy drain timed out after #{timeout_ms}ms"
+      {:error, reason} -> raise "LLMProxy drain failed: #{inspect(reason)}"
+    end
+  end
+
   @doc "Runs an interactive OpenAI Codex OAuth login and stores the provider token."
   @spec codex_login([String.t()]) :: :ok
   def codex_login(argv \\ []) do
@@ -38,6 +74,11 @@ defmodule LLMProxy.ReleaseTasks do
     else
       run_codex_login()
     end
+  end
+
+  defp ops_call(op, payload \\ %{}, opts \\ []) do
+    socket = LLMProxy.Config.rpc_socket() || raise "LLM_PROXY_RPC_SOCKET is not configured"
+    SafeRPC.call(socket, op, payload, opts)
   end
 
   defp run_codex_login do
