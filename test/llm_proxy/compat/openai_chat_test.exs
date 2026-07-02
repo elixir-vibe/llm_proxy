@@ -63,6 +63,62 @@ defmodule LLMProxy.Compat.OpenAIChatTest do
     assert rendered["max_completion_tokens"] == 123
   end
 
+  test "enforces OpenAI strict response schemas without changing other passthrough fields" do
+    body = %{
+      "model" => "gpt-4o",
+      "messages" => [%{"role" => "user", "content" => "json please"}],
+      "response_format" => %{
+        "type" => "json_schema",
+        "json_schema" => %{
+          "name" => "response",
+          "strict" => true,
+          "schema" => %{
+            "type" => "object",
+            "properties" => %{
+              "receipt" => %{
+                "default" => nil,
+                "anyOf" => [
+                  %{
+                    "type" => "object",
+                    "properties" => %{
+                      "items" => %{
+                        "type" => "array",
+                        "items" => %{
+                          "type" => "object",
+                          "properties" => %{"item_name" => %{"type" => "string"}}
+                        }
+                      }
+                    }
+                  },
+                  %{"type" => "null"}
+                ]
+              },
+              "error" => %{"anyOf" => [%{"type" => "string"}, %{"type" => "null"}]}
+            }
+          }
+        }
+      },
+      "provider" => %{"order" => ["OpenAI"], "allow_fallbacks" => false}
+    }
+
+    assert {:ok, request} = Request.parse(:openai_chat, body)
+    rendered = OpenAI.request_body(request)
+    schema = rendered["response_format"]["json_schema"]["schema"]
+
+    assert rendered["provider"] == body["provider"]
+    assert Enum.sort(schema["required"]) == ["error", "receipt"]
+    assert schema["additionalProperties"] == false
+    assert schema["properties"]["receipt"]["default"] == nil
+
+    [receipt_object, %{"type" => "null"}] = schema["properties"]["receipt"]["anyOf"]
+    assert receipt_object["required"] == ["items"]
+    assert receipt_object["additionalProperties"] == false
+
+    item_schema = receipt_object["properties"]["items"]["items"]
+    assert item_schema["required"] == ["item_name"]
+    assert item_schema["additionalProperties"] == false
+  end
+
   test "preserves image detail hints when parsing and rendering OpenAI image content" do
     body = %{
       "model" => "gpt-4o",

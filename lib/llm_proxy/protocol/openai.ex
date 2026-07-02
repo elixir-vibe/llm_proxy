@@ -20,7 +20,9 @@ defmodule LLMProxy.Protocol.OpenAI do
         body: %{"messages" => _messages} = body,
         model: model
       }) do
-    Map.put(body, "model", model)
+    body
+    |> normalize_openai_wire_response_format()
+    |> Map.put("model", model)
   end
 
   def request_body(%Request{
@@ -71,6 +73,35 @@ defmodule LLMProxy.Protocol.OpenAI do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp normalize_openai_wire_response_format(
+         %{
+           "response_format" =>
+             %{
+               "type" => "json_schema",
+               "json_schema" => %{"strict" => true, "schema" => %{"type" => _type} = schema}
+             } = response_format
+         } = body
+       ) do
+    json_schema =
+      Map.put(response_format["json_schema"], "schema", strict_openai_wire_schema(schema))
+
+    Map.put(body, "response_format", %{response_format | "json_schema" => json_schema})
+  end
+
+  defp normalize_openai_wire_response_format(body), do: body
+
+  defp strict_openai_wire_schema(schema) do
+    %{response_format: %{"json_schema" => %{"schema" => schema}}} =
+      ReqLLM.Providers.OpenAI.AdapterHelpers.add_response_format(%{},
+        response_format: %{
+          "type" => "json_schema",
+          "json_schema" => %{"strict" => true, "schema" => schema}
+        }
+      )
+
+    schema
+  end
 
   defp responses_input_to_openai_messages(input) do
     Enum.map(input, fn
