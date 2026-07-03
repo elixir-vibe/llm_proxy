@@ -92,9 +92,13 @@ defmodule LLMProxy.GuardrailPipelineTest do
 
   setup do
     TestSupport.checkout_repo()
+    LLMProxy.Drain.cancel()
     Registry.register(Provider)
 
-    on_exit(fn -> Application.delete_env(:llm_proxy, :guardrails) end)
+    on_exit(fn ->
+      Application.delete_env(:llm_proxy, :guardrails)
+      LLMProxy.Drain.cancel()
+    end)
 
     :ok
   end

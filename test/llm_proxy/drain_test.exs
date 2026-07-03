@@ -3,6 +3,7 @@ defmodule LLMProxy.DrainTest do
 
   setup do
     LLMProxy.Drain.cancel()
+    on_exit(fn -> LLMProxy.Drain.cancel() end)
     :ok
   end
 
