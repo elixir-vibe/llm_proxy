@@ -36,7 +36,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
               %LLMProxy.Providers.Result{
                 status: 429,
                 token: nil,
-                provider_body: %{"error" => "slow down"}
+                provider_body: "slow down"
               }} =
                HTTPResult.handle_response(nil, 429, %{"error" => "slow down"})
 
@@ -45,7 +45,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
                 status: 429,
                 token: nil,
                 retry_after_ms: 3_000,
-                provider_body: %{"error" => "slow down"}
+                provider_body: "slow down"
               }} =
                HTTPResult.handle_response(nil, %{
                  status: 429,
@@ -59,6 +59,13 @@ defmodule LLMProxy.Providers.HTTPResultTest do
     test "wraps exceptions" do
       assert {:error, %LLMProxy.Providers.Result{status: 502, error: "boom"}} =
                HTTPResult.handle_exception(%RuntimeError{message: "boom"})
+    end
+  end
+
+  describe "provider_details/1" do
+    test "keeps only the upstream error payload when present" do
+      body = %{"error" => %{"message" => "bad image"}, "user_id" => "provider-user"}
+      assert HTTPResult.provider_details(body) == %{"message" => "bad image"}
     end
   end
 

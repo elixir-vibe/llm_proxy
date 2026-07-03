@@ -19,12 +19,15 @@ defmodule LLMProxy.Providers.HTTPResult do
 
     mark_rate_limited(status, token, retry_after_ms)
 
-    result(extract(body), status, token, retry_after_ms: retry_after_ms, provider_body: body)
+    result(extract(body), status, token,
+      retry_after_ms: retry_after_ms,
+      provider_body: provider_details(body)
+    )
   end
 
   def handle_response(token, status, body) do
     mark_rate_limited(status, token, nil)
-    result(extract(body), status, token, provider_body: body)
+    result(extract(body), status, token, provider_body: provider_details(body))
   end
 
   def handle_exception(exception) do
@@ -41,6 +44,9 @@ defmodule LLMProxy.Providers.HTTPResult do
     |> List.first()
     |> parse_retry_after()
   end
+
+  def provider_details(%{"error" => error}), do: error
+  def provider_details(body), do: body
 
   def extract(%{"error" => %{"message" => message}}), do: message
   def extract(%{"error" => message}) when is_binary(message), do: message
