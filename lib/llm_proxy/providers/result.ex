@@ -19,6 +19,7 @@ defmodule LLMProxy.Providers.Result do
     :status,
     :token,
     :retry_after_ms,
+    :provider_body,
     :provider,
     :model
   ]
@@ -31,6 +32,7 @@ defmodule LLMProxy.Providers.Result do
           status: pos_integer() | nil,
           token: token(),
           retry_after_ms: non_neg_integer() | nil,
+          provider_body: term() | nil,
           provider: module() | nil,
           model: String.t() | nil
         }
@@ -53,7 +55,8 @@ defmodule LLMProxy.Providers.Result do
       error: error,
       status: status,
       token: token,
-      retry_after_ms: opts[:retry_after_ms]
+      retry_after_ms: opts[:retry_after_ms],
+      provider_body: opts[:provider_body]
     }
   end
 

@@ -87,10 +87,10 @@ defmodule LLMProxy.HTTP.Routes.Chat do
 
   defp handle_provider_error(
          conn,
-         {:provider, %Result{error: error, status: status, provider: provider}}
+         {:provider, %Result{error: error, status: status, provider: provider} = result}
        ) do
     log_provider_error(provider, error, status)
-    HTTP.send_json(conn, status, %{error: error})
+    HTTP.send_json(conn, status, %{error: provider_error_body(result)})
   end
 
   defp handle_provider_error(conn, {:permission, reason}) do
@@ -158,6 +158,12 @@ defmodule LLMProxy.HTTP.Routes.Chat do
 
   defp request_meta(conn, request_id, route) do
     %{method: conn.method, path: conn.request_path, request_id: request_id, route: route}
+  end
+
+  defp provider_error_body(%Result{error: error, provider_body: nil}), do: error
+
+  defp provider_error_body(%Result{error: error, provider_body: provider_body}) do
+    %{message: error, details: provider_body}
   end
 
   defp log_provider_error(nil, error, status),

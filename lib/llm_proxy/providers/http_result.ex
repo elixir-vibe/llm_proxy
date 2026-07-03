@@ -19,12 +19,12 @@ defmodule LLMProxy.Providers.HTTPResult do
 
     mark_rate_limited(status, token, retry_after_ms)
 
-    result(extract(body), status, token, retry_after_ms: retry_after_ms)
+    result(extract(body), status, token, retry_after_ms: retry_after_ms, provider_body: body)
   end
 
   def handle_response(token, status, body) do
     mark_rate_limited(status, token, nil)
-    result(extract(body), status, token)
+    result(extract(body), status, token, provider_body: body)
   end
 
   def handle_exception(exception) do

@@ -9,10 +9,22 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
   defmodule FakeChatProvider do
     def name, do: "fake-chat"
-    def models, do: ["fake-chat-model", "fake-chat-error"]
+    def models, do: ["fake-chat-model", "fake-chat-error", "fake-chat-detailed-error"]
 
     def call(%{"model" => "fake-chat-error"}, _user_id) do
       {:error, Result.error("upstream failed", 502, nil)}
+    end
+
+    def call(%{"model" => "fake-chat-detailed-error"}, _user_id) do
+      {:error,
+       Result.error("Provider returned error", 400, nil,
+         provider_body: %{
+           "error" => %{
+             "message" => "Invalid schema for response_format 'response'",
+             "code" => "invalid_json_schema"
+           }
+         }
+       )}
     end
 
     def call(%{"model" => "fake-chat-model", "messages" => _messages}, _user_id) do
@@ -268,6 +280,32 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
     assert conn.status == 502
     assert Jason.decode!(conn.resp_body) == %{"error" => "upstream failed"}
+  end
+
+  test "returns captured upstream provider error details" do
+    {:ok, _key, raw_key} = Storage.create_key("detailed-error-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/completions", %{
+        "model" => "fake-chat-detailed-error",
+        "messages" => [%{"role" => "user", "content" => "hello"}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> Chat.call(Chat.init([]))
+
+    assert conn.status == 400
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "error" => %{
+               "message" => "Provider returned error",
+               "details" => %{
+                 "error" => %{
+                   "message" => "Invalid schema for response_format 'response'",
+                   "code" => "invalid_json_schema"
+                 }
+               }
+             }
+           }
   end
 
   test "returns 404 for unknown routes" do

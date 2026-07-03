@@ -32,10 +32,21 @@ defmodule LLMProxy.Providers.HTTPResultTest do
     end
 
     test "keeps nil-token rate limits as provider errors" do
-      assert {:error, %LLMProxy.Providers.Result{status: 429, token: nil}} =
+      assert {:error,
+              %LLMProxy.Providers.Result{
+                status: 429,
+                token: nil,
+                provider_body: %{"error" => "slow down"}
+              }} =
                HTTPResult.handle_response(nil, 429, %{"error" => "slow down"})
 
-      assert {:error, %LLMProxy.Providers.Result{status: 429, token: nil, retry_after_ms: 3_000}} =
+      assert {:error,
+              %LLMProxy.Providers.Result{
+                status: 429,
+                token: nil,
+                retry_after_ms: 3_000,
+                provider_body: %{"error" => "slow down"}
+              }} =
                HTTPResult.handle_response(nil, %{
                  status: 429,
                  body: %{"error" => "slow down"},
