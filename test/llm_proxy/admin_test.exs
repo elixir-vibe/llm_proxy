@@ -58,6 +58,32 @@ defmodule LLMProxy.AdminTest do
              "service_usage"
            ]
 
+    recent_usage = Enum.find(dashboard.widgets, &(&1.id == "recent_usage"))
+
+    assert Enum.map(recent_usage.opts.columns, & &1.name) == [
+             :timestamp,
+             :provider,
+             :model,
+             :input_tokens,
+             :output_tokens,
+             :cost_usd,
+             :duration_ms,
+             :ttft_ms,
+             :key_id
+           ]
+
+    assert Enum.map(recent_usage.opts.columns, & &1.opts[:label]) == [
+             "Timestamp",
+             "Provider",
+             "Model",
+             "Input tokens",
+             "Output tokens",
+             "Cost",
+             "Duration",
+             "TTFT",
+             "Key"
+           ]
+
     assert Enum.all?(dashboard.widgets, fn widget -> not Map.has_key?(widget.opts, :query) end)
   end
 

@@ -28,8 +28,22 @@ defmodule LLMProxy.Admin.Dashboards.Operations do
       query: &__MODULE__.output_tokens/2
     )
 
-    table(:recent_usage, span: 8, label: "Recent requests", query: &__MODULE__.recent_usage/2)
-    table(:service_usage, span: 4, label: "Service usage", query: &__MODULE__.service_usage/2)
+    table :recent_usage, span: 8, label: "Recent requests", query: &__MODULE__.recent_usage/2 do
+      column(:timestamp, label: "Timestamp", format: :datetime)
+      column(:provider, label: "Provider")
+      column(:model, label: "Model")
+      column(:input_tokens, label: "Input tokens", format: :number)
+      column(:output_tokens, label: "Output tokens", format: :number)
+      column(:cost_usd, label: "Cost", format: :money)
+      column(:duration_ms, label: "Duration", format: :number)
+      column(:ttft_ms, label: "TTFT", format: :number)
+      column(:key_id, label: "Key")
+    end
+
+    table :service_usage, span: 4, label: "Service usage", query: &__MODULE__.service_usage/2 do
+      column(:service, label: "Service")
+      column(:count, label: "Count", format: :number)
+    end
   end
 
   def total_keys(_variables, _context), do: stats().total_keys
