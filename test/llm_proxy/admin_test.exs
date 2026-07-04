@@ -93,10 +93,24 @@ defmodule LLMProxy.AdminTest do
     assert {:ok, 123} = Incant.Service.Session.run_widget(session, "operations", "input_tokens")
     assert {:ok, 45} = Incant.Service.Session.run_widget(session, "operations", "output_tokens")
 
-    assert {:ok, [%{model: "dashboard-model"}]} =
-             Incant.Service.Session.run_widget(session, "operations", "recent_usage")
+    assert {:ok,
+            %{
+              "columns" => [
+                "timestamp",
+                "provider",
+                "model",
+                "input_tokens",
+                "output_tokens",
+                "cost_usd",
+                "duration_ms",
+                "ttft_ms",
+                "key_id"
+              ],
+              "rows" => [%{"model" => "dashboard-model"}]
+            }} = Incant.Service.Session.run_widget(session, "operations", "recent_usage")
 
-    assert {:ok, []} = Incant.Service.Session.run_widget(session, "operations", "service_usage")
+    assert {:ok, %{"columns" => ["service", "count"], "rows" => []}} =
+             Incant.Service.Session.run_widget(session, "operations", "service_usage")
 
     GenServer.stop(server)
   end

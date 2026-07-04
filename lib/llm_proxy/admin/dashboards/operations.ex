@@ -37,8 +37,30 @@ defmodule LLMProxy.Admin.Dashboards.Operations do
   def total_spend(_variables, _context), do: stats().total_spend_usd
   def input_tokens(_variables, _context), do: stats().total_input_tokens
   def output_tokens(_variables, _context), do: stats().total_output_tokens
-  def recent_usage(_variables, _context), do: stats().recent_usage
-  def service_usage(_variables, _context), do: stats().service_stats
+
+  def recent_usage(_variables, _context) do
+    %{
+      columns: [
+        :timestamp,
+        :provider,
+        :model,
+        :input_tokens,
+        :output_tokens,
+        :cost_usd,
+        :duration_ms,
+        :ttft_ms,
+        :key_id
+      ],
+      rows: stats().recent_usage
+    }
+  end
+
+  def service_usage(_variables, _context) do
+    %{
+      columns: [:service, :count],
+      rows: stats().service_stats
+    }
+  end
 
   defp stats, do: LLMProxy.Storage.get_stats()
 end
