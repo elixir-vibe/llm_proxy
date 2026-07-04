@@ -67,12 +67,19 @@ defmodule LLMProxy.SafeRPCTest do
 
     assert %{ops: ops} = Map.fetch!(descriptor.modules, LLMProxy.Admin)
 
-    assert %{describe: describe, index: index, read: read, run_action: run_action} = ops
+    assert %{
+             describe: describe,
+             index: index,
+             read: read,
+             run_action: run_action,
+             run_widget: run_widget
+           } = ops
 
     assert describe.docs == "Describe this Incant admin surface."
     assert index.spec != nil
     assert read.spec != nil
     assert run_action.spec != nil
+    assert run_widget.spec != nil
 
     for atom <- ["compact", "density", "options", "select", "safe_rpc_reply"] do
       assert atom in atoms

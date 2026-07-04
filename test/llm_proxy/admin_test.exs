@@ -3,7 +3,12 @@ defmodule LLMProxy.AdminTest do
 
   alias Incant.ActionResult
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.TestSupport
+
+  defmodule AdminServer do
+    use SafeRPC.Adapter.Server, service: LLMProxy.Admin
+  end
 
   setup do
     TestSupport.checkout_repo()
@@ -54,6 +59,46 @@ defmodule LLMProxy.AdminTest do
            ]
 
     assert Enum.all?(dashboard.widgets, fn widget -> not Map.has_key?(widget.opts, :query) end)
+  end
+
+  test "executes Operations dashboard widgets through Incant service session" do
+    socket = socket_path("dashboard-widgets")
+    {:ok, server} = AdminServer.start_link(socket: socket)
+    Ecto.Adapters.SQL.Sandbox.allow(SQLite, self(), server)
+
+    {:ok, key, _raw_key} = Storage.create_key("dashboard-widget-user")
+    Storage.update_key_usage(key, %{input: 123, output: 45, cost_usd: 0.67})
+
+    assert {:ok, _usage} =
+             Storage.record_usage(%{
+               key_id: key.id,
+               model: "dashboard-model",
+               input_tokens: 123,
+               output_tokens: 45,
+               cost_usd: 0.67,
+               provider: "openai",
+               timestamp: DateTime.utc_now() |> DateTime.truncate(:second)
+             })
+
+    bindings = %{llm_proxy: %{socket: socket, modules: [LLMProxy.Admin]}}
+
+    assert {:ok, %Incant.Service.Registry{entries: [entry]}} =
+             Incant.Service.Registry.from_bindings(bindings)
+
+    session = Incant.Service.Session.new(entry)
+
+    assert {:ok, 1} = Incant.Service.Session.run_widget(session, "operations", "api_keys")
+    assert {:ok, 1} = Incant.Service.Session.run_widget(session, "operations", "requests")
+    assert {:ok, 0.67} = Incant.Service.Session.run_widget(session, "operations", "spend")
+    assert {:ok, 123} = Incant.Service.Session.run_widget(session, "operations", "input_tokens")
+    assert {:ok, 45} = Incant.Service.Session.run_widget(session, "operations", "output_tokens")
+
+    assert {:ok, [%{model: "dashboard-model"}]} =
+             Incant.Service.Session.run_widget(session, "operations", "recent_usage")
+
+    assert {:ok, []} = Incant.Service.Session.run_widget(session, "operations", "service_usage")
+
+    GenServer.stop(server)
   end
 
   test "runs Codex OAuth start page action" do
@@ -130,5 +175,12 @@ defmodule LLMProxy.AdminTest do
              LLMProxy.Admin.run_action("api_key", "delete", %{id: key.id}, %{})
 
     assert Storage.list_keys() == []
+  end
+
+  defp socket_path(name) do
+    Path.join(
+      System.tmp_dir!(),
+      "llm-proxy-admin-#{name}-#{System.unique_integer([:positive])}.sock"
+    )
   end
 end
