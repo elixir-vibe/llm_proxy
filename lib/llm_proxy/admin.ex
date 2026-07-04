@@ -13,7 +13,7 @@ defmodule LLMProxy.Admin do
     policy: LLMProxy.Admin.Policy,
     rpc: true
 
-  expose(LLMProxy.Schemas.ApiKey)
+  resource(LLMProxy.Admin.Resources.ApiKey)
   expose(LLMProxy.Schemas.ProviderToken)
   expose(LLMProxy.Schemas.Trace, readonly: true)
   expose(LLMProxy.Schemas.MessageLog, as: :message, readonly: true)

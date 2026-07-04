@@ -1,6 +1,8 @@
 defmodule LLMProxy.Admin.Resources.ApiKey do
   @moduledoc "Admin resource for LLMProxy API keys."
 
+  alias LLMProxy.Admin.Resources.APIKey.CreateInput
+
   use Incant.Resource,
     schema: LLMProxy.Schemas.ApiKey,
     title: "API Keys"
@@ -16,10 +18,33 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
     filter(:name, :text)
     filter(:trace_requests, :boolean)
 
+    actions do
+      page(:create,
+        label: "Create API key",
+        confirm: "Create a new API key?",
+        callback: {__MODULE__, :create}
+      )
+    end
+
     action(:delete, confirm: true, destructive: true, callback: {__MODULE__, :delete})
   end
 
   def index(params, _context), do: LLMProxy.Storage.list_keys(params)
+
+  def create(_params, assigns) do
+    with {:ok, command} <- CreateInput.from_assigns(assigns),
+         {:ok, key, raw_key} <-
+           LLMProxy.Storage.create_key(command.name, %{trace_requests: command.trace_requests}) do
+      {:ok,
+       Incant.ActionResult.job("api_key:#{key.id}",
+         label: "Created #{command.name}",
+         meta: %{id: key.id, name: key.name, token: raw_key}
+       )}
+    else
+      {:error, message} when is_binary(message) -> {:error, message}
+      {:error, changeset} -> {:error, inspect(changeset.errors)}
+    end
+  end
 
   def delete(%{id: id}, _assigns) do
     case LLMProxy.Storage.delete_key(id) do

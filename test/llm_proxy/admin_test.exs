@@ -36,6 +36,7 @@ defmodule LLMProxy.AdminTest do
            ]
 
     assert Enum.map(api_key.table.actions, & &1.id) == ["delete"]
+    assert Enum.map(api_key.table.page_actions, & &1.id) == ["create"]
 
     provider_token = Enum.find(contract.resources, &(&1.id == "provider_token"))
 
@@ -139,6 +140,21 @@ defmodule LLMProxy.AdminTest do
              Incant.Service.Session.run_widget(session, "operations", "service_usage")
 
     GenServer.stop(server)
+  end
+
+  test "runs API key creation page action" do
+    assert {:ok, %ActionResult.Job{id: "api_key:" <> _id, meta: meta}} =
+             LLMProxy.Admin.run_action(
+               "api_key",
+               "create",
+               %{assigns: %{"name" => "operator-test", "trace_requests" => true}},
+               %{}
+             )
+
+    assert %{id: id, name: "operator-test", token: "sk-proxy-" <> _} = meta
+    assert key = Storage.find_key(meta.token)
+    assert key.id == id
+    assert key.trace_requests == true
   end
 
   test "runs Codex OAuth start page action" do
