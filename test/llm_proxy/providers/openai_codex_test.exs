@@ -48,6 +48,33 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
     assert provider_options[:openai_stream_transport] == :websocket
   end
 
+  test "Chat input preserves tools for ReqLLM generation" do
+    tool = %{
+      "type" => "function",
+      "function" => %{
+        "name" => "add",
+        "parameters" => %{
+          "type" => "object",
+          "properties" => %{"a" => %{"type" => "number"}},
+          "required" => ["a"]
+        }
+      }
+    }
+
+    assert {:ok, request} =
+             OpenAICodex.request_from_chat_body(%{
+               "model" => "gpt-5.3-codex-spark",
+               "messages" => [%{"role" => "user", "content" => "use add"}],
+               "tools" => [tool],
+               "tool_choice" => "auto"
+             })
+
+    assert request.model == "gpt-5.3-codex-spark"
+    assert request.tools == [tool]
+    assert request.tool_choice == "auto"
+    assert [%{role: :user}] = request.messages
+  end
+
   test "Responses input is converted into ReqLLM context messages" do
     {:ok, context} =
       OpenAICodex.context_from_responses_body(%{

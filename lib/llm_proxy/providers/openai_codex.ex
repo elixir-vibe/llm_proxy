@@ -31,13 +31,13 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @impl true
   def call(body, user_id) do
     with {:ok, token} <- pick_token(user_id),
-         {:ok, context} <- context_from_chat_body(body),
-         {:ok, response} <- generate(body["model"], context, token, stream?: false) do
+         {:ok, request} <- request_from_chat_body(body),
+         {:ok, response} <- generate(request, token, stream?: false) do
       {:ok,
        Result.response(
          ProxyResponse.to_openai_chat_completion(
            response,
-           body["model"],
+           request.model,
            "chatcmpl-#{response.id}",
            response.usage,
            nil,
@@ -51,9 +51,9 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @impl true
   def stream(body, user_id) do
     with {:ok, token} <- pick_token(user_id),
-         {:ok, context} <- context_from_chat_body(body),
-         {:ok, stream_response} <- generate(body["model"], context, token, stream?: true) do
-      stream = Stream.map(stream_response.stream, &Events.openai_chat_event(&1, body["model"]))
+         {:ok, request} <- request_from_chat_body(body),
+         {:ok, stream_response} <- generate(request, token, stream?: true) do
+      stream = Stream.map(stream_response.stream, &Events.openai_chat_event(&1, request.model))
       {:ok, Result.stream(Stream.reject(stream, &is_nil/1), token)}
     end
   end
@@ -61,11 +61,11 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @impl true
   def call_native(body, user_id) do
     with {:ok, token} <- pick_token(user_id),
-         {:ok, context} <- context_from_responses_body(body),
-         {:ok, response} <- generate(body["model"], context, token, stream?: false) do
+         {:ok, request} <- request_from_responses_body(body),
+         {:ok, response} <- generate(request, token, stream?: false) do
       {:ok,
        Result.response(
-         ProxyResponse.to_responses(response, body["model"], System.system_time(:second)),
+         ProxyResponse.to_responses(response, request.model, System.system_time(:second)),
          token
        )}
     end
@@ -74,8 +74,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @impl true
   def stream_native(body, user_id) do
     with {:ok, token} <- pick_token(user_id),
-         {:ok, context} <- context_from_responses_body(body),
-         {:ok, stream_response} <- generate(body["model"], context, token, stream?: true) do
+         {:ok, request} <- request_from_responses_body(body),
+         {:ok, stream_response} <- generate(request, token, stream?: true) do
       stream = Stream.map(stream_response.stream, &Events.responses_event/1)
       {:ok, Result.stream(Stream.reject(stream, &is_nil/1), token)}
     end
@@ -90,24 +90,38 @@ defmodule LLMProxy.Providers.OpenAICodex do
   def to_openai_response(response, model), do: Map.put(response, "model", model)
 
   @doc false
-  def context_from_chat_body(%{"messages" => messages}) when is_list(messages) do
-    case ReqLLM.Context.normalize(messages) do
-      {:ok, context} -> {:ok, context}
-      {:error, reason} -> provider_error("Invalid chat messages: #{inspect(reason)}", 400)
-    end
-  end
-
-  def context_from_chat_body(_body), do: provider_error("Request must include messages", 400)
-
-  @doc false
-  def context_from_responses_body(body) when is_map(body) do
-    case Request.parse(:openai_responses, body) do
-      {:ok, %Request{messages: messages}} -> {:ok, %ReqLLM.Context{messages: messages}}
+  def request_from_chat_body(body) when is_map(body) do
+    case Request.parse(:openai_chat, body) do
+      {:ok, %Request{} = request} -> {:ok, request}
       {:error, %Request.Error{} = error} -> provider_error(error.message, 400)
     end
   end
 
-  def context_from_responses_body(_body), do: provider_error("Request must include input", 400)
+  def request_from_chat_body(_body), do: provider_error("Request must include messages", 400)
+
+  @doc false
+  def context_from_chat_body(body) do
+    with {:ok, %Request{messages: messages}} <- request_from_chat_body(body) do
+      {:ok, %ReqLLM.Context{messages: messages}}
+    end
+  end
+
+  @doc false
+  def request_from_responses_body(body) when is_map(body) do
+    case Request.parse(:openai_responses, body) do
+      {:ok, %Request{} = request} -> {:ok, request}
+      {:error, %Request.Error{} = error} -> provider_error(error.message, 400)
+    end
+  end
+
+  def request_from_responses_body(_body), do: provider_error("Request must include input", 400)
+
+  @doc false
+  def context_from_responses_body(body) do
+    with {:ok, %Request{messages: messages}} <- request_from_responses_body(body) do
+      {:ok, %ReqLLM.Context{messages: messages}}
+    end
+  end
 
   @doc false
   def req_llm_opts(token, stream?) do
@@ -144,10 +158,11 @@ defmodule LLMProxy.Providers.OpenAICodex do
   defp normalize_token_refresh({:ok, token}), do: {:ok, token}
   defp normalize_token_refresh({:error, reason}), do: provider_error(to_string(reason), 503)
 
-  defp generate(model, %ReqLLM.Context{} = context, token, stream?: false) do
-    model_spec = "openai_codex:#{model}"
+  defp generate(%Request{} = request, token, stream?: false) do
+    model_spec = "openai_codex:#{request.model}"
+    context = %ReqLLM.Context{messages: request.messages}
 
-    case ReqLLM.generate_text(model_spec, context, req_llm_opts(token, false)) do
+    case ReqLLM.generate_text(model_spec, context, generation_opts(request, token, false)) do
       {:ok, response} -> {:ok, response}
       {:error, reason} -> provider_error(error_message(reason), 502)
     end
@@ -156,16 +171,29 @@ defmodule LLMProxy.Providers.OpenAICodex do
       provider_error(Exception.message(exception), 502)
   end
 
-  defp generate(model, %ReqLLM.Context{} = context, token, stream?: true) do
-    model_spec = "openai_codex:#{model}"
+  defp generate(%Request{} = request, token, stream?: true) do
+    model_spec = "openai_codex:#{request.model}"
+    context = %ReqLLM.Context{messages: request.messages}
 
-    case ReqLLM.stream_text(model_spec, context, req_llm_opts(token, true)) do
+    case ReqLLM.stream_text(model_spec, context, generation_opts(request, token, true)) do
       {:ok, response} -> {:ok, response}
       {:error, reason} -> provider_error(error_message(reason), 502)
     end
   rescue
     exception in [ArgumentError, RuntimeError] ->
       provider_error(Exception.message(exception), 502)
+  end
+
+  defp generation_opts(%Request{} = request, token, stream?) do
+    token
+    |> req_llm_opts(stream?)
+    |> maybe_put(:tools, request.tools)
+    |> maybe_put(:tool_choice, request.tool_choice)
+    |> maybe_put(:max_tokens, request.max_tokens)
+    |> maybe_put(:temperature, request.temperature)
+    |> maybe_put(:top_p, request.top_p)
+    |> maybe_put(:stop, request.stop)
+    |> maybe_put(:parallel_tool_calls, request.body["parallel_tool_calls"])
   end
 
   defp error_message(%_{} = exception), do: Exception.message(exception)
