@@ -140,6 +140,7 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
     assert start["index"] == 0
     assert start["id"] == "call_1"
     assert start["function"]["name"] == "add"
+    assert start["function"]["arguments"] == ""
 
     assert [%{"delta" => %{"tool_calls" => [arg_delta]}}] = args.data["choices"]
     assert arg_delta["index"] == 0

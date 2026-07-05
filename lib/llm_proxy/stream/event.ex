@@ -105,7 +105,7 @@ defmodule LLMProxy.Stream.Event do
             "type" => "function",
             "function" => %{
               "name" => name,
-              "arguments" => Jason.encode!(arguments)
+              "arguments" => openai_tool_call_arguments(arguments)
             }
           }
         ]
@@ -153,6 +153,9 @@ defmodule LLMProxy.Stream.Event do
 
   defp responses_status(:incomplete), do: "incomplete"
   defp responses_status(_reason), do: "completed"
+
+  defp openai_tool_call_arguments(arguments) when arguments == %{}, do: ""
+  defp openai_tool_call_arguments(arguments), do: Jason.encode!(arguments)
 
   defp openai_finish_reason(:tool_calls), do: "tool_calls"
   defp openai_finish_reason(:length), do: "length"
