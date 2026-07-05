@@ -53,8 +53,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
     with {:ok, token} <- pick_token(user_id),
          {:ok, request} <- request_from_chat_body(body),
          {:ok, stream_response} <- generate(request, token, stream?: true) do
-      stream = Stream.map(stream_response.stream, &Events.openai_chat_event(&1, request.model))
-      {:ok, Result.stream(Stream.reject(stream, &is_nil/1), token)}
+      {:ok,
+       Result.stream(Events.openai_chat_events(stream_response.stream, request.model), token)}
     end
   end
 

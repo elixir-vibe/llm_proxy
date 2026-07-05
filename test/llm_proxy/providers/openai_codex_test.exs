@@ -124,6 +124,30 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
     assert event.data["model"] == "gpt-5.3-codex-spark"
   end
 
+  test "OpenAI chat stream conversion normalizes tool indexes and terminal finish" do
+    chunks = [
+      StreamChunk.tool_call("add", %{}, %{id: "call_1", index: 1}),
+      StreamChunk.meta(%{tool_call_args: %{index: 1, fragment: ~s({"a":2,"b":3})}}),
+      StreamChunk.meta(%{terminal?: true, finish_reason: :stop, usage: %{input_tokens: 1}})
+    ]
+
+    [tool_start, args, terminal] =
+      chunks
+      |> Events.openai_chat_events("gpt-5.3-codex-spark")
+      |> Enum.to_list()
+
+    assert [%{"delta" => %{"tool_calls" => [start]}}] = tool_start.data["choices"]
+    assert start["index"] == 0
+    assert start["id"] == "call_1"
+    assert start["function"]["name"] == "add"
+
+    assert [%{"delta" => %{"tool_calls" => [arg_delta]}}] = args.data["choices"]
+    assert arg_delta["index"] == 0
+    assert arg_delta["function"]["arguments"] == ~s({"a":2,"b":3})
+
+    assert [%{"finish_reason" => "tool_calls"}] = terminal.data["choices"]
+  end
+
   defp account_token(account_id) do
     header = Base.url_encode64(Jason.encode!(%{"alg" => "none"}), padding: false)
 
