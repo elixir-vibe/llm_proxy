@@ -12,7 +12,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
   @behaviour LLMProxy.Providers.Behaviour
 
   alias LLMProxy.Protocol.Request
-  alias LLMProxy.Providers.OpenAICodex.{Events, OAuth}
+  alias LLMProxy.Providers.OpenAICodex.{Events, OAuth, ToolSchema}
   alias LLMProxy.Providers.Result
   alias LLMProxy.Response, as: ProxyResponse
   alias LLMProxy.TokenPool.Server, as: TokenPool
@@ -187,88 +187,13 @@ defmodule LLMProxy.Providers.OpenAICodex do
   defp generation_opts(%Request{} = request, token, stream?) do
     token
     |> req_llm_opts(stream?)
-    |> maybe_put(:tools, strict_tools(request.tools))
+    |> maybe_put(:tools, ToolSchema.strictify(request.tools))
     |> maybe_put(:tool_choice, request.tool_choice)
     |> maybe_put(:max_tokens, request.max_tokens)
     |> maybe_put(:temperature, request.temperature)
     |> maybe_put(:top_p, request.top_p)
     |> maybe_put(:stop, request.stop)
     |> maybe_put(:parallel_tool_calls, request.body["parallel_tool_calls"])
-  end
-
-  defp strict_tools(nil), do: nil
-  defp strict_tools(tools) when is_list(tools), do: Enum.map(tools, &strict_tool/1)
-  defp strict_tools(tools), do: tools
-
-  defp strict_tool(%{"function" => %{} = function} = tool) do
-    put_in(tool, ["function", "parameters"], strict_schema(function["parameters"]))
-  end
-
-  defp strict_tool(%{function: %{} = function} = tool) do
-    put_in(tool, [:function, :parameters], strict_schema(function[:parameters]))
-  end
-
-  defp strict_tool(tool), do: tool
-
-  defp strict_schema(%{} = schema) do
-    schema
-    |> maybe_put_additional_properties_false()
-    |> update_schema_children()
-  end
-
-  defp strict_schema(schema), do: schema
-
-  defp maybe_put_additional_properties_false(%{"type" => "object"} = schema),
-    do: Map.put_new(schema, "additionalProperties", false)
-
-  defp maybe_put_additional_properties_false(%{type: "object"} = schema),
-    do: Map.put_new(schema, :additionalProperties, false)
-
-  defp maybe_put_additional_properties_false(schema), do: schema
-
-  defp update_schema_children(schema) do
-    schema
-    |> update_schema_map("properties")
-    |> update_schema_map(:properties)
-    |> update_schema_value("items")
-    |> update_schema_value(:items)
-    |> update_schema_list("oneOf")
-    |> update_schema_list(:oneOf)
-    |> update_schema_list("anyOf")
-    |> update_schema_list(:anyOf)
-    |> update_schema_list("allOf")
-    |> update_schema_list(:allOf)
-  end
-
-  defp update_schema_map(schema, key) do
-    case Map.get(schema, key) do
-      %{} = properties ->
-        Map.put(
-          schema,
-          key,
-          Map.new(properties, fn {name, child} -> {name, strict_schema(child)} end)
-        )
-
-      _other ->
-        schema
-    end
-  end
-
-  defp update_schema_value(schema, key) do
-    case Map.get(schema, key) do
-      %{} = child -> Map.put(schema, key, strict_schema(child))
-      _other -> schema
-    end
-  end
-
-  defp update_schema_list(schema, key) do
-    case Map.get(schema, key) do
-      children when is_list(children) ->
-        Map.put(schema, key, Enum.map(children, &strict_schema/1))
-
-      _other ->
-        schema
-    end
   end
 
   defp error_message(%_{} = exception), do: Exception.message(exception)
