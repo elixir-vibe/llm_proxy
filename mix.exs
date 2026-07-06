@@ -54,11 +54,7 @@ defmodule LLMProxy.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:quackdb, "~> 0.5.15"},
-      # Temporary fork until ReqLLM PRs #791/#796 are merged/released. LLMProxy relies on
-      # these encoder/reasoning-details fixes to avoid local provider wire-format patches.
-      {:req_llm,
-       git: "https://github.com/dannote/req_llm.git",
-       branch: "fix/openai-compatible-reasoning-details"},
+      {:req_llm, "~> 1.17.1"},
       {:req, "~> 0.6"},
       {:llm_db, "~> 2026.3", runtime: false},
       {:dotenvy, "~> 1.1"},
