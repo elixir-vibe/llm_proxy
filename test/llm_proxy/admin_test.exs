@@ -64,6 +64,9 @@ defmodule LLMProxy.AdminTest do
              "service_usage"
            ]
 
+    assert dashboard.grid == %{columns: 10}
+    assert Enum.map(dashboard.widgets, & &1.opts[:span]) == [2, 2, 2, 2, 2, 7, 3]
+
     recent_usage = Enum.find(dashboard.widgets, &(&1.id == "recent_usage"))
 
     assert Enum.map(recent_usage.opts.columns, & &1.name) == [
