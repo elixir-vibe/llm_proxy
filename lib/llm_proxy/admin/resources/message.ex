@@ -7,7 +7,7 @@ defmodule LLMProxy.Admin.Resources.Message do
 
   table density: :compact do
     column(:timestamp, link: true, format: :datetime)
-    column(:key_id)
+    column(:key_id, format: :id)
     column(:model)
     column(:route)
     column(:user_message, label: "Message", sensitive: true)

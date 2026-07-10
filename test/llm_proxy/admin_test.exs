@@ -39,6 +39,11 @@ defmodule LLMProxy.AdminTest do
     assert Enum.map(api_key.table.page_actions, & &1.id) == ["create"]
 
     provider_token = Enum.find(contract.resources, &(&1.id == "provider_token"))
+    trace = Enum.find(contract.resources, &(&1.id == "trace"))
+    message = Enum.find(contract.resources, &(&1.id == "message"))
+
+    assert Enum.find(trace.table.columns, &(&1.id == "key_id")).opts[:format] == :id
+    assert Enum.find(message.table.columns, &(&1.id == "key_id")).opts[:format] == :id
 
     assert Enum.map(provider_token.table.page_actions, & &1.id) == [
              "codex_oauth_start",

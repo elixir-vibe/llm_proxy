@@ -7,7 +7,7 @@ defmodule LLMProxy.Admin.Resources.Trace do
 
   table density: :compact do
     column(:timestamp, link: true, format: :datetime)
-    column(:key_id)
+    column(:key_id, format: :id)
     column(:model)
     column(:provider)
     column(:input_tokens, label: "Input", format: :number)
