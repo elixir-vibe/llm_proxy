@@ -11,6 +11,26 @@ defmodule LLMProxy.AdminTest do
   alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.TestSupport
 
+  defmodule QueryCaptureRepo do
+    def aggregate(%Ecto.Query{}, :count), do: 1
+
+    def all(%Ecto.Query{} = query) do
+      send(self(), {:captured_query, query})
+
+      [
+        %{
+          id: "key-1",
+          name: "test",
+          total_spend_usd: 0.0,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          trace_requests: false
+        }
+      ]
+    end
+  end
+
   defmodule AdminServer do
     use SafeRPC.Adapter.Server, service: LLMProxy.Admin
   end
@@ -141,6 +161,26 @@ defmodule LLMProxy.AdminTest do
            ]
 
     assert Enum.all?(dashboard.widgets, fn widget -> not Map.has_key?(widget.opts, :query) end)
+  end
+
+  test "declarative resource projections compile for the production QuackDB adapter" do
+    resource = %{Incant.metadata(LLMProxy.Admin.Resources.ApiKey) | repo: QueryCaptureRepo}
+
+    page =
+      Incant.Live.Rows.page(resource, %{
+        page: 1,
+        page_size: 25,
+        sort: "",
+        search: "",
+        filters: %{}
+      })
+
+    assert page.total == 1
+    assert_receive {:captured_query, query}
+
+    sql = query |> Ecto.Adapters.QuackDB.Query.all() |> IO.iodata_to_binary()
+    assert sql =~ ~s(SELECT q0."id", q0."name")
+    refute sql =~ "q0.value"
   end
 
   test "declares mutually exclusive provider token actions" do
