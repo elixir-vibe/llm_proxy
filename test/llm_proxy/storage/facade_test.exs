@@ -29,6 +29,7 @@ defmodule LLMProxy.Storage.FacadeTest do
     def update_token_oauth(id, attrs), do: {:ok, {id, attrs}}
     def seed_tokens_from_env(_entries), do: :ok
     def log_message(attrs), do: {:ok, attrs}
+    def update_message_usage(id, usage), do: {:ok, {id, usage}}
     def get_messages(opts), do: [opts]
     def get_stats(opts), do: %{opts: opts}
     def record_trace(attrs), do: {:ok, attrs}
@@ -59,6 +60,10 @@ defmodule LLMProxy.Storage.FacadeTest do
              LLMProxy.Storage.create_key("user", %{trace_requests: true})
 
     assert LLMProxy.Storage.find_trace_by_request_id("req-1") == %{request_id: "req-1"}
+
+    assert LLMProxy.Storage.update_message_usage(1, %{input_tokens: 10}) ==
+             {:ok, {1, %{input_tokens: 10}}}
+
     assert LLMProxy.Storage.get_stats(%{from: "now"}) == %{opts: %{from: "now"}}
   end
 end

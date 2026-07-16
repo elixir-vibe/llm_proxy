@@ -40,6 +40,13 @@ defmodule LLMProxy.Accounting.UsageTracking do
       timestamp: DateTime.utc_now()
     })
 
+    if opts[:message_log_id] do
+      Storage.update_message_usage(opts.message_log_id, %{
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens
+      })
+    end
+
     duration = if opts[:duration_ms], do: " #{opts[:duration_ms]}ms", else: ""
 
     Logger.info(

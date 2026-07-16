@@ -11,7 +11,9 @@ defmodule LLMProxy.Admin.Resources.Message do
     column(:key_id, format: :id, priority: :tertiary)
     column(:model, priority: :primary)
     column(:route, priority: :secondary)
-    column(:user_message, label: "Message", sensitive: true, priority: :secondary)
+    column(:input_tokens, label: "Input tokens", format: :number, priority: :secondary)
+    column(:output_tokens, label: "Output tokens", format: :number, priority: :secondary)
+    column(:user_message, label: "Message", priority: :secondary)
 
     filter(:model, :combobox, options: :distinct)
     filter(:route, :select, options: :distinct)

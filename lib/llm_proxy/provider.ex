@@ -51,9 +51,13 @@ defmodule LLMProxy.Provider do
         "Provider request from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
 
-      UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
-        Request.user_text(request)
-      end)
+      opts =
+        put_message_log_id(
+          opts,
+          UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
+            Request.user_text(request)
+          end)
+        )
 
       call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
     else
@@ -82,9 +86,13 @@ defmodule LLMProxy.Provider do
         "Provider stream from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
 
-      UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
-        Request.user_text(request)
-      end)
+      opts =
+        put_message_log_id(
+          opts,
+          UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
+            Request.user_text(request)
+          end)
+        )
 
       stream_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
     else
@@ -254,6 +262,9 @@ defmodule LLMProxy.Provider do
   defp check_model_access(%{id: "master"}, _model), do: :ok
   defp check_model_access(api_key, model), do: LLMProxy.Storage.check_model_access(api_key, model)
 
+  defp put_message_log_id(opts, {:ok, %{id: id}}), do: Keyword.put(opts, :message_log_id, id)
+  defp put_message_log_id(opts, _result), do: opts
+
   defp call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
     start = System.monotonic_time(:millisecond)
 
@@ -317,9 +328,13 @@ defmodule LLMProxy.Provider do
         "Provider native #{function} from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
 
-      UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
-        Request.user_text(request)
-      end)
+      opts =
+        put_message_log_id(
+          opts,
+          UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
+            Request.user_text(request)
+          end)
+        )
 
       call_native_provider(provider, upstream_model, attempts, request, api_key, function, opts)
     else
@@ -435,6 +450,7 @@ defmodule LLMProxy.Provider do
       duration_ms: duration_ms,
       ttft_ms: ttft_ms,
       provider: context.provider.name(),
+      message_log_id: opts[:message_log_id],
       tags: Map.get(usage_metadata, :tags, request.tags),
       metadata: tracking_metadata(request, usage_metadata, context.trace_id)
     }
@@ -494,6 +510,7 @@ defmodule LLMProxy.Provider do
     tracking_opts = %{
       duration_ms: duration_ms,
       provider: response.provider.name(),
+      message_log_id: opts[:message_log_id],
       tags: Map.get(usage_metadata, :tags, request.tags),
       metadata: tracking_metadata(request, usage_metadata, response.trace_id)
     }

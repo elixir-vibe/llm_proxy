@@ -461,6 +461,13 @@ defmodule LLMProxy.Storage.Ecto do
     |> Repo.insert()
   end
 
+  def update_message_usage(id, usage) do
+    case Repo.get(MessageLog, id) do
+      nil -> {:error, :not_found}
+      message -> message |> MessageLog.changeset(usage) |> Repo.update()
+    end
+  end
+
   def get_messages(opts \\ %{}) do
     per_page = Map.get(opts, :per_page, Map.get(opts, :limit, 25))
 
@@ -474,6 +481,8 @@ defmodule LLMProxy.Storage.Ecto do
         model: m.model,
         route: m.route,
         user_message: m.user_message,
+        input_tokens: m.input_tokens,
+        output_tokens: m.output_tokens,
         timestamp: m.timestamp
       }
     )

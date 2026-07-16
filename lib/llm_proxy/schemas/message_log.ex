@@ -10,12 +10,22 @@ defmodule LLMProxy.Schemas.MessageLog do
     field(:model, :string)
     field(:route, :string)
     field(:user_message, :string)
+    field(:input_tokens, :integer)
+    field(:output_tokens, :integer)
     field(:timestamp, :utc_datetime)
   end
 
   def changeset(log, attrs) do
     log
-    |> cast(attrs, [:key_id, :model, :route, :user_message, :timestamp])
+    |> cast(attrs, [
+      :key_id,
+      :model,
+      :route,
+      :user_message,
+      :input_tokens,
+      :output_tokens,
+      :timestamp
+    ])
     |> validate_required([:key_id, :model, :route, :user_message, :timestamp])
   end
 end

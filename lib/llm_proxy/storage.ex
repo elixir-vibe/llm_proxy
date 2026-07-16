@@ -43,6 +43,7 @@ defmodule LLMProxy.Storage do
   def seed_tokens_from_env(entries), do: adapter().seed_tokens_from_env(entries)
 
   def log_message(attrs), do: adapter().log_message(attrs)
+  def update_message_usage(id, usage), do: adapter().update_message_usage(id, usage)
   def get_messages(opts \\ %{}), do: adapter().get_messages(opts)
   def get_stats(opts \\ %{}), do: adapter().get_stats(opts)
 

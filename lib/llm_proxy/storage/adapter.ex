@@ -29,6 +29,7 @@ defmodule LLMProxy.Storage.Adapter do
   @callback update_token_oauth(term(), map()) :: {:ok, term()} | {:error, term()}
   @callback seed_tokens_from_env([map()]) :: :ok
   @callback log_message(map()) :: {:ok, term()} | {:error, term()}
+  @callback update_message_usage(term(), map()) :: {:ok, term()} | {:error, term()}
   @callback get_messages(map()) :: [term()]
   @callback get_stats(map()) :: map()
   @callback record_trace(map()) :: {:ok, term()} | {:error, term()}

@@ -69,6 +69,9 @@ defmodule LLMProxy.ProviderTest do
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 4
     assert updated_key.output_tokens == 3
+
+    assert [%{user_message: "hello", input_tokens: 4, output_tokens: 3}] =
+             Storage.get_messages()
   end
 
   test "Provider.stream returns guarded streams and records usage after consumption" do

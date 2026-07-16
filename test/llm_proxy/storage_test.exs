@@ -322,13 +322,17 @@ defmodule LLMProxy.StorageTest do
     test "filters messages, traces, and daily stats" do
       {:ok, key, _} = Storage.create_key("observed")
 
-      Storage.log_message(%{
-        key_id: key.id,
-        model: "gpt-4o",
-        route: "chat",
-        user_message: "hello world",
-        timestamp: DateTime.utc_now()
-      })
+      assert {:ok, message} =
+               Storage.log_message(%{
+                 key_id: key.id,
+                 model: "gpt-4o",
+                 route: "chat",
+                 user_message: "hello world",
+                 timestamp: DateTime.utc_now()
+               })
+
+      assert {:ok, _message} =
+               Storage.update_message_usage(message.id, %{input_tokens: 11, output_tokens: 7})
 
       Storage.record_usage(%{
         key_id: key.id,
@@ -354,7 +358,7 @@ defmodule LLMProxy.StorageTest do
         timestamp: DateTime.utc_now()
       })
 
-      assert [%{user_message: "hello world"}] =
+      assert [%{user_message: "hello world", input_tokens: 11, output_tokens: 7}] =
                Storage.get_messages(%{search: "hello", per_page: 10})
 
       assert [%{session_id: "session-1"} = trace] =

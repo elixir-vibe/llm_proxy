@@ -47,6 +47,18 @@ defmodule LLMProxy.AdminTest do
     assert Enum.find(trace.table.columns, &(&1.id == "key_id")).opts[:format] == :id
     assert Enum.find(message.table.columns, &(&1.id == "key_id")).opts[:format] == :id
 
+    assert Enum.map(message.table.columns, & &1.id) == [
+             "timestamp",
+             "key_id",
+             "model",
+             "route",
+             "input_tokens",
+             "output_tokens",
+             "user_message"
+           ]
+
+    refute Enum.find(message.table.columns, &(&1.id == "user_message")).opts[:sensitive]
+
     assert Enum.map(provider_token.table.page_actions, & &1.id) == [
              "codex_oauth_start",
              "codex_oauth_complete"
