@@ -73,7 +73,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   end
 
   defp request_moderation(conn, %CreateRequest{} = attrs, token, trace_id) do
-    LLMProxy.Drain.track(:request, request_meta(conn, trace_id, :moderations), fn ->
+    LLMProxy.Drain.track(:request, HTTP.request_meta(conn, trace_id, :moderations), fn ->
       req =
         HTTP.new(
           url: "https://api.openai.com/v1/moderations",
@@ -111,10 +111,6 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   end
 
   defp handle_drain_race(result, _conn), do: result
-
-  defp request_meta(conn, trace_id, route) do
-    %{method: conn.method, path: conn.request_path, request_id: trace_id, route: route}
-  end
 
   match _ do
     HTTP.send_json(conn, 404, %{error: "Not found"})

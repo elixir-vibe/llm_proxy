@@ -5,6 +5,10 @@ defmodule LLMProxy.HTTP do
 
   import Plug.Conn
 
+  def request_meta(conn, request_id, route) do
+    %{method: conn.method, path: conn.request_path, request_id: request_id, route: route}
+  end
+
   def send_json(conn, status, body) do
     conn
     |> put_resp_content_type("application/json")

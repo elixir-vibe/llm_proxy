@@ -105,7 +105,7 @@ defmodule LLMProxy.MixProject do
         "credo --strict",
         "dialyzer",
         "ex_dna --max-clones 0",
-        "reach.check --arch --smells"
+        "reach.check --arch --smells --strict"
       ]
     ]
   end

@@ -50,7 +50,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   defp handle_non_stream(conn, api_key, %Request{} = request, meta) do
     {conn, request_id} = Trace.ensure_conn(conn)
 
-    LLMProxy.Drain.track(:request, request_meta(conn, request_id, :chat), fn ->
+    LLMProxy.Drain.track(:request, HTTP.request_meta(conn, request_id, :chat), fn ->
       case Provider.call(request, Actor.from_api_key(api_key),
              route: :chat,
              trace_id: request_id,
@@ -69,7 +69,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   defp handle_stream(conn, api_key, %Request{} = request, meta) do
     {conn, request_id} = Trace.ensure_conn(conn)
 
-    LLMProxy.Drain.track(:stream, request_meta(conn, request_id, :chat), fn ->
+    LLMProxy.Drain.track(:stream, HTTP.request_meta(conn, request_id, :chat), fn ->
       case Provider.stream(request, Actor.from_api_key(api_key),
              route: :chat,
              trace_id: request_id,
@@ -154,10 +154,6 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     |> HTTP.send_json(503, %{
       error: %{code: "draining", message: "LLMProxy is draining and not accepting new requests"}
     })
-  end
-
-  defp request_meta(conn, request_id, route) do
-    %{method: conn.method, path: conn.request_path, request_id: request_id, route: route}
   end
 
   defp provider_error_body(%Result{error: error, provider_body: nil}), do: error

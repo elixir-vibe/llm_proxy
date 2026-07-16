@@ -59,7 +59,7 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   defp responses_stream?(%Request{} = request), do: normalize_stream(request).stream
 
   defp dispatch_provider(conn, %Request{stream: true} = request, api_key, trace_id) do
-    LLMProxy.Drain.track(:stream, request_meta(conn, trace_id, :responses), fn ->
+    LLMProxy.Drain.track(:stream, HTTP.request_meta(conn, trace_id, :responses), fn ->
       case Provider.stream_native(request, Actor.from_api_key(api_key),
              route: :responses,
              trace_id: trace_id,
@@ -76,7 +76,7 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   end
 
   defp dispatch_provider(conn, %Request{} = request, api_key, trace_id) do
-    LLMProxy.Drain.track(:request, request_meta(conn, trace_id, :responses), fn ->
+    LLMProxy.Drain.track(:request, HTTP.request_meta(conn, trace_id, :responses), fn ->
       case Provider.call_native(request, Actor.from_api_key(api_key),
              route: :responses,
              trace_id: trace_id,
@@ -186,10 +186,6 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   end
 
   defp handle_drain_race(result, _conn), do: result
-
-  defp request_meta(conn, trace_id, route) do
-    %{method: conn.method, path: conn.request_path, request_id: trace_id, route: route}
-  end
 
   defp send_error(conn, status, type, message) do
     HTTP.send_json(conn, status, %{error: %{type: type, message: message}})

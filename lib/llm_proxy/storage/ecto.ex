@@ -808,14 +808,14 @@ defmodule LLMProxy.Storage.Ecto do
 
   defp daily_entry({date, rows}) do
     request_count = length(rows)
-    duration_sum = rows |> Enum.map(&(&1.duration_ms || 0)) |> Enum.sum()
+    duration_sum = Enum.sum_by(rows, &(&1.duration_ms || 0))
 
     %{
       date: date,
       requests: request_count,
-      input_tokens: Enum.sum(Enum.map(rows, &(&1.input_tokens || 0))),
-      output_tokens: Enum.sum(Enum.map(rows, &(&1.output_tokens || 0))),
-      cost_usd: Enum.sum(Enum.map(rows, &(&1.cost_usd || 0.0))),
+      input_tokens: Enum.sum_by(rows, &(&1.input_tokens || 0)),
+      output_tokens: Enum.sum_by(rows, &(&1.output_tokens || 0)),
+      cost_usd: Enum.sum_by(rows, &(&1.cost_usd || 0.0)),
       avg_duration_ms: if(request_count > 0, do: duration_sum / request_count, else: nil)
     }
   end
