@@ -30,7 +30,7 @@ defmodule LLMProxy.Storage.Adapter do
   @callback seed_tokens_from_env([map()]) :: :ok
   @callback log_message(map()) :: {:ok, term()} | {:error, term()}
   @callback get_messages(map()) :: [term()]
-  @callback get_stats() :: map()
+  @callback get_stats(map()) :: map()
   @callback record_trace(map()) :: {:ok, term()} | {:error, term()}
   @callback get_traces(map()) :: [term()]
   @callback get_trace(term()) :: term() | nil

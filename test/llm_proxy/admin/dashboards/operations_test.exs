@@ -23,11 +23,13 @@ defmodule LLMProxy.Admin.Dashboards.OperationsTest do
                timestamp: DateTime.utc_now() |> DateTime.truncate(:second)
              })
 
-    assert Operations.total_keys(%{}, %{}) == 1
-    assert Operations.total_requests(%{}, %{}) == 1
-    assert Operations.total_spend(%{}, %{}) == 0.67
-    assert Operations.input_tokens(%{}, %{}) == 123
-    assert Operations.output_tokens(%{}, %{}) == 45
+    variables = %{"range" => "24h"}
+
+    assert Operations.total_keys(variables, %{}) == 1
+    assert Operations.total_requests(variables, %{}) == 1
+    assert Operations.total_spend(variables, %{}) == 0.67
+    assert Operations.input_tokens(variables, %{}) == 123
+    assert Operations.output_tokens(variables, %{}) == 45
 
     assert %{
              columns: [
@@ -42,8 +44,36 @@ defmodule LLMProxy.Admin.Dashboards.OperationsTest do
                :key_id
              ],
              rows: [%{model: "dashboard-model"}]
-           } = Operations.recent_usage(%{}, %{})
+           } = Operations.recent_usage(variables, %{})
 
-    assert %{columns: [:service, :count], rows: []} = Operations.service_usage(%{}, %{})
+    assert %{columns: [:service, :count], rows: []} = Operations.service_usage(variables, %{})
+  end
+
+  test "applies preset and custom dashboard ranges" do
+    {:ok, key, _raw_key} = Storage.create_key("range-user")
+    now = DateTime.utc_now() |> DateTime.truncate(:second)
+
+    for timestamp <- [DateTime.add(now, -2, :hour), DateTime.add(now, -20, :minute)] do
+      assert {:ok, _usage} =
+               Storage.record_usage(%{
+                 key_id: key.id,
+                 model: "range-model",
+                 input_tokens: 10,
+                 output_tokens: 5,
+                 cost_usd: 0.1,
+                 provider: "openai",
+                 timestamp: timestamp
+               })
+    end
+
+    assert Operations.total_requests(%{"range" => "1h"}, %{}) == 1
+    assert Operations.total_requests(%{"range" => "24h"}, %{}) == 2
+
+    today = Date.to_iso8601(Date.utc_today())
+
+    assert Operations.total_requests(
+             %{"range" => %{"from" => today, "to" => today}},
+             %{}
+           ) == 2
   end
 end

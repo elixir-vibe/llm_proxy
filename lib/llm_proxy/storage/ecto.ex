@@ -523,7 +523,7 @@ defmodule LLMProxy.Storage.Ecto do
 
   # --- Stats ---
 
-  def get_stats do
+  def get_stats(opts \\ %{}) do
     key_stats =
       from(k in ApiKey,
         select: %{
@@ -537,50 +537,81 @@ defmodule LLMProxy.Storage.Ecto do
       )
       |> Repo.one()
 
-    request_count = from(u in UsageLog, select: count(u.id)) |> Repo.one()
+    usage_query = stats_window(from(u in UsageLog), opts)
+
+    usage_stats =
+      usage_query
+      |> select([u], %{
+        count: count(u.id),
+        input: coalesce(sum(u.input_tokens), 0),
+        output: coalesce(sum(u.output_tokens), 0),
+        cache_read: coalesce(sum(u.cache_read_tokens), 0),
+        cache_write: coalesce(sum(u.cache_write_tokens), 0),
+        spend: coalesce(sum(u.cost_usd), 0.0)
+      })
+      |> Repo.one()
+
+    totals = if stats_window?(opts), do: usage_stats, else: key_stats
 
     recent =
-      from(u in UsageLog,
-        order_by: [desc: u.timestamp],
-        limit: 50,
-        select: %{
-          id: u.id,
-          key_id: u.key_id,
-          model: u.model,
-          input_tokens: u.input_tokens,
-          output_tokens: u.output_tokens,
-          cache_read_tokens: u.cache_read_tokens,
-          cache_write_tokens: u.cache_write_tokens,
-          cost_usd: u.cost_usd,
-          duration_ms: u.duration_ms,
-          ttft_ms: u.ttft_ms,
-          provider: u.provider,
-          tags: u.tags,
-          metadata: u.metadata,
-          timestamp: u.timestamp
-        }
-      )
+      usage_query
+      |> order_by([u], desc: u.timestamp)
+      |> limit(50)
+      |> select([u], %{
+        id: u.id,
+        key_id: u.key_id,
+        model: u.model,
+        input_tokens: u.input_tokens,
+        output_tokens: u.output_tokens,
+        cache_read_tokens: u.cache_read_tokens,
+        cache_write_tokens: u.cache_write_tokens,
+        cost_usd: u.cost_usd,
+        duration_ms: u.duration_ms,
+        ttft_ms: u.ttft_ms,
+        provider: u.provider,
+        tags: u.tags,
+        metadata: u.metadata,
+        timestamp: u.timestamp
+      })
       |> Repo.all()
 
     service_stats =
-      from(s in ServiceUsage,
-        group_by: s.service,
-        select: %{service: s.service, count: count(s.id)}
-      )
+      from(s in ServiceUsage)
+      |> stats_window(opts)
+      |> group_by([s], s.service)
+      |> select([s], %{service: s.service, count: count(s.id)})
       |> Repo.all()
 
     %{
       total_keys: key_stats.count,
-      total_requests: request_count,
-      total_input_tokens: key_stats.input,
-      total_output_tokens: key_stats.output,
-      total_cache_read_tokens: key_stats.cache_read,
-      total_cache_write_tokens: key_stats.cache_write,
-      total_spend_usd: key_stats.spend,
+      total_requests: usage_stats.count,
+      total_input_tokens: totals.input,
+      total_output_tokens: totals.output,
+      total_cache_read_tokens: totals.cache_read,
+      total_cache_write_tokens: totals.cache_write,
+      total_spend_usd: totals.spend,
       recent_usage: recent,
       service_stats: service_stats
     }
   end
+
+  defp stats_window(query, opts) do
+    query
+    |> maybe_stats_from(Map.get(opts, :from))
+    |> maybe_stats_to(Map.get(opts, :to))
+  end
+
+  defp maybe_stats_from(query, %DateTime{} = from),
+    do: where(query, [row], row.timestamp >= ^from)
+
+  defp maybe_stats_from(query, _from), do: query
+
+  defp maybe_stats_to(query, %DateTime{} = to),
+    do: where(query, [row], row.timestamp < ^to)
+
+  defp maybe_stats_to(query, _to), do: query
+
+  defp stats_window?(opts), do: match?(%DateTime{}, opts[:from]) or match?(%DateTime{}, opts[:to])
 
   # --- Traces ---
 
