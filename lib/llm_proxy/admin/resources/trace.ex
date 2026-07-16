@@ -1,13 +1,12 @@
 defmodule LLMProxy.Admin.Resources.Trace do
   @moduledoc "Admin resource for recorded LLM traces."
 
-  alias LLMProxy.Admin.Query
-
   use Incant.Resource,
     schema: LLMProxy.Schemas.Trace,
+    repo: LLMProxy.Storage.Repo,
     title: "Traces"
 
-  table density: :compact do
+  table density: :compact, default_sort: [timestamp: :desc] do
     column(:timestamp, link: true, format: :datetime, priority: :primary)
     column(:key_id, format: :id, priority: :tertiary)
     column(:model, priority: :primary)
@@ -18,19 +17,21 @@ defmodule LLMProxy.Admin.Resources.Trace do
     column(:duration_ms, label: "Latency", format: :duration_ms, priority: :tertiary)
     column(:ttft_ms, label: "TTFT", format: :duration_ms, priority: :tertiary)
 
-    filter(:model, :combobox, options_from: :model)
-    filter(:provider, :select, options: ["anthropic", "openai", "openai-codex", "openrouter"])
+    filter(:model, :combobox, options: :distinct)
+
+    filter(:provider, :select,
+      options: %{
+        "anthropic" => "Anthropic",
+        "openai" => "OpenAI",
+        "openai-codex" => "OpenAI Codex",
+        "openrouter" => "OpenRouter"
+      }
+    )
+
     filter(:timestamp, :date_range)
 
     row_detail(:payload, label: "Request/response")
 
     search([:model, :provider])
-  end
-
-  def index(params, _context) do
-    params
-    |> Query.options()
-    |> LLMProxy.Storage.page_traces()
-    |> Query.result()
   end
 end

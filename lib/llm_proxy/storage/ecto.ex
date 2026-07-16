@@ -464,61 +464,29 @@ defmodule LLMProxy.Storage.Ecto do
   def get_messages(opts \\ %{}) do
     per_page = Map.get(opts, :per_page, Map.get(opts, :limit, 25))
 
-    opts
-    |> message_query()
-    |> Incant.Ecto.sort(table_sort(opts), message_sort_fields(), default: {:timestamp, :desc})
-    |> messages_select()
+    from(m in MessageLog,
+      join: k in ApiKey,
+      on: k.id == m.key_id,
+      select: %{
+        id: m.id,
+        key_id: m.key_id,
+        key_name: k.name,
+        model: m.model,
+        route: m.route,
+        user_message: m.user_message,
+        timestamp: m.timestamp
+      }
+    )
+    |> messages_filter_key(opts[:key_id])
+    |> messages_search(opts[:search])
+    |> messages_sort(opts[:sort], opts[:dir])
     |> limit(^(per_page + 1))
     |> messages_offset(opts[:offset])
     |> Repo.all()
   end
 
-  def page_messages(opts \\ %{}) do
-    resource_page(
-      opts,
-      message_query(opts),
-      message_sort_fields(),
-      &messages_select/1,
-      %{"model" => message_models(), "route" => message_routes()}
-    )
-  end
-
-  defp message_query(opts) do
-    from(m in MessageLog,
-      join: k in ApiKey,
-      on: k.id == m.key_id
-    )
-    |> messages_filter_key(opts[:key_id])
-    |> messages_filter_model(filter_value(opts, "model"))
-    |> messages_filter_route(filter_value(opts, "route"))
-    |> messages_filter_timestamp(filter_value(opts, "timestamp"))
-    |> messages_search(opts[:search])
-  end
-
-  defp messages_select(query) do
-    select(query, [m, k], %{
-      id: m.id,
-      key_id: m.key_id,
-      key_name: k.name,
-      model: m.model,
-      route: m.route,
-      user_message: m.user_message,
-      timestamp: m.timestamp
-    })
-  end
-
   defp messages_filter_key(query, nil), do: query
   defp messages_filter_key(query, key_id), do: where(query, [m], m.key_id == ^key_id)
-
-  defp messages_filter_model(query, nil), do: query
-  defp messages_filter_model(query, ""), do: query
-  defp messages_filter_model(query, model), do: where(query, [m], m.model == ^model)
-
-  defp messages_filter_route(query, nil), do: query
-  defp messages_filter_route(query, ""), do: query
-  defp messages_filter_route(query, route), do: where(query, [m], m.route == ^route)
-
-  defp messages_filter_timestamp(query, range), do: timestamp_range(query, range)
 
   defp messages_search(query, nil), do: query
   defp messages_search(query, ""), do: query
@@ -530,19 +498,28 @@ defmodule LLMProxy.Storage.Ecto do
       query,
       [m, k],
       fragment("lower(?) LIKE lower(?)", m.model, ^pattern) or
-        fragment("lower(?) LIKE lower(?)", m.route, ^pattern) or
         fragment("lower(?) LIKE lower(?)", k.name, ^pattern) or
         fragment("lower(?) LIKE lower(?)", m.user_message, ^pattern)
     )
   end
 
-  defp message_sort_fields, do: [:key_id, :model, :route, :user_message, :timestamp]
+  defp messages_sort(query, "model", dir),
+    do: order_by(query, [m], [{^sort_dir(dir), m.model}])
+
+  defp messages_sort(query, "key_name", dir),
+    do: order_by(query, [m, k], [{^sort_dir(dir), k.name}])
+
+  defp messages_sort(query, "route", dir),
+    do: order_by(query, [m], [{^sort_dir(dir), m.route}])
+
+  defp messages_sort(query, "timestamp", dir),
+    do: order_by(query, [m], [{^sort_dir(dir), m.timestamp}])
+
+  defp messages_sort(query, _, _),
+    do: order_by(query, [m], desc: m.timestamp)
 
   defp messages_offset(query, nil), do: query
   defp messages_offset(query, offset), do: offset(query, ^offset)
-
-  defp message_models, do: distinct_values(MessageLog, :model)
-  defp message_routes, do: distinct_values(MessageLog, :route)
 
   # --- Stats ---
 
@@ -616,53 +593,32 @@ defmodule LLMProxy.Storage.Ecto do
   def get_traces(opts \\ %{}) do
     per_page = Map.get(opts, :per_page, 25)
 
-    opts
-    |> trace_query()
-    |> Incant.Ecto.sort(table_sort(opts), trace_sort_fields(), default: {:timestamp, :desc})
-    |> traces_select()
-    |> limit(^(per_page + 1))
-    |> traces_offset(opts[:offset])
-    |> Repo.all()
-  end
-
-  def page_traces(opts \\ %{}) do
-    resource_page(
-      opts,
-      trace_query(opts),
-      trace_sort_fields(),
-      &traces_select/1,
-      %{"model" => trace_models()}
-    )
-  end
-
-  defp trace_query(opts) do
     from(t in Trace,
       join: k in ApiKey,
-      on: k.id == t.key_id
+      on: k.id == t.key_id,
+      select: %{
+        id: t.id,
+        key_id: t.key_id,
+        key_name: k.name,
+        model: t.model,
+        provider: t.provider,
+        input_tokens: t.input_tokens,
+        output_tokens: t.output_tokens,
+        cost_usd: t.cost_usd,
+        duration_ms: t.duration_ms,
+        ttft_ms: t.ttft_ms,
+        session_id: t.session_id,
+        timestamp: t.timestamp
+      }
     )
     |> traces_filter_key(opts[:key_id])
     |> traces_filter_session(opts[:session_id])
-    |> traces_filter_model(opts[:model] || filter_value(opts, "model"))
-    |> traces_filter_provider(filter_value(opts, "provider"))
-    |> traces_filter_timestamp(filter_value(opts, "timestamp"))
+    |> traces_filter_model(opts[:model])
     |> traces_search(opts[:search])
-  end
-
-  defp traces_select(query) do
-    select(query, [t, k], %{
-      id: t.id,
-      key_id: t.key_id,
-      key_name: k.name,
-      model: t.model,
-      provider: t.provider,
-      input_tokens: t.input_tokens,
-      output_tokens: t.output_tokens,
-      cost_usd: t.cost_usd,
-      duration_ms: t.duration_ms,
-      ttft_ms: t.ttft_ms,
-      session_id: t.session_id,
-      timestamp: t.timestamp
-    })
+    |> order_by([t], desc: t.timestamp)
+    |> limit(^(per_page + 1))
+    |> traces_offset(opts[:offset])
+    |> Repo.all()
   end
 
   def get_trace(id) do
@@ -760,14 +716,7 @@ defmodule LLMProxy.Storage.Ecto do
   defp traces_filter_session(query, sid), do: where(query, [t], t.session_id == ^sid)
 
   defp traces_filter_model(query, nil), do: query
-  defp traces_filter_model(query, ""), do: query
   defp traces_filter_model(query, model), do: where(query, [t], t.model == ^model)
-
-  defp traces_filter_provider(query, nil), do: query
-  defp traces_filter_provider(query, ""), do: query
-  defp traces_filter_provider(query, provider), do: where(query, [t], t.provider == ^provider)
-
-  defp traces_filter_timestamp(query, range), do: timestamp_range(query, range)
 
   defp traces_search(query, nil), do: query
   defp traces_search(query, ""), do: query
@@ -779,29 +728,12 @@ defmodule LLMProxy.Storage.Ecto do
       query,
       [t, k],
       fragment("lower(?) LIKE lower(?)", k.name, ^pattern) or
-        fragment("lower(?) LIKE lower(?)", t.model, ^pattern) or
-        fragment("lower(?) LIKE lower(?)", t.provider, ^pattern)
+        fragment("lower(?) LIKE lower(?)", t.model, ^pattern)
     )
-  end
-
-  defp trace_sort_fields do
-    [
-      :key_id,
-      :model,
-      :provider,
-      :input_tokens,
-      :output_tokens,
-      :cost_usd,
-      :duration_ms,
-      :ttft_ms,
-      :timestamp
-    ]
   end
 
   defp traces_offset(query, nil), do: query
   defp traces_offset(query, offset), do: offset(query, ^offset)
-
-  defp trace_models, do: distinct_values(Trace, :model)
 
   # --- Daily Stats ---
 
@@ -859,80 +791,6 @@ defmodule LLMProxy.Storage.Ecto do
   end
 
   # --- Helpers ---
-
-  defp filter_value(opts, name) do
-    filters = Map.get(opts, :filters, %{})
-
-    filters
-    |> Map.fetch(name)
-    |> filter_value_fallback(filters, name)
-  end
-
-  defp filter_value_fallback({:ok, value}, _filters, _name), do: value
-
-  defp filter_value_fallback(:error, filters, name) do
-    filters
-    |> Enum.find(&(to_string(elem(&1, 0)) == name))
-    |> pair_value()
-  end
-
-  defp pair_value(nil), do: nil
-  defp pair_value({_key, value}), do: value
-
-  defp timestamp_range(query, range) when is_map(range) do
-    from_date = range |> map_value("from") |> parse_date()
-    to_date = range |> map_value("to") |> parse_date()
-
-    query
-    |> timestamp_from(from_date)
-    |> timestamp_to(to_date)
-  end
-
-  defp timestamp_range(query, _range), do: query
-
-  defp timestamp_from(query, nil), do: query
-
-  defp timestamp_from(query, date) do
-    timestamp = DateTime.new!(date, ~T[00:00:00], "Etc/UTC")
-    where(query, [row], row.timestamp >= ^timestamp)
-  end
-
-  defp timestamp_to(query, nil), do: query
-
-  defp timestamp_to(query, date) do
-    timestamp = DateTime.new!(Date.add(date, 1), ~T[00:00:00], "Etc/UTC")
-    where(query, [row], row.timestamp < ^timestamp)
-  end
-
-  defp map_value(map, "from"), do: Map.get(map, "from", Map.get(map, :from))
-  defp map_value(map, "to"), do: Map.get(map, "to", Map.get(map, :to))
-
-  defp resource_page(opts, query, sort_fields, select, options) do
-    table_state = Map.get(opts, :table, %{})
-    {query, page} = Incant.Ecto.page(query, Repo, table_state)
-
-    rows =
-      query
-      |> Incant.Ecto.sort(table_state, sort_fields, default: {:timestamp, :desc})
-      |> select.()
-      |> Repo.all()
-
-    Map.merge(page, %{rows: rows, options: options})
-  end
-
-  defp distinct_values(schema, field_name) do
-    from(row in schema,
-      where: not is_nil(field(row, ^field_name)) and field(row, ^field_name) != "",
-      distinct: true,
-      order_by: [asc: field(row, ^field_name)],
-      select: field(row, ^field_name)
-    )
-    |> Repo.all()
-  end
-
-  defp table_sort(%{sort: sort, dir: "desc"}) when is_binary(sort), do: %{sort: "-#{sort}"}
-  defp table_sort(%{sort: sort}) when is_binary(sort), do: %{sort: sort}
-  defp table_sort(_opts), do: %{}
 
   defp window_start(window_ms), do: DateTime.add(DateTime.utc_now(), -window_ms, :millisecond)
 

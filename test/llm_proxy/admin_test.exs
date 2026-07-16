@@ -67,7 +67,13 @@ defmodule LLMProxy.AdminTest do
 
     provider_filter = Enum.find(provider_token.table.filters, &(&1.id == "provider"))
     assert provider_filter.type == :select
-    assert "openai-codex" in provider_filter.opts.options
+
+    assert provider_filter.opts.options == [
+             %{label: "Anthropic", value: "anthropic"},
+             %{label: "OpenAI", value: "openai"},
+             %{label: "OpenAI Codex", value: "openai-codex"},
+             %{label: "OpenRouter", value: "openrouter"}
+           ]
 
     model_filter = Enum.find(message.table.filters, &(&1.id == "model"))
     assert model_filter.type == :combobox
@@ -157,7 +163,7 @@ defmodule LLMProxy.AdminTest do
         key_id: key.id,
         model: "model-#{rem(index, 2)}",
         route: "chat",
-        user_message: "message #{index}"
+        user_message: if(index == 17, do: "unique needle", else: "message #{index}")
       })
     end
 
@@ -175,7 +181,51 @@ defmodule LLMProxy.AdminTest do
     assert page.total == 30
     assert page.total_pages == 3
     assert length(page.rows) == 10
-    assert page.meta.options["model"] != []
+
+    assert page.meta.options["model"] == [
+             %{label: "model-0", value: "model-0"},
+             %{label: "model-1", value: "model-1"}
+           ]
+
+    assert page.meta.options["route"] == [%{label: "chat", value: "chat"}]
+
+    assert {:ok, filtered} =
+             Runtime.index(LLMProxy.Admin, "message", %{
+               page: 1,
+               page_size: 10,
+               sort: "model",
+               search: "",
+               filters: %{"model" => "model-0"}
+             })
+
+    assert filtered.total == 15
+    assert Enum.all?(filtered.rows, &(Map.get(&1, :model) == "model-0"))
+
+    assert {:ok, searched} =
+             Runtime.index(LLMProxy.Admin, "message", %{
+               page: 1,
+               page_size: 10,
+               sort: "",
+               search: "needle",
+               filters: %{}
+             })
+
+    assert Map.get(searched, :error) == nil
+    assert searched.total == 1
+    assert [%{user_message: "unique needle"}] = searched.rows
+
+    today = Date.to_iso8601(Date.utc_today())
+
+    assert {:ok, dated} =
+             Runtime.index(LLMProxy.Admin, "message", %{
+               page: 1,
+               page_size: 10,
+               sort: "",
+               search: "",
+               filters: %{"timestamp" => %{"from" => today, "to" => today}}
+             })
+
+    assert dated.total == 30
   end
 
   test "transports only applicable provider token actions" do

@@ -3,15 +3,6 @@ defmodule LLMProxy.Storage.Adapter do
   Behaviour for persistence adapters that back LLMProxy storage operations.
   """
 
-  @type resource_page :: %{
-          required(:rows) => [term()],
-          required(:total) => non_neg_integer(),
-          required(:options) => map(),
-          optional(:page) => pos_integer(),
-          optional(:page_size) => pos_integer(),
-          optional(:total_pages) => pos_integer()
-        }
-
   @callback create_key(String.t(), map()) :: {:ok, term(), String.t()} | {:error, term()}
   @callback find_key(String.t()) :: term() | nil
   @callback list_keys(map()) :: [term()]
@@ -39,11 +30,9 @@ defmodule LLMProxy.Storage.Adapter do
   @callback seed_tokens_from_env([map()]) :: :ok
   @callback log_message(map()) :: {:ok, term()} | {:error, term()}
   @callback get_messages(map()) :: [term()]
-  @callback page_messages(map()) :: resource_page()
   @callback get_stats() :: map()
   @callback record_trace(map()) :: {:ok, term()} | {:error, term()}
   @callback get_traces(map()) :: [term()]
-  @callback page_traces(map()) :: resource_page()
   @callback get_trace(term()) :: term() | nil
   @callback record_trace_feedback(map()) :: {:ok, term()} | {:error, term()}
   @callback list_trace_feedback(term()) :: [term()]

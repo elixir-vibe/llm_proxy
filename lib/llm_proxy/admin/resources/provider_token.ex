@@ -3,9 +3,10 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
 
   use Incant.Resource,
     schema: LLMProxy.Schemas.ProviderToken,
+    repo: LLMProxy.Storage.Repo,
     title: "Provider Tokens"
 
-  table density: :compact do
+  table density: :compact, default_sort: [provider: :asc] do
     column(:provider, link: true, priority: :primary)
     column(:kind, priority: :secondary)
     column(:label, priority: :primary)
@@ -20,8 +21,16 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     column(:proxy, priority: :tertiary)
     column(:added_at, format: :datetime, priority: :tertiary)
 
-    filter(:provider, :select, options: ["anthropic", "openai", "openai-codex", "openrouter"])
-    filter(:kind, :select, options: ["api-key", "oauth"])
+    filter(:provider, :select,
+      options: %{
+        "anthropic" => "Anthropic",
+        "openai" => "OpenAI",
+        "openai-codex" => "OpenAI Codex",
+        "openrouter" => "OpenRouter"
+      }
+    )
+
+    filter(:kind, :select, options: %{"api-key" => "API key", "oauth" => "OAuth"})
     filter(:enabled, :boolean)
 
     action(:disable,
@@ -51,8 +60,6 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
 
     search([:provider, :label])
   end
-
-  def index(params, _context), do: LLMProxy.Storage.list_tokens(params)
 
   def disable(%{id: id}, _assigns), do: set_enabled(id, false)
   def enable(%{id: id}, _assigns), do: set_enabled(id, true)

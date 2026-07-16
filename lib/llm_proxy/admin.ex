@@ -10,6 +10,14 @@ defmodule LLMProxy.Admin do
     service: :llm_proxy,
     version: "1",
     title: "LLM Proxy",
+    naming: [
+      terms: %{
+        openai: "OpenAI",
+        openai_codex: "OpenAI Codex",
+        openrouter: "OpenRouter",
+        req_llm: "ReqLLM"
+      }
+    ],
     repo: LLMProxy.Storage.Repo,
     policy: LLMProxy.Admin.Policy,
     rpc: true

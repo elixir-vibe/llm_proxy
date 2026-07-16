@@ -30,11 +30,9 @@ defmodule LLMProxy.Storage.FacadeTest do
     def seed_tokens_from_env(_entries), do: :ok
     def log_message(attrs), do: {:ok, attrs}
     def get_messages(opts), do: [opts]
-    def page_messages(opts), do: %{rows: [opts], total: 1, options: %{}}
     def get_stats, do: %{ok: true}
     def record_trace(attrs), do: {:ok, attrs}
     def get_traces(opts), do: [opts]
-    def page_traces(opts), do: %{rows: [opts], total: 1, options: %{}}
     def get_trace(id), do: %{id: id}
     def record_trace_feedback(attrs), do: {:ok, attrs}
     def list_trace_feedback(id), do: [id]

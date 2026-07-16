@@ -5,9 +5,10 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
 
   use Incant.Resource,
     schema: LLMProxy.Schemas.ApiKey,
+    repo: LLMProxy.Storage.Repo,
     title: "API Keys"
 
-  table density: :compact do
+  table density: :compact, default_sort: [name: :asc] do
     column(:name, link: true, priority: :primary)
     column(:total_spend_usd, label: "Spend", format: :money, priority: :primary)
     column(:input_tokens, label: "Input tokens", format: :number, priority: :secondary)
@@ -37,8 +38,6 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
 
     search([:name])
   end
-
-  def index(params, _context), do: LLMProxy.Storage.list_keys(params)
 
   def create(_params, assigns) do
     with {:ok, command} <- CreateInput.from_assigns(assigns),
