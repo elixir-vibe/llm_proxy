@@ -2,6 +2,7 @@ defmodule LLMProxy.ReleaseTasksTest do
   use ExUnit.Case, async: false
 
   alias LLMProxy.ReleaseTasks
+  alias LLMProxy.RPC.AdminServer
 
   setup do
     previous = Application.get_env(:llm_proxy, :rpc_socket)
@@ -28,7 +29,7 @@ defmodule LLMProxy.ReleaseTasksTest do
 
     Application.put_env(:llm_proxy, :rpc_socket, socket)
 
-    {:ok, server} = LLMProxy.RPC.AdminServer.start_link(socket: socket)
+    {:ok, server} = AdminServer.start_link(socket: socket)
 
     assert :ok = ReleaseTasks.drain_start()
     assert %{draining: true} = LLMProxy.Drain.status()
@@ -48,7 +49,7 @@ defmodule LLMProxy.ReleaseTasksTest do
 
     Application.put_env(:llm_proxy, :rpc_socket, socket)
 
-    {:ok, server} = LLMProxy.RPC.AdminServer.start_link(socket: socket)
+    {:ok, server} = AdminServer.start_link(socket: socket)
     {:ok, ref} = LLMProxy.Drain.enter(:agent, %{})
 
     assert_raise RuntimeError, "LLMProxy drain timed out after 10ms", fn ->

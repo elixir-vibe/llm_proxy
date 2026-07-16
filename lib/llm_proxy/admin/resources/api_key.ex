@@ -8,12 +8,12 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
     title: "API Keys"
 
   table density: :compact do
-    column(:name, link: true)
-    column(:total_spend_usd, label: "Spend", format: :money)
-    column(:input_tokens, label: "Input tokens", format: :number)
-    column(:output_tokens, label: "Output tokens", format: :number)
-    column(:cache_read_tokens, label: "Cache read", format: :number)
-    column(:trace_requests, label: "Trace", as: :boolean)
+    column(:name, link: true, priority: :primary)
+    column(:total_spend_usd, label: "Spend", format: :money, priority: :primary)
+    column(:input_tokens, label: "Input tokens", format: :number, priority: :secondary)
+    column(:output_tokens, label: "Output tokens", format: :number, priority: :secondary)
+    column(:cache_read_tokens, label: "Cache read", format: :number, priority: :tertiary)
+    column(:trace_requests, label: "Trace", as: :boolean, priority: :secondary)
 
     filter(:name, :text)
     filter(:trace_requests, :boolean)

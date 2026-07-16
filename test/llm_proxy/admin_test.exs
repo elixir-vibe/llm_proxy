@@ -1,7 +1,11 @@
 defmodule LLMProxy.AdminTest do
   use ExUnit.Case, async: false
 
+  alias Ecto.Adapters.SQL.Sandbox
   alias Incant.ActionResult
+  alias Incant.Service.{Registry, Session}
+  alias LLMProxy.Admin.CodexOAuth
+  alias LLMProxy.Providers.OpenAICodex.OAuth
   alias LLMProxy.Storage
   alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.TestSupport
@@ -33,6 +37,15 @@ defmodule LLMProxy.AdminTest do
              "output_tokens",
              "cache_read_tokens",
              "trace_requests"
+           ]
+
+    assert Enum.map(api_key.table.columns, & &1.opts[:priority]) == [
+             :primary,
+             :primary,
+             :secondary,
+             :secondary,
+             :tertiary,
+             :secondary
            ]
 
     assert Enum.map(api_key.table.actions, & &1.id) == ["delete"]
@@ -93,13 +106,27 @@ defmodule LLMProxy.AdminTest do
              "Key"
            ]
 
+    assert recent_usage.opts[:preview_rows] == 10
+
+    assert Enum.map(recent_usage.opts.columns, & &1.opts[:priority]) == [
+             :primary,
+             :secondary,
+             :primary,
+             :secondary,
+             :tertiary,
+             :secondary,
+             :tertiary,
+             :tertiary,
+             :tertiary
+           ]
+
     assert Enum.all?(dashboard.widgets, fn widget -> not Map.has_key?(widget.opts, :query) end)
   end
 
   test "executes Operations dashboard widgets through Incant service session" do
     socket = socket_path("dashboard-widgets")
     {:ok, server} = AdminServer.start_link(socket: socket)
-    Ecto.Adapters.SQL.Sandbox.allow(SQLite, self(), server)
+    Sandbox.allow(SQLite, self(), server)
 
     {:ok, key, _raw_key} = Storage.create_key("dashboard-widget-user")
     Storage.update_key_usage(key, %{input: 123, output: 45, cost_usd: 0.67})
@@ -117,16 +144,15 @@ defmodule LLMProxy.AdminTest do
 
     bindings = %{llm_proxy: %{socket: socket, modules: [LLMProxy.Admin]}}
 
-    assert {:ok, %Incant.Service.Registry{entries: [entry]}} =
-             Incant.Service.Registry.from_bindings(bindings)
+    assert {:ok, %Registry{entries: [entry]}} = Registry.from_bindings(bindings)
 
-    session = Incant.Service.Session.new(entry)
+    session = Session.new(entry)
 
-    assert {:ok, 1} = Incant.Service.Session.run_widget(session, "operations", "api_keys")
-    assert {:ok, 1} = Incant.Service.Session.run_widget(session, "operations", "requests")
-    assert {:ok, 0.67} = Incant.Service.Session.run_widget(session, "operations", "spend")
-    assert {:ok, 123} = Incant.Service.Session.run_widget(session, "operations", "input_tokens")
-    assert {:ok, 45} = Incant.Service.Session.run_widget(session, "operations", "output_tokens")
+    assert {:ok, 1} = Session.run_widget(session, "operations", "api_keys")
+    assert {:ok, 1} = Session.run_widget(session, "operations", "requests")
+    assert {:ok, 0.67} = Session.run_widget(session, "operations", "spend")
+    assert {:ok, 123} = Session.run_widget(session, "operations", "input_tokens")
+    assert {:ok, 45} = Session.run_widget(session, "operations", "output_tokens")
 
     assert {:ok,
             %{
@@ -142,10 +168,10 @@ defmodule LLMProxy.AdminTest do
                 "key_id"
               ],
               "rows" => [%{"model" => "dashboard-model"}]
-            }} = Incant.Service.Session.run_widget(session, "operations", "recent_usage")
+            }} = Session.run_widget(session, "operations", "recent_usage")
 
     assert {:ok, %{"columns" => ["service", "count"], "rows" => []}} =
-             Incant.Service.Session.run_widget(session, "operations", "service_usage")
+             Session.run_widget(session, "operations", "service_usage")
 
     GenServer.stop(server)
   end
@@ -182,14 +208,14 @@ defmodule LLMProxy.AdminTest do
 
   test "stores Codex OAuth credentials from live admin process" do
     {:ok, credentials} =
-      LLMProxy.Providers.OpenAICodex.OAuth.new(
+      OAuth.new(
         "access-token",
         "refresh-token",
         DateTime.utc_now() |> DateTime.add(3600, :second),
         "account-123"
       )
 
-    assert {:ok, token} = LLMProxy.Admin.CodexOAuth.store_credentials(credentials)
+    assert {:ok, token} = CodexOAuth.store_credentials(credentials)
 
     assert token.provider == "openai-codex"
     assert token.kind == "oauth"

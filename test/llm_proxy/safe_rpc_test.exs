@@ -3,6 +3,7 @@ defmodule LLMProxy.SafeRPCTest do
 
   alias Incant.Service.{Entry, RegistryServer}
   alias LLMProxy.Catalog.{Deployment, Model}
+  alias LLMProxy.RPC.AdminServer, as: RPCAdminServer
 
   defmodule Server do
     use SafeRPC.Adapter.Server, service: LLMProxy
@@ -152,7 +153,7 @@ defmodule LLMProxy.SafeRPCTest do
   test "real LLMProxy RPC server dispatches admin and ops services on one socket" do
     LLMProxy.Drain.cancel()
     socket = socket_path("composite")
-    {:ok, server} = LLMProxy.RPC.AdminServer.start_link(socket: socket)
+    {:ok, server} = RPCAdminServer.start_link(socket: socket)
 
     assert {:ok, %SafeRPC.Descriptor{modules: modules}} = SafeRPC.describe(socket)
     assert Map.has_key?(modules, LLMProxy.Admin)

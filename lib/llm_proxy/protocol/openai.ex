@@ -10,6 +10,7 @@ defmodule LLMProxy.Protocol.OpenAI do
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Usage
   alias ReqLLM.Provider.Defaults, as: ReqLLMDefaults
+  alias ReqLLM.Providers.OpenAI.AdapterHelpers
 
   @impl true
   def protocol, do: :openai
@@ -93,7 +94,7 @@ defmodule LLMProxy.Protocol.OpenAI do
 
   defp strict_openai_wire_schema(schema) do
     %{response_format: %{"json_schema" => %{"schema" => schema}}} =
-      ReqLLM.Providers.OpenAI.AdapterHelpers.add_response_format(%{},
+      AdapterHelpers.add_response_format(%{},
         response_format: %{
           "type" => "json_schema",
           "json_schema" => %{"strict" => true, "schema" => schema}

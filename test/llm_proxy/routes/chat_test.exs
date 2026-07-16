@@ -1,9 +1,11 @@
 defmodule LLMProxy.HTTP.Routes.ChatTest do
   use ExUnit.Case
 
+  alias Ecto.Adapters.SQL.Sandbox
   alias LLMProxy.HTTP.Routes.Chat
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.Stream.Event
   alias LLMProxy.TestSupport
 
@@ -209,7 +211,7 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
       end)
 
     task_pid = task.pid
-    Ecto.Adapters.SQL.Sandbox.allow(LLMProxy.Storage.Repo.SQLite, self(), task_pid)
+    Sandbox.allow(SQLite, self(), task_pid)
     send(task_pid, :start_blocking_stream)
 
     assert_receive {:blocking_stream_waiting, ^task_pid}

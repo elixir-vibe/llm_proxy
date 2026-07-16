@@ -6,11 +6,11 @@ defmodule LLMProxy.Admin.Resources.Message do
     title: "Messages"
 
   table density: :compact do
-    column(:timestamp, link: true, format: :datetime)
-    column(:key_id, format: :id)
-    column(:model)
-    column(:route)
-    column(:user_message, label: "Message", sensitive: true)
+    column(:timestamp, link: true, format: :datetime, priority: :primary)
+    column(:key_id, format: :id, priority: :tertiary)
+    column(:model, priority: :primary)
+    column(:route, priority: :secondary)
+    column(:user_message, label: "Message", sensitive: true, priority: :secondary)
 
     filter(:model, :text)
     filter(:route, :text)

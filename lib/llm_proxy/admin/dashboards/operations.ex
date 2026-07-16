@@ -28,21 +28,25 @@ defmodule LLMProxy.Admin.Dashboards.Operations do
       query: &__MODULE__.output_tokens/2
     )
 
-    table :recent_usage, span: 7, label: "Recent requests", query: &__MODULE__.recent_usage/2 do
-      column(:timestamp, label: "Timestamp", format: :datetime)
-      column(:provider, label: "Provider")
-      column(:model, label: "Model")
-      column(:input_tokens, label: "Input tokens", format: :number)
-      column(:output_tokens, label: "Output tokens", format: :number)
-      column(:cost_usd, label: "Cost", format: :money)
-      column(:duration_ms, label: "Duration", format: :number)
-      column(:ttft_ms, label: "TTFT", format: :number)
-      column(:key_id, label: "Key")
+    table :recent_usage,
+      span: 7,
+      label: "Recent requests",
+      preview_rows: 10,
+      query: &__MODULE__.recent_usage/2 do
+      column(:timestamp, label: "Timestamp", format: :datetime, priority: :primary)
+      column(:provider, label: "Provider", priority: :secondary)
+      column(:model, label: "Model", priority: :primary)
+      column(:input_tokens, label: "Input tokens", format: :number, priority: :secondary)
+      column(:output_tokens, label: "Output tokens", format: :number, priority: :tertiary)
+      column(:cost_usd, label: "Cost", format: :money, priority: :secondary)
+      column(:duration_ms, label: "Duration", format: :number, priority: :tertiary)
+      column(:ttft_ms, label: "TTFT", format: :number, priority: :tertiary)
+      column(:key_id, label: "Key", priority: :tertiary)
     end
 
     table :service_usage, span: 3, label: "Service usage", query: &__MODULE__.service_usage/2 do
-      column(:service, label: "Service")
-      column(:count, label: "Count", format: :number)
+      column(:service, label: "Service", priority: :primary)
+      column(:count, label: "Count", format: :number, priority: :primary)
     end
   end
 

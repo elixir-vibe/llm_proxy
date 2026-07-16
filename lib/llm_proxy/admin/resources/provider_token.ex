@@ -6,12 +6,12 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     title: "Provider Tokens"
 
   table density: :compact do
-    column(:provider, link: true)
-    column(:kind)
-    column(:label)
-    column(:enabled, as: :boolean)
-    column(:proxy)
-    column(:added_at, format: :datetime)
+    column(:provider, link: true, priority: :primary)
+    column(:kind, priority: :secondary)
+    column(:label, priority: :primary)
+    column(:enabled, as: :boolean, priority: :primary)
+    column(:proxy, priority: :tertiary)
+    column(:added_at, format: :datetime, priority: :tertiary)
 
     filter(:provider, :text)
     filter(:kind, :select, options: ["api-key", "oauth"])
