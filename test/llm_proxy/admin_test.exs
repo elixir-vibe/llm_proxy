@@ -3,7 +3,8 @@ defmodule LLMProxy.AdminTest do
 
   alias Ecto.Adapters.SQL.Sandbox
   alias Incant.ActionResult
-  alias Incant.Service.{Registry, Session}
+  alias Incant.Live.Rows
+  alias Incant.Service.{Page, Registry, Runtime, Session}
   alias LLMProxy.Admin.CodexOAuth
   alias LLMProxy.Providers.OpenAICodex.OAuth
   alias LLMProxy.Storage
@@ -24,6 +25,7 @@ defmodule LLMProxy.AdminTest do
     assert contract.id == "llm_proxy"
     assert contract.service == :llm_proxy
     assert contract.version == "1"
+    assert contract.opts.title == "LLM Proxy"
 
     resource_ids = Enum.map(contract.resources, & &1.id)
     assert resource_ids == ["api_key", "provider_token", "trace", "message"]
@@ -62,6 +64,18 @@ defmodule LLMProxy.AdminTest do
              "codex_oauth_start",
              "codex_oauth_complete"
            ]
+
+    provider_filter = Enum.find(provider_token.table.filters, &(&1.id == "provider"))
+    assert provider_filter.type == :select
+    assert "openai-codex" in provider_filter.opts.options
+
+    model_filter = Enum.find(message.table.filters, &(&1.id == "model"))
+    assert model_filter.type == :combobox
+    assert model_filter.opts.options_from == :model
+
+    enabled_column = Enum.find(provider_token.table.columns, &(&1.id == "enabled"))
+    assert enabled_column.opts.true_label == "Enabled"
+    assert enabled_column.opts.false_label == "Disabled"
 
     refute Map.has_key?(api_key.opts, :schema)
 
@@ -121,6 +135,61 @@ defmodule LLMProxy.AdminTest do
            ]
 
     assert Enum.all?(dashboard.widgets, fn widget -> not Map.has_key?(widget.opts, :query) end)
+  end
+
+  test "declares mutually exclusive provider token actions" do
+    resource = Incant.metadata(LLMProxy.Admin.Resources.ProviderToken)
+    enable = Enum.find(resource.table.actions, &(&1.name == :enable))
+    disable = Enum.find(resource.table.actions, &(&1.name == :disable))
+
+    assert enable.opts[:callback] == {LLMProxy.Admin.Resources.ProviderToken, :enable}
+    assert enable.opts[:available_if] == [enabled: false]
+    assert disable.opts[:callback] == {LLMProxy.Admin.Resources.ProviderToken, :disable}
+    assert disable.opts[:available_if] == [enabled: true]
+    assert disable.opts[:confirm] == "Disable this provider token?"
+  end
+
+  test "returns authoritative message pages through the Incant runtime" do
+    {:ok, key, _raw} = Storage.create_key("incant-page")
+
+    for index <- 1..30 do
+      Storage.log_message(%{
+        key_id: key.id,
+        model: "model-#{rem(index, 2)}",
+        route: "chat",
+        user_message: "message #{index}"
+      })
+    end
+
+    assert {:ok, page} =
+             Runtime.index(LLMProxy.Admin, "message", %{
+               page: 2,
+               page_size: 10,
+               sort: "-timestamp",
+               search: "",
+               filters: %{}
+             })
+
+    assert page.page == 2
+    assert page.page_size == 10
+    assert page.total == 30
+    assert page.total_pages == 3
+    assert length(page.rows) == 10
+    assert page.meta.options["model"] != []
+  end
+
+  test "transports only applicable provider token actions" do
+    {:ok, _enabled} = Storage.add_token("openai", "api-key", "enabled", %{enabled: true})
+    {:ok, _disabled} = Storage.add_token("openai", "api-key", "disabled", %{enabled: false})
+
+    assert {:ok, external} =
+             Runtime.index_external(LLMProxy.Admin, "provider_token")
+
+    page = Page.from_external(external)
+    rows = Map.new(page.rows, &{Rows.field(&1, :enabled), &1.available_actions})
+
+    assert rows[true] == ["disable", "remove"]
+    assert rows[false] == ["enable", "remove"]
   end
 
   test "executes Operations dashboard widgets through Incant service session" do

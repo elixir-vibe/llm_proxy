@@ -9,6 +9,7 @@ defmodule LLMProxy.Admin do
   use Incant.Admin,
     service: :llm_proxy,
     version: "1",
+    title: "LLM Proxy",
     repo: LLMProxy.Storage.Repo,
     policy: LLMProxy.Admin.Policy,
     rpc: true

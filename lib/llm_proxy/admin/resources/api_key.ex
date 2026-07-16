@@ -13,7 +13,14 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
     column(:input_tokens, label: "Input tokens", format: :number, priority: :secondary)
     column(:output_tokens, label: "Output tokens", format: :number, priority: :secondary)
     column(:cache_read_tokens, label: "Cache read", format: :number, priority: :tertiary)
-    column(:trace_requests, label: "Trace", as: :boolean, priority: :secondary)
+
+    column(:trace_requests,
+      label: "Tracing",
+      as: :boolean,
+      true_label: "Enabled",
+      false_label: "Disabled",
+      priority: :secondary
+    )
 
     filter(:name, :text)
     filter(:trace_requests, :boolean)
@@ -22,11 +29,13 @@ defmodule LLMProxy.Admin.Resources.ApiKey do
       page(:create,
         label: "Create API key",
         confirm: "Create a new API key?",
-        callback: {__MODULE__, :create}
+        callback: :create
       )
     end
 
-    action(:delete, confirm: true, destructive: true, callback: {__MODULE__, :delete})
+    action(:delete, confirm: true, destructive: true, callback: :delete)
+
+    search([:name])
   end
 
   def index(params, _context), do: LLMProxy.Storage.list_keys(params)

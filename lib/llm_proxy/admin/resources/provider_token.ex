@@ -9,17 +9,33 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     column(:provider, link: true, priority: :primary)
     column(:kind, priority: :secondary)
     column(:label, priority: :primary)
-    column(:enabled, as: :boolean, priority: :primary)
+
+    column(:enabled,
+      as: :boolean,
+      true_label: "Enabled",
+      false_label: "Disabled",
+      priority: :primary
+    )
+
     column(:proxy, priority: :tertiary)
     column(:added_at, format: :datetime, priority: :tertiary)
 
-    filter(:provider, :text)
+    filter(:provider, :select, options: ["anthropic", "openai", "openai-codex", "openrouter"])
     filter(:kind, :select, options: ["api-key", "oauth"])
     filter(:enabled, :boolean)
 
-    action(:disable, confirm: true, callback: {__MODULE__, :disable})
-    action(:enable, callback: {__MODULE__, :enable})
-    action(:remove, confirm: true, destructive: true, callback: {__MODULE__, :remove})
+    action(:disable,
+      available_if: [enabled: true],
+      confirm: "Disable this provider token?",
+      callback: :disable
+    )
+
+    action(:enable,
+      available_if: [enabled: false],
+      callback: :enable
+    )
+
+    action(:remove, confirm: true, destructive: true, callback: :remove)
 
     actions do
       page(:codex_oauth_start,
@@ -32,6 +48,8 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
         callback: {LLMProxy.Admin.CodexOAuth, :complete}
       )
     end
+
+    search([:provider, :label])
   end
 
   def index(params, _context), do: LLMProxy.Storage.list_tokens(params)

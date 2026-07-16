@@ -44,10 +44,12 @@ defmodule LLMProxy.Storage do
 
   def log_message(attrs), do: adapter().log_message(attrs)
   def get_messages(opts \\ %{}), do: adapter().get_messages(opts)
+  def page_messages(opts \\ %{}), do: adapter().page_messages(opts)
   def get_stats, do: adapter().get_stats()
 
   def record_trace(attrs), do: adapter().record_trace(attrs)
   def get_traces(opts \\ %{}), do: adapter().get_traces(opts)
+  def page_traces(opts \\ %{}), do: adapter().page_traces(opts)
   def get_trace(id), do: adapter().get_trace(id)
   def record_trace_feedback(attrs), do: adapter().record_trace_feedback(attrs)
 

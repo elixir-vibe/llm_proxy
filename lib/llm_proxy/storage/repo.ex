@@ -30,6 +30,9 @@ defmodule LLMProxy.Storage.Repo do
   def adapter, do: configured().__adapter__()
   def config, do: configured().config()
 
+  def aggregate(queryable, aggregate, field, opts \\ []),
+    do: configured().aggregate(queryable, aggregate, field, opts)
+
   def all(queryable, opts \\ []), do: configured().all(queryable, opts)
   def delete(struct, opts \\ []), do: configured().delete(struct, opts)
   def delete_all(queryable, opts \\ []), do: configured().delete_all(queryable, opts)
