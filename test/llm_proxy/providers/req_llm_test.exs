@@ -106,6 +106,64 @@ defmodule LLMProxy.Providers.ReqLLMTest do
     assert {"authorization", "Bearer configured-token"} in headers
   end
 
+  test "normalizes a prior provider tool-call turn before configured execution" do
+    test_pid = self()
+
+    ReqTest.stub(HTTPStub, fn conn ->
+      send(test_pid, {:mixed_context_request, conn.body_params})
+
+      ReqTest.json(conn, %{
+        "id" => "chatcmpl-mixed-context",
+        "model" => "upstream-model",
+        "choices" => [
+          %{
+            "index" => 0,
+            "finish_reason" => "stop",
+            "message" => %{"role" => "assistant", "content" => "continued"}
+          }
+        ],
+        "usage" => %{"prompt_tokens" => 12, "completion_tokens" => 1, "total_tokens" => 13}
+      })
+    end)
+
+    {:ok, _token} = Storage.add_token("isolated-pool", "api-key", "configured-token")
+
+    attempt = %Attempt{
+      provider: ReqLLM,
+      provider_name: "configured-test",
+      model: "upstream-model",
+      token_pool: "isolated-pool"
+    }
+
+    body = %{
+      "model" => "upstream-model",
+      "messages" => [
+        %{"role" => "user", "content" => "inspect"},
+        %{
+          "role" => "assistant",
+          "content" => nil,
+          "tool_calls" => [
+            %{
+              "id" => "call-1",
+              "type" => "function",
+              "function" => %{"name" => "inspect_value", "arguments" => ~s({"id":1})}
+            }
+          ]
+        },
+        %{"role" => "tool", "tool_call_id" => "call-1", "content" => ~s({"value":42})},
+        %{"role" => "user", "content" => "continue"}
+      ]
+    }
+
+    assert {:ok, %Result{}} = ReqLLM.call(body, "user-1", attempt)
+    assert_receive {:mixed_context_request, request}
+
+    assert get_in(request, ["messages", Access.at(1), "tool_calls", Access.at(0), "id"]) ==
+             "call-1"
+
+    assert get_in(request, ["messages", Access.at(2), "tool_call_id"]) == "call-1"
+  end
+
   test "token proxy overrides the configured base URL" do
     test_pid = self()
 
@@ -221,7 +279,7 @@ defmodule LLMProxy.Providers.ReqLLMTest do
            ]
 
     assert_receive {:tool_request, request}
-    assert request["reasoning_effort"] == "xhigh"
+    assert request["reasoning_effort"] == "max"
     assert request["tool_choice"] == "required"
     assert get_in(request, ["tools", Access.at(0), "function", "strict"]) == true
   end

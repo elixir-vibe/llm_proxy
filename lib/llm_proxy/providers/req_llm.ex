@@ -10,11 +10,12 @@ defmodule LLMProxy.Providers.ReqLLM do
 
   @behaviour LLMProxy.Providers.Behaviour
 
+  alias Elixir.ReqLLM.{Context, StreamResponse, Tool}
+  alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Attempt, Result}
   alias LLMProxy.Providers.ReqLLM.Projection
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Usage
-  alias ReqLLM.{StreamResponse, Tool}
 
   @request_option_keys ~w(max_tokens temperature top_p stop parallel_tool_calls)a
   @reasoning_efforts %{
@@ -24,7 +25,7 @@ defmodule LLMProxy.Providers.ReqLLM do
     "medium" => :medium,
     "high" => :high,
     "xhigh" => :xhigh,
-    "max" => :xhigh,
+    "max" => :max,
     "default" => :default
   }
 
@@ -56,8 +57,8 @@ defmodule LLMProxy.Providers.ReqLLM do
   end
 
   defp call_with_token(body, attempt, token) do
-    with {:ok, model, opts} <- request(attempt, token, body),
-         {:ok, response} <- ReqLLM.Generation.generate_text(model, body["messages"] || [], opts) do
+    with {:ok, model, context, opts} <- request(attempt, token, body),
+         {:ok, response} <- ReqLLM.Generation.generate_text(model, context, opts) do
       {:ok, Result.response(Projection.response(response, attempt.model), token)}
     else
       {:error, reason} -> {:error, req_llm_error(reason, token)}
@@ -65,8 +66,8 @@ defmodule LLMProxy.Providers.ReqLLM do
   end
 
   defp stream_with_token(body, attempt, token) do
-    with {:ok, model, opts} <- request(attempt, token, body),
-         {:ok, response} <- ReqLLM.Generation.stream_text(model, body["messages"] || [], opts) do
+    with {:ok, model, context, opts} <- request(attempt, token, body),
+         {:ok, response} <- ReqLLM.Generation.stream_text(model, context, opts) do
       stream =
         response
         |> StreamResponse.events()
@@ -99,7 +100,8 @@ defmodule LLMProxy.Providers.ReqLLM do
 
   defp request(%Attempt{provider_name: provider_name, model: model_id}, token, body) do
     with {:ok, adapter} <- adapter(provider_name),
-         {:ok, base_url} <- base_url(provider_name, token) do
+         {:ok, base_url} <- base_url(provider_name, token),
+         {:ok, %Request{messages: messages}} <- Request.parse(:openai_chat, body) do
       model = %LLMDB.Model{
         id: model_id,
         model: model_id,
@@ -112,7 +114,7 @@ defmodule LLMProxy.Providers.ReqLLM do
         |> Keyword.merge(configured_req_options(provider_name))
         |> Keyword.merge(body_options(body))
 
-      {:ok, model, opts}
+      {:ok, model, %Context{messages: messages}, opts}
     end
   end
 
@@ -210,6 +212,7 @@ defmodule LLMProxy.Providers.ReqLLM do
     Result.error(message, status, token)
   end
 
+  defp error_status(%Request.Error{}), do: 400
   defp error_status(%{status: status}) when is_integer(status), do: status
   defp error_status(%{status_code: status}) when is_integer(status), do: status
   defp error_status(_reason), do: 502

@@ -55,7 +55,7 @@ Persisted provider tokens remain the runtime source after seeding. Never put cre
 
 A provider-token `proxy` value overrides the configured base URL for that token. Use it only for an intentional per-token gateway; prefer the named provider's `base_url` for normal service endpoints.
 
-Configuration-driven ReqLLM providers currently serve the normalized chat execution path, including `/v1/chat/completions`, local `LLMProxy.chat/2`, streaming, reasoning deltas, tools, and usage. Native wire passthrough endpoints require a provider that explicitly supports that native API.
+Configuration-driven ReqLLM providers currently serve the normalized chat execution path, including `/v1/chat/completions`, local `LLMProxy.chat/2`, streaming, reasoning deltas, tools, and usage. Incoming messages pass through `LLMProxy.Protocol.Request` before ReqLLM execution, so conversation history retains assistant tool calls and tool results—including assistant turns with null text content—when clients switch models. Native wire passthrough endpoints require a provider that explicitly supports that native API.
 
 ## When provider code is justified
 
