@@ -19,6 +19,7 @@ defmodule LLMProxy.Protocol.Request do
     :tools,
     :tool_choice,
     :max_tokens,
+    :reasoning_effort,
     :temperature,
     :top_p,
     :stop,
@@ -36,6 +37,7 @@ defmodule LLMProxy.Protocol.Request do
           tools: [map()] | nil,
           tool_choice: term(),
           max_tokens: non_neg_integer() | nil,
+          reasoning_effort: :none | :minimal | :low | :medium | :high | :xhigh | :max | nil,
           temperature: number() | nil,
           top_p: number() | nil,
           stop: [String.t()] | String.t() | nil,
@@ -66,7 +68,8 @@ defmodule LLMProxy.Protocol.Request do
   def user_text(%__MODULE__{messages: messages}), do: last_user_text(messages)
 
   defp build(protocol, body, messages, parser) do
-    with {:ok, parsed} <- parse_messages(messages, parser) do
+    with {:ok, parsed} <- parse_messages(messages, parser),
+         {:ok, reasoning_effort} <- reasoning_effort(body) do
       {:ok,
        %__MODULE__{
          protocol: protocol,
@@ -78,6 +81,7 @@ defmodule LLMProxy.Protocol.Request do
          tools: body["tools"],
          tool_choice: body["tool_choice"],
          max_tokens: body["max_tokens"],
+         reasoning_effort: reasoning_effort,
          temperature: body["temperature"],
          top_p: body["top_p"],
          stop: body["stop"] || body["stop_sequences"],
@@ -85,6 +89,21 @@ defmodule LLMProxy.Protocol.Request do
        }}
     end
   end
+
+  @reasoning_efforts ~w(none minimal low medium high xhigh max)
+
+  defp reasoning_effort(%{"reasoning_effort" => effort}), do: normalize_reasoning_effort(effort)
+
+  defp reasoning_effort(%{"reasoning" => %{"effort" => effort}}),
+    do: normalize_reasoning_effort(effort)
+
+  defp reasoning_effort(_body), do: {:ok, nil}
+
+  defp normalize_reasoning_effort(effort) when effort in @reasoning_efforts,
+    do: {:ok, String.to_existing_atom(effort)}
+
+  defp normalize_reasoning_effort(_effort),
+    do: error("invalid_reasoning_effort", "Unsupported reasoning effort")
 
   defp metadata(%{"metadata" => %{} = metadata}), do: Map.delete(metadata, "tags")
   defp metadata(_body), do: nil

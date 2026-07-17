@@ -190,6 +190,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
     |> maybe_put(:tools, ToolSchema.strictify(request.tools))
     |> maybe_put(:tool_choice, request.tool_choice)
     |> maybe_put(:max_tokens, request.max_tokens)
+    |> maybe_put(:reasoning_effort, request.reasoning_effort)
     |> maybe_put(:temperature, request.temperature)
     |> maybe_put(:top_p, request.top_p)
     |> maybe_put(:stop, request.stop)

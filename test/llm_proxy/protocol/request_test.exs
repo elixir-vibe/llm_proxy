@@ -10,6 +10,7 @@ defmodule LLMProxy.Protocol.RequestTest do
                "messages" => [%{"role" => "user", "content" => "hello"}],
                "stream" => true,
                "max_tokens" => 20,
+               "reasoning_effort" => "max",
                "temperature" => 0.2,
                "top_p" => 0.9,
                "metadata" => %{"tags" => ["a"], "session_id" => "s1"}
@@ -18,6 +19,7 @@ defmodule LLMProxy.Protocol.RequestTest do
     assert request.model == "gpt-4o"
     assert request.stream == true
     assert request.max_tokens == 20
+    assert request.reasoning_effort == :max
     assert request.temperature == 0.2
     assert request.top_p == 0.9
     assert request.tags == ["a"]
@@ -30,6 +32,16 @@ defmodule LLMProxy.Protocol.RequestTest do
              }
            ] =
              request.messages
+  end
+
+  test "rejects unsupported reasoning effort" do
+    assert {:error, error} =
+             Request.parse(:openai_chat, %{
+               "messages" => [%{"role" => "user", "content" => "hello"}],
+               "reasoning_effort" => "ultra"
+             })
+
+    assert error.code == "invalid_reasoning_effort"
   end
 
   test "extracts OpenAI chat user text from normalized messages" do
