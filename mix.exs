@@ -54,7 +54,8 @@ defmodule LLMProxy.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:quackdb, "~> 0.5.15"},
-      {:req_llm, "~> 1.17.1"},
+      # Temporary until https://github.com/agentjido/req_llm/pull/897 is released on Hex.
+      {:req_llm, github: "dannote/req_llm", ref: "92e260095292b9d1ad59aaffc94515a4c9f28cfe"},
       {:req, "~> 0.6"},
       {:llm_db, "~> 2026.3", runtime: false},
       {:dotenvy, "~> 1.1"},
