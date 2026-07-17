@@ -5,10 +5,11 @@ defmodule LLMProxy.HTTP.Routes.Feedback do
   use Plug.Router
 
   alias LLMProxy.HTTP
-  alias LLMProxy.Plugs.Auth
+  alias LLMProxy.Plugs.{Auth, JSONBodyParser}
   alias LLMProxy.Storage
 
   plug(Auth)
+  plug(JSONBodyParser)
   plug(:match)
   plug(:dispatch)
 

@@ -11,13 +11,6 @@ defmodule LLMProxy.HTTP.Router do
 
   plug(Plug.RequestId, assign_as: :request_id)
 
-  plug(Plug.Parsers,
-    parsers: [:json],
-    pass: ["*/*"],
-    json_decoder: Jason,
-    length: 32_000_000
-  )
-
   plug(LLMProxy.Plugs.Drain)
 
   plug(:match)

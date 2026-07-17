@@ -10,7 +10,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   alias LLMProxy.Actor
   alias LLMProxy.HTTP
   alias LLMProxy.HTTP.Routes.Passthrough
-  alias LLMProxy.Plugs.{Auth, QuotaCheck}
+  alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
@@ -21,6 +21,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
 
   plug(Auth)
   plug(QuotaCheck)
+  plug(JSONBodyParser)
   plug(:match)
   plug(:dispatch)
 

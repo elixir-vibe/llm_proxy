@@ -8,7 +8,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   require Logger
 
   alias LLMProxy.HTTP
-  alias LLMProxy.Plugs.{Auth, QuotaCheck}
+  alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Telemetry
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Trace
@@ -45,6 +45,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
 
   plug(Auth)
   plug(QuotaCheck)
+  plug(JSONBodyParser)
   plug(:match)
   plug(:dispatch)
 

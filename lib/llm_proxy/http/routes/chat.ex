@@ -8,7 +8,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
 
   alias LLMProxy.Actor
   alias LLMProxy.HTTP
-  alias LLMProxy.Plugs.{Auth, QuotaCheck}
+  alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Protocol.{OpenAI, Request}
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
@@ -17,6 +17,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
 
   plug(Auth)
   plug(QuotaCheck)
+  plug(JSONBodyParser)
   plug(:match)
   plug(:dispatch)
 

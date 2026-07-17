@@ -25,15 +25,27 @@ defmodule LLMProxy.RouterTest do
     assert is_list(data)
   end
 
-  test "accepts image-bearing JSON bodies above Plug's default limit" do
-    body = Jason.encode!(%{"image" => String.duplicate("x", 8_100_000)})
-
+  test "authenticates before parsing JSON request bodies" do
     conn =
-      conn(:post, "/nonexistent", body)
+      conn(:post, "/v1/chat/completions", "{invalid-json")
       |> Plug.Conn.put_req_header("content-type", "application/json")
       |> Router.call(@opts)
 
-    assert conn.status == 404
+    assert conn.status == 401
+    assert Jason.decode!(conn.resp_body) == %{"error" => "Missing API key"}
+  end
+
+  test "accepts authenticated image-bearing JSON bodies above Plug's default limit" do
+    body = Jason.encode!(%{"image" => String.duplicate("x", 8_100_000)})
+
+    conn =
+      conn(:post, "/v1/chat/completions", body)
+      |> Plug.Conn.put_req_header("authorization", "Bearer test-master-key")
+      |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> Router.call(@opts)
+
+    assert conn.status == 400
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "code"]) == "missing_messages"
   end
 
   test "unknown route returns 404" do
