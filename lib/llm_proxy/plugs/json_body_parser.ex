@@ -22,6 +22,14 @@ defmodule LLMProxy.Plugs.JSONBodyParser do
   def call(conn, opts) do
     limit = Keyword.get_lazy(opts, :length, &body_limit_bytes/0)
 
+    if declared_length_exceeds?(conn, limit) do
+      send_too_large(conn, limit)
+    else
+      parse_body(conn, limit)
+    end
+  end
+
+  defp parse_body(conn, limit) do
     parser_opts =
       Plug.Parsers.init(
         parsers: [:json],
@@ -30,19 +38,33 @@ defmodule LLMProxy.Plugs.JSONBodyParser do
         length: limit
       )
 
-    try do
-      Plug.Parsers.call(conn, parser_opts)
-    rescue
-      Plug.Parsers.RequestTooLargeError ->
-        conn
-        |> HTTP.send_json(413, %{
-          error: %{
-            code: "request_too_large",
-            message: "Request body exceeds the #{format_limit(limit)} limit"
-          }
-        })
-        |> halt()
+    Plug.Parsers.call(conn, parser_opts)
+  rescue
+    Plug.Parsers.RequestTooLargeError -> send_too_large(conn, limit)
+  end
+
+  defp declared_length_exceeds?(conn, limit) do
+    case get_req_header(conn, "content-length") do
+      [value] ->
+        case Integer.parse(value) do
+          {bytes, ""} -> bytes > limit
+          _other -> false
+        end
+
+      _other ->
+        false
     end
+  end
+
+  defp send_too_large(conn, limit) do
+    conn
+    |> HTTP.send_json(413, %{
+      error: %{
+        code: "request_too_large",
+        message: "Request body exceeds the #{format_limit(limit)} limit"
+      }
+    })
+    |> halt()
   end
 
   defp format_limit(bytes) when bytes >= 1_000_000 and rem(bytes, 1_000_000) == 0,

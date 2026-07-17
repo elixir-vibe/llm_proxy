@@ -9,14 +9,31 @@ defmodule LLMProxy.Plugs.JSONBodyParserTest do
     assert JSONBodyParser.body_limit_bytes() == 32_000_000
   end
 
-  test "returns a structured 413 response when the body exceeds the limit" do
+  test "rejects a declared oversized body before reading it" do
+    opts = JSONBodyParser.init(length: 100)
+
+    conn =
+      conn(:post, "/", "{}")
+      |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> Plug.Conn.put_req_header("content-length", "101")
+      |> JSONBodyParser.call(opts)
+
+    assert_too_large(conn)
+  end
+
+  test "returns a structured 413 response when a body without a declared length exceeds the limit" do
     opts = JSONBodyParser.init(length: 100)
 
     conn =
       conn(:post, "/", Jason.encode!(%{"data" => String.duplicate("x", 101)}))
       |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> Plug.Conn.delete_req_header("content-length")
       |> JSONBodyParser.call(opts)
 
+    assert_too_large(conn)
+  end
+
+  defp assert_too_large(conn) do
     assert conn.halted
     assert conn.status == 413
 
