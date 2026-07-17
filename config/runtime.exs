@@ -52,6 +52,7 @@ if config_env() in [:dev, :prod] do
     providers: %{
       "anthropic" => %{api_keys: System.get_env("ANTHROPIC_API_KEYS", "")},
       "openai" => %{api_keys: System.get_env("OPENAI_API_KEYS", "")},
+      "kimi-code" => %{api_keys: System.get_env("KIMI_CODE_API_KEYS", "")},
       "openrouter" => %{
         api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
         http_referer: public_url

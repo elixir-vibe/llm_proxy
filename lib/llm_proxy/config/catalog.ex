@@ -120,6 +120,7 @@ defmodule LLMProxy.Config.Catalog do
       module == :openai -> LLMProxy.Providers.OpenAI
       module == :openai_codex -> LLMProxy.Providers.OpenAICodex
       module == :anthropic -> LLMProxy.Providers.Anthropic
+      module == :kimi_code -> LLMProxy.Providers.KimiCode
       module == :openrouter -> LLMProxy.Providers.OpenRouter
       true -> raise ArgumentError, "unknown LLMProxy provider #{inspect(module)}"
     end
@@ -128,6 +129,7 @@ defmodule LLMProxy.Config.Catalog do
   defp provider_module!("openai"), do: LLMProxy.Providers.OpenAI
   defp provider_module!("openai-codex"), do: LLMProxy.Providers.OpenAICodex
   defp provider_module!("anthropic"), do: LLMProxy.Providers.Anthropic
+  defp provider_module!("kimi-code"), do: LLMProxy.Providers.KimiCode
   defp provider_module!("openrouter"), do: LLMProxy.Providers.OpenRouter
 
   defp provider_module!(provider) do

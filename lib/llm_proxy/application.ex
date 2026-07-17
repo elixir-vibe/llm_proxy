@@ -18,6 +18,7 @@ defmodule LLMProxy.Application do
     LLMProxy.Catalog.init()
     LLMProxy.Pricing.init()
     Registry.register(LLMProxy.Providers.OpenRouter)
+    Registry.register(LLMProxy.Providers.KimiCode)
     Registry.register(LLMProxy.Providers.Anthropic)
     Registry.register(LLMProxy.Providers.OpenAI)
     Registry.register(LLMProxy.Providers.OpenAICodex)
@@ -102,6 +103,7 @@ defmodule LLMProxy.Application do
     entries =
       [
         {"openrouter", "api-key", :api_keys},
+        {"kimi-code", "api-key", :api_keys},
         {"openai", "api-key", :api_keys},
         {"anthropic", "api-key", :api_keys},
         {"openai-codex", "oauth", :oauth_tokens}

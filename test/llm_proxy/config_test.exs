@@ -3,7 +3,7 @@ defmodule LLMProxy.ConfigTest do
 
   alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Config
-  alias LLMProxy.Providers.{Anthropic, OpenAI, OpenAICodex}
+  alias LLMProxy.Providers.{Anthropic, KimiCode, OpenAI, OpenAICodex}
 
   setup do
     original_providers = Application.get_env(:llm_proxy, :providers)
@@ -22,11 +22,13 @@ defmodule LLMProxy.ConfigTest do
   test "normalizes readable provider config" do
     Application.put_env(:llm_proxy, :providers,
       openai_codex: [base_url: "https://chatgpt.example", oauth_tokens: "token"],
+      kimi_code: [base_url: "https://kimi.example"],
       openrouter: [http_referer: "https://example.test"]
     )
 
     assert Config.provider_value("openai-codex", :base_url) == "https://chatgpt.example"
     assert Config.provider_value(:openai_codex, :oauth_tokens) == "token"
+    assert Config.provider_value(:kimi_code, :base_url) == "https://kimi.example"
     assert Config.provider_value("openrouter", :http_referer) == "https://example.test"
   end
 
@@ -37,6 +39,7 @@ defmodule LLMProxy.ConfigTest do
       codex: [
         routes: [[to: :openai_codex, model: "gpt-5.3-codex-spark"]]
       ],
+      kimi: [routes: [[to: :kimi_code, model: "k3"]]],
       fast: [
         routing: :lowest_cost,
         routes: [
@@ -46,7 +49,7 @@ defmodule LLMProxy.ConfigTest do
       ]
     )
 
-    assert [codex, fast] = Config.catalog()
+    assert [codex, kimi, fast] = Config.catalog()
 
     assert codex.name == "codex"
     assert [%{provider: OpenAICodex, upstream_model: "gpt-5.3-codex-spark"}] = codex.deployments
@@ -58,6 +61,9 @@ defmodule LLMProxy.ConfigTest do
              %{provider: OpenAI, upstream_model: "gpt-4o-mini", timeout_ms: 15_000},
              %{provider: Anthropic, upstream_model: "claude-3-haiku-20240307", order: 2}
            ] = fast.deployments
+
+    assert kimi.name == "kimi"
+    assert [%{provider: KimiCode, upstream_model: "k3"}] = kimi.deployments
   end
 
   test "catalog config accepts strict model structs" do

@@ -24,6 +24,7 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     filter(:provider, :select,
       options: %{
         "anthropic" => "Anthropic",
+        "kimi-code" => "Kimi Code",
         "openai" => "OpenAI",
         "openai-codex" => "OpenAI Codex",
         "openrouter" => "OpenRouter"

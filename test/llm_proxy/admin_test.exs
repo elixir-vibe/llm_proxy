@@ -69,6 +69,7 @@ defmodule LLMProxy.AdminTest do
 
     assert provider_filter.opts.options == [
              %{label: "Anthropic", value: "anthropic"},
+             %{label: "Kimi Code", value: "kimi-code"},
              %{label: "OpenAI", value: "openai"},
              %{label: "OpenAI Codex", value: "openai-codex"},
              %{label: "OpenRouter", value: "openrouter"}

@@ -34,6 +34,7 @@ config :release_kit, :artifact,
   env_secret: [
     "MASTER_KEY",
     "ANTHROPIC_API_KEYS",
+    "KIMI_CODE_API_KEYS",
     "OPENAI_API_KEYS",
     "OPENAI_CODEX_TOKENS",
     "OPENROUTER_API_KEYS"

@@ -12,7 +12,7 @@ defmodule LLMProxy.Providers.OpenAICompatible do
 
   def call(provider_name, body, user_id, opts) do
     with {:ok, token} <- pick_token(provider_name, user_id) do
-      req = request(token, opts, into: nil)
+      req = request(token, opts)
 
       HTTPResult.post(req, body, token)
     end
@@ -20,10 +20,10 @@ defmodule LLMProxy.Providers.OpenAICompatible do
 
   def stream(provider_name, body, user_id, opts) do
     with {:ok, token} <- pick_token(provider_name, user_id) do
-      req = request(token, opts, into: :self)
+      req = request(token, opts)
       body = Map.put(body, "stream", true)
 
-      case Req.post(req, json: body) do
+      case Req.post(req, json: body, into: :self) do
         {:ok, %{status: 200} = response} ->
           stream =
             response.body
@@ -51,15 +51,11 @@ defmodule LLMProxy.Providers.OpenAICompatible do
     end
   end
 
-  defp request(token, opts, into: into) do
+  defp request(token, opts) do
     HTTP.new(
       url: "#{opts.base_url_fn.(token)}/chat/completions",
       headers: opts.headers_fn.(token),
       receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
     )
-    |> maybe_put_into(into)
   end
-
-  defp maybe_put_into(req, nil), do: req
-  defp maybe_put_into(req, into), do: Req.Request.put_option(req, :into, into)
 end

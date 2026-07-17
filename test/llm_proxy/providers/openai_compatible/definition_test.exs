@@ -55,4 +55,25 @@ defmodule LLMProxy.Providers.OpenAICompatible.DefinitionTest do
     assert picked_token.id == token.id
     assert Provider.models() == ["macro-model"]
   end
+
+  test "generated provider streams OpenAI-compatible SSE with Req 0.6" do
+    ReqTest.stub(ProviderStub, fn conn ->
+      assert conn.request_path == "/v1/chat/completions"
+      assert %{"stream" => true} = Jason.decode!(ReqTest.raw_body(conn))
+
+      body = ~s(data: {"choices":[{"delta":{"content":"OK"}}]}\n\ndata: [DONE]\n\n)
+
+      conn
+      |> Plug.Conn.put_resp_content_type("text/event-stream")
+      |> Plug.Conn.send_resp(200, body)
+    end)
+
+    {:ok, _token} = Storage.add_token("macro-openai-compatible", "api-key", "macro-token")
+
+    assert {:ok, %Result{stream: stream}} =
+             Provider.stream(%{"model" => "macro-model"}, "user-1")
+
+    assert [%LLMProxy.Stream.Event{data: %{"choices" => [%{"delta" => %{"content" => "OK"}}]}}] =
+             Enum.to_list(stream)
+  end
 end
