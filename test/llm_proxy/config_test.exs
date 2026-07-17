@@ -19,6 +19,14 @@ defmodule LLMProxy.ConfigTest do
     :ok
   end
 
+  test "configures bounded concurrent ReqLLM streaming pools" do
+    assert ReqLLM.Application.get_finch_config()[:pools][:default] == [
+             protocols: [:http1],
+             size: 4,
+             count: 8
+           ]
+  end
+
   test "normalizes readable provider config" do
     Application.put_env(:llm_proxy, :providers,
       openai_codex: [base_url: "https://chatgpt.example", oauth_tokens: "token"],

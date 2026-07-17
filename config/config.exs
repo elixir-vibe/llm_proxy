@@ -11,6 +11,14 @@ config :llm_proxy, LLMProxy.Storage.Repo.SQLite,
 config :llm_proxy,
   http: [port: 4000]
 
+# ReqLLM defaults to one HTTP/1 connection per Finch shard. Give each shard
+# bounded parallel capacity so concurrent streaming requests do not queue behind
+# a single long-lived upstream response.
+config :req_llm,
+  stream_pool_protocols: [:http1],
+  stream_pool_size: 4,
+  stream_pool_count: 8
+
 config :opentelemetry,
   span_processor: :batch,
   traces_exporter: :none
