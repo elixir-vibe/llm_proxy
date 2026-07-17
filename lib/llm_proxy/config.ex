@@ -64,6 +64,17 @@ defmodule LLMProxy.Config do
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
   def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)
 
+  def body_limit_bytes do
+    case Application.get_env(:llm_proxy, :body_limit_bytes, 32_000_000) do
+      bytes when is_integer(bytes) and bytes > 0 ->
+        bytes
+
+      value ->
+        raise ArgumentError,
+              ":body_limit_bytes must be a positive integer, got: #{inspect(value)}"
+    end
+  end
+
   def catalog do
     configured_catalog = Application.get_env(:llm_proxy, :catalog, [])
     configured_models = Application.get_env(:llm_proxy, :models, [])

@@ -6,7 +6,7 @@ defmodule LLMProxy.Plugs.JSONBodyParserTest do
   alias LLMProxy.Plugs.JSONBodyParser
 
   test "uses the bounded request size supported by image-bearing LLM APIs" do
-    assert JSONBodyParser.max_body_bytes() == 32_000_000
+    assert JSONBodyParser.body_limit_bytes() == 32_000_000
   end
 
   test "returns a structured 413 response when the body exceeds the limit" do

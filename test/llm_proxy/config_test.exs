@@ -9,14 +9,27 @@ defmodule LLMProxy.ConfigTest do
     original_providers = Application.get_env(:llm_proxy, :providers)
     original_catalog = Application.get_env(:llm_proxy, :catalog)
     original_models = Application.get_env(:llm_proxy, :models)
+    original_body_limit = Application.get_env(:llm_proxy, :body_limit_bytes)
 
     on_exit(fn ->
       restore_env(:providers, original_providers)
       restore_env(:catalog, original_catalog)
       restore_env(:models, original_models)
+      restore_env(:body_limit_bytes, original_body_limit)
     end)
 
     :ok
+  end
+
+  test "configures the authenticated JSON body limit in bytes" do
+    Application.put_env(:llm_proxy, :body_limit_bytes, 64_000_000)
+    assert Config.body_limit_bytes() == 64_000_000
+
+    Application.put_env(:llm_proxy, :body_limit_bytes, 0)
+
+    assert_raise ArgumentError, ~r/:body_limit_bytes must be a positive integer/, fn ->
+      Config.body_limit_bytes()
+    end
   end
 
   test "configures bounded concurrent ReqLLM streaming pools" do

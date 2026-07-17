@@ -45,6 +45,15 @@ if config_env() in [:dev, :prod] do
 
   public_url = System.get_env("PUBLIC_URL", "")
 
+  body_limit_bytes =
+    case Integer.parse(System.get_env("LLM_PROXY_BODY_LIMIT_BYTES", "32000000")) do
+      {bytes, ""} when bytes > 0 ->
+        bytes
+
+      _other ->
+        raise "LLM_PROXY_BODY_LIMIT_BYTES must be a positive integer"
+    end
+
   provider_key_seeds =
     case System.get_env("LLM_PROXY_PROVIDER_KEYS") do
       nil -> %{}
@@ -66,5 +75,6 @@ if config_env() in [:dev, :prod] do
       "openai-codex" => %{oauth_tokens: System.get_env("OPENAI_CODEX_TOKENS", "")}
     },
     fallbacks: fallbacks,
-    max_retries: String.to_integer(System.get_env("LLM_MAX_RETRIES", "1"))
+    max_retries: String.to_integer(System.get_env("LLM_MAX_RETRIES", "1")),
+    body_limit_bytes: body_limit_bytes
 end
