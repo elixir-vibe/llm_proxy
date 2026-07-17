@@ -25,6 +25,7 @@ defmodule LLMProxy.RouterDynamicTest do
     Registry.register(RouterProvider)
     Dynamic.init()
     Dynamic.register("/dynamic", DynamicRoute)
+    on_exit(fn -> LLMProxy.Drain.cancel() end)
     :ok
   end
 

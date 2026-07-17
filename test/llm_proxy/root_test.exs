@@ -25,6 +25,17 @@ defmodule LLMProxy.RouterTest do
     assert is_list(data)
   end
 
+  test "accepts image-bearing JSON bodies above Plug's default limit" do
+    body = Jason.encode!(%{"image" => String.duplicate("x", 8_100_000)})
+
+    conn =
+      conn(:post, "/nonexistent", body)
+      |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> Router.call(@opts)
+
+    assert conn.status == 404
+  end
+
   test "unknown route returns 404" do
     conn =
       conn(:get, "/nonexistent")

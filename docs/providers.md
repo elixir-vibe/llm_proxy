@@ -57,6 +57,8 @@ A provider-token `proxy` value overrides the configured base URL for that token.
 
 Configuration-driven ReqLLM providers currently serve the normalized chat execution path, including `/v1/chat/completions`, local `LLMProxy.chat/2`, streaming, reasoning deltas, tools, and usage. Incoming messages pass through `LLMProxy.Protocol.Request` before ReqLLM execution, so conversation history retains assistant tool calls and tool results—including assistant turns with null text content—when clients switch models. Native wire passthrough endpoints require a provider that explicitly supports that native API.
 
+LLMProxy accepts JSON request bodies up to 32 MB so image-bearing conversation history can pass through the OpenAI-compatible routes without hitting Plug's 8 MB default. The limit remains bounded; clients should compact long image-heavy sessions rather than relying on unbounded request growth.
+
 LLMProxy configures ReqLLM's Finch transport as eight HTTP/1 pool shards with four connections per shard. This gives each upstream destination bounded capacity for 32 concurrent streams while retaining connection isolation and backpressure; change these application settings only after concurrency and resource validation.
 
 ## When provider code is justified
