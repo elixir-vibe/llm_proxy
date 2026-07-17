@@ -52,9 +52,17 @@ defmodule LLMProxy.Providers.OpenAICompatible.Definition do
       @impl true
       def call(body, user_id), do: OpenAICompatible.call(@provider_name, body, user_id, opts())
 
+      def call(body, user_id, %LLMProxy.Providers.Attempt{token_pool: token_pool}) do
+        OpenAICompatible.call(@provider_name, body, user_id, opts(token_pool))
+      end
+
       @impl true
       def stream(body, user_id),
         do: OpenAICompatible.stream(@provider_name, body, user_id, opts())
+
+      def stream(body, user_id, %LLMProxy.Providers.Attempt{token_pool: token_pool}) do
+        OpenAICompatible.stream(@provider_name, body, user_id, opts(token_pool))
+      end
 
       @impl true
       def extract_usage(response), do: OpenAICompatible.extract_usage(response)
@@ -62,7 +70,9 @@ defmodule LLMProxy.Providers.OpenAICompatible.Definition do
       @impl true
       def to_openai_response(response, model), do: Map.put(response, "model", model)
 
-      defp opts, do: %{base_url_fn: &base_url/1, headers_fn: &headers/1}
+      defp opts(token_pool \\ nil) do
+        %{base_url_fn: &base_url/1, headers_fn: &headers/1, token_pool: token_pool}
+      end
 
       defp headers(token) do
         [

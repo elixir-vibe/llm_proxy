@@ -18,7 +18,6 @@ defmodule LLMProxy.Application do
     LLMProxy.Catalog.init()
     LLMProxy.Pricing.init()
     Registry.register(LLMProxy.Providers.OpenRouter)
-    Registry.register(LLMProxy.Providers.KimiCode)
     Registry.register(LLMProxy.Providers.Anthropic)
     Registry.register(LLMProxy.Providers.OpenAI)
     Registry.register(LLMProxy.Providers.OpenAICodex)
@@ -103,7 +102,6 @@ defmodule LLMProxy.Application do
     entries =
       [
         {"openrouter", "api-key", :api_keys},
-        {"kimi-code", "api-key", :api_keys},
         {"openai", "api-key", :api_keys},
         {"anthropic", "api-key", :api_keys},
         {"openai-codex", "oauth", :oauth_tokens}
@@ -114,13 +112,24 @@ defmodule LLMProxy.Application do
           |> LLMProxy.Config.provider_value(config_key, "")
           |> token_entries(provider)
 
-        %{provider: provider, kind: kind, tokens: tokens}
+        token_seed(provider, kind, tokens)
       end)
+      |> Kernel.++(configured_provider_key_entries())
       |> Enum.reject(fn e -> e.tokens == [] end)
 
     if entries != [] do
       LLMProxy.Storage.seed_tokens_from_env(entries)
     end
+  end
+
+  defp configured_provider_key_entries do
+    Enum.map(LLMProxy.Config.provider_key_seeds(), fn {pool, tokens} ->
+      token_seed(to_string(pool), "api-key", token_entries(tokens, to_string(pool)))
+    end)
+  end
+
+  defp token_seed(provider, kind, tokens) do
+    %{provider: provider, kind: kind, tokens: tokens}
   end
 
   defp token_entries(value, "openai-codex") when is_list(value),

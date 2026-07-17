@@ -29,7 +29,6 @@ defmodule LLMProxy.Config do
       conversion_defaults: %{max_tokens: 4096}
     },
     "openai" => %{base_url: "https://api.openai.com/v1"},
-    "kimi-code" => %{base_url: "https://api.kimi.com/coding/v1"},
     "openrouter" => %{
       base_url: "https://openrouter.ai/api/v1",
       http_referer: "",
@@ -61,6 +60,7 @@ defmodule LLMProxy.Config do
   def rpc_socket, do: Application.get_env(:llm_proxy, :rpc_socket)
 
   def public_url, do: Application.get_env(:llm_proxy, :public_url, "")
+  def provider_key_seeds, do: Application.get_env(:llm_proxy, :provider_key_seeds, %{})
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
   def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)
 
@@ -162,6 +162,7 @@ defmodule LLMProxy.Config do
   defp normalize_value(value), do: value
 
   @known_config_keys %{
+    "adapter" => :adapter,
     "api_keys" => :api_keys,
     "api_version" => :api_version,
     "base_url" => :base_url,
@@ -199,7 +200,6 @@ defmodule LLMProxy.Config do
       LLMProxy.Providers.OpenAI -> "openai"
       LLMProxy.Providers.OpenAICodex -> "openai-codex"
       LLMProxy.Providers.Anthropic -> "anthropic"
-      LLMProxy.Providers.KimiCode -> "kimi-code"
       LLMProxy.Providers.OpenRouter -> "openrouter"
       :openai_codex -> "openai-codex"
       other -> other |> Atom.to_string() |> String.replace("_", "-")

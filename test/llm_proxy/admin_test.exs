@@ -65,15 +65,7 @@ defmodule LLMProxy.AdminTest do
            ]
 
     provider_filter = Enum.find(provider_token.table.filters, &(&1.id == "provider"))
-    assert provider_filter.type == :select
-
-    assert provider_filter.opts.options == [
-             %{label: "Anthropic", value: "anthropic"},
-             %{label: "Kimi Code", value: "kimi-code"},
-             %{label: "OpenAI", value: "openai"},
-             %{label: "OpenAI Codex", value: "openai-codex"},
-             %{label: "OpenRouter", value: "openrouter"}
-           ]
+    assert provider_filter.type == :text
 
     model_filter = Enum.find(message.table.filters, &(&1.id == "model"))
     assert model_filter.type == :combobox

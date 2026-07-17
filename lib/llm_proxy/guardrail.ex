@@ -19,6 +19,7 @@ defmodule LLMProxy.Guardrail do
           optional(:route) => atom(),
           optional(:model) => String.t(),
           optional(:provider) => module(),
+          optional(:provider_name) => String.t() | nil,
           optional(:trace_id) => String.t(),
           optional(:cache_key) => String.t(),
           optional(:metadata) => map()

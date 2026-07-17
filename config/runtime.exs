@@ -45,14 +45,20 @@ if config_env() in [:dev, :prod] do
 
   public_url = System.get_env("PUBLIC_URL", "")
 
+  provider_key_seeds =
+    case System.get_env("LLM_PROXY_PROVIDER_KEYS") do
+      nil -> %{}
+      json -> Jason.decode!(json)
+    end
+
   config :llm_proxy,
     master_key: System.get_env("MASTER_KEY"),
+    provider_key_seeds: provider_key_seeds,
     public_url: public_url,
     rpc_socket: System.get_env("LLM_PROXY_RPC_SOCKET"),
     providers: %{
       "anthropic" => %{api_keys: System.get_env("ANTHROPIC_API_KEYS", "")},
       "openai" => %{api_keys: System.get_env("OPENAI_API_KEYS", "")},
-      "kimi-code" => %{api_keys: System.get_env("KIMI_CODE_API_KEYS", "")},
       "openrouter" => %{
         api_keys: System.get_env("OPENROUTER_API_KEYS", ""),
         http_referer: public_url

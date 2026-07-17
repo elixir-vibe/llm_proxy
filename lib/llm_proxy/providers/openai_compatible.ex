@@ -11,7 +11,7 @@ defmodule LLMProxy.Providers.OpenAICompatible do
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
   def call(provider_name, body, user_id, opts) do
-    with {:ok, token} <- pick_token(provider_name, user_id) do
+    with {:ok, token} <- pick_token(provider_name, user_id, opts) do
       req = request(token, opts)
 
       HTTPResult.post(req, body, token)
@@ -19,7 +19,7 @@ defmodule LLMProxy.Providers.OpenAICompatible do
   end
 
   def stream(provider_name, body, user_id, opts) do
-    with {:ok, token} <- pick_token(provider_name, user_id) do
+    with {:ok, token} <- pick_token(provider_name, user_id, opts) do
       req = request(token, opts)
       body = Map.put(body, "stream", true)
 
@@ -44,8 +44,10 @@ defmodule LLMProxy.Providers.OpenAICompatible do
 
   def extract_usage(response), do: OpenAI.extract_usage(response)
 
-  defp pick_token(provider_name, user_id) do
-    case TokenPool.pick_token(provider_name, user_id) do
+  defp pick_token(provider_name, user_id, opts) do
+    pool = Map.get(opts, :token_pool) || provider_name
+
+    case TokenPool.pick_token(pool, user_id) do
       {:ok, token} -> {:ok, token}
       {:error, reason} -> Result.unavailable_tokens(reason)
     end

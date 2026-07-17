@@ -25,9 +25,9 @@ Out of scope for core:
 
 ### 1. Model catalog
 
-Introduce a first-class catalog separating public model names from upstream deployments.
+Implemented: the catalog separates public model names from upstream deployments, propagates isolated token pools into execution attempts, and supports named configuration-driven ReqLLM providers. See `docs/providers.md` for the supported operator-facing configuration.
 
-Potential shape:
+Internal shape:
 
 ```elixir
 %LLMProxy.Catalog.Model{
@@ -44,12 +44,10 @@ Potential shape:
 }
 ```
 
-Useful ideas to adapt:
+Remaining ideas:
 
-- LiteLLM model groups and aliases
-- Portkey provider slugs like `@openai-prod/gpt-4o`
-- hidden aliases for backwards-compatible model names
-- per-model access controls
+- Portkey-style provider slugs such as `@openai-prod/gpt-4o`
+- richer per-model access controls
 
 ### 2. Budgets and rate limits
 

@@ -9,6 +9,11 @@ defmodule LLMProxy.Config.TOMLTest do
     base_url = "https://chatgpt.com/backend-api"
     oauth_tokens = "token"
 
+    [providers.configured]
+    adapter = "openai"
+    base_url = "https://configured.example/v1"
+    token_pool = "configured-production"
+
     [providers.anthropic.conversion_defaults]
     max_tokens = 4096
 
@@ -37,7 +42,12 @@ defmodule LLMProxy.Config.TOMLTest do
                   base_url: "https://chatgpt.com/backend-api",
                   oauth_tokens: "token"
                 },
-                "anthropic" => %{conversion_defaults: %{max_tokens: 4096}}
+                "anthropic" => %{conversion_defaults: %{max_tokens: 4096}},
+                "configured" => %{
+                  adapter: "openai",
+                  base_url: "https://configured.example/v1",
+                  token_pool: "configured-production"
+                }
               },
               models: [
                 %{

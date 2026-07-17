@@ -24,7 +24,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Usage
   alias ReqLLM.Provider.Defaults, as: ReqLLMDefaults
 
-  @dialyzer {:nowarn_function, req_llm_response: 6}
+  @dialyzer {:nowarn_function, req_llm_response: 7}
 
   @type call_error ::
           {:request, Request.Error.t()}
@@ -250,6 +250,7 @@ defmodule LLMProxy.Provider do
         api_key: api_key,
         route: route,
         model: request.model,
+        provider_name: nil,
         metadata: request.metadata || %{}
       },
       extra
@@ -265,6 +266,12 @@ defmodule LLMProxy.Provider do
   defp put_message_log_id(opts, {:ok, %{id: id}}), do: Keyword.put(opts, :message_log_id, id)
   defp put_message_log_id(opts, _result), do: opts
 
+  defp attempt_provider_name([%Attempt{provider_name: name} | _], _provider)
+       when is_binary(name),
+       do: name
+
+  defp attempt_provider_name(_attempts, provider), do: provider.name()
+
   defp call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
     start = System.monotonic_time(:millisecond)
 
@@ -274,6 +281,7 @@ defmodule LLMProxy.Provider do
     context =
       guard_context(request, actor, api_key, route, %{
         provider: provider,
+        provider_name: attempt_provider_name(attempts, provider),
         model: upstream_model,
         trace_id: trace_id,
         cache_key: cache_key
@@ -306,7 +314,7 @@ defmodule LLMProxy.Provider do
 
   defp call_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
     Telemetry.with_provider_span(
-      provider.name(),
+      attempt_provider_name(attempts, provider),
       upstream_model,
       :call,
       fn -> Execution.call_attempts(attempts, request, api_key.id) end,
@@ -352,7 +360,7 @@ defmodule LLMProxy.Provider do
 
     result =
       Telemetry.with_provider_span(
-        provider.name(),
+        attempt_provider_name(attempts, provider),
         upstream_model,
         function,
         fn -> invoke_native(function, attempts, request, api_key.id, api_name) end,
@@ -384,14 +392,27 @@ defmodule LLMProxy.Provider do
     context =
       guard_context(request, actor, api_key, route, %{
         provider: provider,
+        provider_name: attempt_provider_name(attempts, provider),
         model: upstream_model,
         trace_id: trace_id
       })
 
     case stream_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
       {:ok,
-       %Result{kind: :stream, stream: stream, provider: used_provider, model: used_model} = result} ->
-        context = %{context | provider: used_provider, model: used_model}
+       %Result{
+         kind: :stream,
+         stream: stream,
+         provider: used_provider,
+         provider_name: used_provider_name,
+         model: used_model
+       } = result} ->
+        context = %{
+          context
+          | provider: used_provider,
+            provider_name: used_provider_name || used_provider.name(),
+            model: used_model
+        }
+
         stream = track_stream(stream, used_model, request, api_key, context, start, opts)
         {:ok, %{result | stream: stream}}
 
@@ -402,7 +423,7 @@ defmodule LLMProxy.Provider do
 
   defp stream_provider_attempts(provider, upstream_model, attempts, request, api_key, trace_id) do
     Telemetry.with_provider_span(
-      provider.name(),
+      attempt_provider_name(attempts, provider),
       upstream_model,
       :stream,
       fn -> Execution.stream_attempts(attempts, request, api_key.id) end,
@@ -449,7 +470,7 @@ defmodule LLMProxy.Provider do
     tracking_opts = %{
       duration_ms: duration_ms,
       ttft_ms: ttft_ms,
-      provider: context.provider.name(),
+      provider: context.provider_name || context.provider.name(),
       message_log_id: opts[:message_log_id],
       tags: Map.get(usage_metadata, :tags, request.tags),
       metadata: tracking_metadata(request, usage_metadata, context.trace_id)
@@ -463,6 +484,7 @@ defmodule LLMProxy.Provider do
            kind: :response,
            response: provider_body,
            provider: used_provider,
+           provider_name: used_provider_name,
            model: used_model
          },
          request,
@@ -481,9 +503,18 @@ defmodule LLMProxy.Provider do
 
     response = %Response{
       message:
-        req_llm_response(openai_body, used_model, request, used_provider, context.trace_id, usage),
+        req_llm_response(
+          openai_body,
+          used_model,
+          request,
+          used_provider,
+          used_provider_name,
+          context.trace_id,
+          usage
+        ),
       provider_response: provider_body,
       provider: used_provider,
+      provider_name: used_provider_name || used_provider.name(),
       model: used_model,
       request: request,
       usage: usage,
@@ -491,7 +522,12 @@ defmodule LLMProxy.Provider do
       cache_ttl_ms: cache_policy.ttl_ms
     }
 
-    context = %{context | provider: used_provider, model: used_model}
+    context = %{
+      context
+      | provider: used_provider,
+        provider_name: used_provider_name || used_provider.name(),
+        model: used_model
+    }
 
     case GuardrailPipeline.after_response(response, context) do
       {:ok, response} ->
@@ -509,7 +545,7 @@ defmodule LLMProxy.Provider do
 
     tracking_opts = %{
       duration_ms: duration_ms,
-      provider: response.provider.name(),
+      provider: response.provider_name || response.provider.name(),
       message_log_id: opts[:message_log_id],
       tags: Map.get(usage_metadata, :tags, request.tags),
       metadata: tracking_metadata(request, usage_metadata, response.trace_id)
@@ -569,7 +605,15 @@ defmodule LLMProxy.Provider do
 
   defp req_llm_response(%Response{message: %ReqLLM.Response{} = message}), do: message
 
-  defp req_llm_response(openai_body, model_id, request, provider, trace_id, usage) do
+  defp req_llm_response(
+         openai_body,
+         model_id,
+         request,
+         provider,
+         provider_name,
+         trace_id,
+         usage
+       ) do
     model = LLMDB.Model.new!(%{id: model_id, provider: :llm_proxy})
 
     {:ok, req_llm_response} =
@@ -581,7 +625,7 @@ defmodule LLMProxy.Provider do
         usage: req_llm_usage(usage),
         provider_meta:
           Map.merge(req_llm_response.provider_meta, %{
-            provider: provider.name(),
+            provider: provider_name || provider.name(),
             trace_id: trace_id
           })
     }

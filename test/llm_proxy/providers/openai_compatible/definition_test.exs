@@ -56,6 +56,27 @@ defmodule LLMProxy.Providers.OpenAICompatible.DefinitionTest do
     assert Provider.models() == ["macro-model"]
   end
 
+  test "generated provider honors a deployment token pool" do
+    ReqTest.stub(ProviderStub, fn conn ->
+      assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer isolated-token"]
+      ReqTest.json(conn, %{"id" => "isolated-response"})
+    end)
+
+    {:ok, token} = Storage.add_token("isolated-pool", "api-key", "isolated-token")
+
+    attempt = %LLMProxy.Providers.Attempt{
+      provider: Provider,
+      provider_name: Provider.name(),
+      model: "macro-model",
+      token_pool: "isolated-pool"
+    }
+
+    assert {:ok, %Result{token: picked_token}} =
+             Provider.call(%{"model" => "macro-model"}, "user-1", attempt)
+
+    assert picked_token.id == token.id
+  end
+
   test "generated provider streams OpenAI-compatible SSE with Req 0.6" do
     ReqTest.stub(ProviderStub, fn conn ->
       assert conn.request_path == "/v1/chat/completions"

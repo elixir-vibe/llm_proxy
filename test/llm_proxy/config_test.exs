@@ -3,7 +3,7 @@ defmodule LLMProxy.ConfigTest do
 
   alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Config
-  alias LLMProxy.Providers.{Anthropic, KimiCode, OpenAI, OpenAICodex}
+  alias LLMProxy.Providers.{Anthropic, OpenAI, OpenAICodex}
 
   setup do
     original_providers = Application.get_env(:llm_proxy, :providers)
@@ -22,24 +22,26 @@ defmodule LLMProxy.ConfigTest do
   test "normalizes readable provider config" do
     Application.put_env(:llm_proxy, :providers,
       openai_codex: [base_url: "https://chatgpt.example", oauth_tokens: "token"],
-      kimi_code: [base_url: "https://kimi.example"],
+      kimi: [adapter: :openai, base_url: "https://kimi.example"],
       openrouter: [http_referer: "https://example.test"]
     )
 
     assert Config.provider_value("openai-codex", :base_url) == "https://chatgpt.example"
     assert Config.provider_value(:openai_codex, :oauth_tokens) == "token"
-    assert Config.provider_value(:kimi_code, :base_url) == "https://kimi.example"
+    assert Config.provider_value(:kimi, :adapter) == :openai
+    assert Config.provider_value(:kimi, :base_url) == "https://kimi.example"
     assert Config.provider_value("openrouter", :http_referer) == "https://example.test"
   end
 
   test "normalizes readable models config into catalog deployments" do
     Application.put_env(:llm_proxy, :catalog, [])
+    Application.put_env(:llm_proxy, :providers, kimi: [adapter: :openai, token_pool: "kimi-code"])
 
     Application.put_env(:llm_proxy, :models,
       codex: [
         routes: [[to: :openai_codex, model: "gpt-5.3-codex-spark"]]
       ],
-      kimi: [routes: [[to: :kimi_code, model: "k3"]]],
+      kimi: [routes: [[to: :kimi, model: "k3"]]],
       fast: [
         routing: :lowest_cost,
         routes: [
@@ -63,7 +65,15 @@ defmodule LLMProxy.ConfigTest do
            ] = fast.deployments
 
     assert kimi.name == "kimi"
-    assert [%{provider: KimiCode, upstream_model: "k3"}] = kimi.deployments
+
+    assert [
+             %{
+               provider: LLMProxy.Providers.ReqLLM,
+               provider_name: "kimi",
+               upstream_model: "k3",
+               token_pool: "kimi-code"
+             }
+           ] = kimi.deployments
   end
 
   test "catalog config accepts strict model structs" do

@@ -87,7 +87,7 @@ defmodule LLMProxy.Providers.Execution do
       Logger.info("Fallback to #{attempt.provider.name()}/#{attempt.model} succeeded")
     end
 
-    Result.with_attempt({:ok, result}, attempt.provider, attempt.model)
+    Result.with_attempt({:ok, result}, attempt)
   end
 
   defp handle_call_result({:error, %Result{status: status}} = error, attempt, rest, body, user_id)
@@ -138,7 +138,7 @@ defmodule LLMProxy.Providers.Execution do
       Logger.info("Fallback to #{attempt.provider.name()}/#{attempt.model} succeeded (stream)")
     end
 
-    Result.with_attempt({:ok, result}, attempt.provider, attempt.model)
+    Result.with_attempt({:ok, result}, attempt)
   end
 
   defp handle_stream_result(
@@ -214,7 +214,7 @@ defmodule LLMProxy.Providers.Execution do
       Logger.info("Fallback to #{attempt.provider.name()}/#{attempt.model} succeeded (native)")
     end
 
-    Result.with_attempt({:ok, result}, attempt.provider, attempt.model)
+    Result.with_attempt({:ok, result}, attempt)
   end
 
   defp handle_native_result(
@@ -251,7 +251,7 @@ defmodule LLMProxy.Providers.Execution do
          _user_id,
          _api_name
        ) do
-    Result.with_attempt({:error, result}, attempt.provider, attempt.model)
+    Result.with_attempt({:error, result}, attempt)
   end
 
   defp handle_retryable_native_error(
@@ -276,7 +276,7 @@ defmodule LLMProxy.Providers.Execution do
       request,
       user_id,
       api_name,
-      Result.with_attempt(error, attempt.provider, attempt.model)
+      Result.with_attempt(error, attempt)
     )
   end
 
@@ -287,7 +287,7 @@ defmodule LLMProxy.Providers.Execution do
        400,
        nil
      )}
-    |> Result.with_attempt(attempt.provider, attempt.model)
+    |> Result.with_attempt(attempt)
   end
 
   defp native_attempt_body(%Request{} = request, model) do
@@ -303,11 +303,11 @@ defmodule LLMProxy.Providers.Execution do
   defp retry_after({:error, %Result{retry_after_ms: retry_after_ms}}), do: retry_after_ms
 
   defp invoke(%Attempt{timeout_ms: nil} = attempt, function, args) do
-    apply(attempt.provider, function, args)
+    apply_attempt(attempt, function, args)
   end
 
   defp invoke(%Attempt{timeout_ms: timeout_ms} = attempt, function, args) do
-    task = Task.async(fn -> apply(attempt.provider, function, args) end)
+    task = Task.async(fn -> apply_attempt(attempt, function, args) end)
 
     case Task.yield(task, timeout_ms) || Task.shutdown(task, :brutal_kill) do
       {:ok, result} -> result
@@ -316,5 +316,13 @@ defmodule LLMProxy.Providers.Execution do
   rescue
     error in [RuntimeError, ArgumentError] ->
       {:error, Result.error(Exception.message(error), 500, nil)}
+  end
+
+  defp apply_attempt(%Attempt{provider: provider} = attempt, function, args) do
+    if function_exported?(provider, function, length(args) + 1) do
+      apply(provider, function, args ++ [attempt])
+    else
+      apply(provider, function, args)
+    end
   end
 end

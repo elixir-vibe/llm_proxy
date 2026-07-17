@@ -2,49 +2,66 @@
 
 `LLMProxy.Provider` is the execution boundary. Provider modules only implement upstream-specific request execution and response conversion.
 
-## OpenAI-compatible providers
+## Configuration-driven providers
 
-For providers that expose `/chat/completions`, use `LLMProxy.Providers.OpenAICompatible.Definition`:
+Use configuration, not a new LLMProxy module, when ReqLLM already supports the upstream protocol. A named provider declares a ReqLLM `adapter`, endpoint, and default token pool; public model aliases route to that provider and upstream model ID.
 
-```elixir
-defmodule MyApp.LLM.MyProvider do
-  use LLMProxy.Providers.OpenAICompatible.Definition,
-    name: "my-provider",
-    models: ["my-model"],
-    config_key: "my-provider"
-end
-```
-
-Configure provider defaults and seed tokens:
+Embedded Elixir configuration:
 
 ```elixir
 config :llm_proxy,
   providers: %{
-    "my-provider" => %{
-      api_keys: System.get_env("MY_PROVIDER_API_KEYS", ""),
-      base_url: "https://api.example.com/v1"
+    "my-service" => %{
+      adapter: "openai",
+      base_url: "https://api.example.com/v1",
+      token_pool: "my-service-production"
     }
-  }
+  },
+  models: [
+    [
+      name: "my-service/model",
+      routes: [[to: "my-service", model: "upstream-model-id"]]
+    ]
+  ]
 ```
 
-Register the provider at application startup:
+Standalone TOML configuration:
 
-```elixir
-LLMProxy.Providers.Registry.register(MyApp.LLM.MyProvider)
+```toml
+[providers.my-service]
+adapter = "openai"
+base_url = "https://api.example.com/v1"
+token_pool = "my-service-production"
+
+[[models]]
+name = "my-service/model"
+
+[[models.routes]]
+to = "my-service"
+model = "upstream-model-id"
 ```
 
-Optional headers can be set through config or macro defaults:
+The adapter name must match a registered ReqLLM provider ID, such as `openai`, `anthropic`, or another provider returned by `ReqLLM.Providers.list/0`. LLMProxy resolves this finite registry without creating atoms from configuration.
 
-```elixir
-defmodule MyApp.LLM.OpenRouterLike do
-  use LLMProxy.Providers.OpenAICompatible.Definition,
-    name: "openrouter-like",
-    http_referer: "https://my-app.example",
-    title: "My App"
-end
+`token_pool` defaults at provider level and may be overridden on an individual route. Provider-token rows select a pool through their `provider` field. This isolates credentials even when several services use the same ReqLLM adapter.
+
+Standalone releases can bootstrap arbitrary API-key pools with one secret environment variable:
+
+```text
+LLM_PROXY_PROVIDER_KEYS={"my-service-production":["secret-key"]}
 ```
 
-Token-level `proxy` values override the configured base URL, so deployments can route through provider-specific gateways.
+Persisted provider tokens remain the runtime source after seeding. Never put credentials in TOML, Elixir config committed to source control, model metadata, or route metadata.
+
+A provider-token `proxy` value overrides the configured base URL for that token. Use it only for an intentional per-token gateway; prefer the named provider's `base_url` for normal service endpoints.
+
+Configuration-driven ReqLLM providers currently serve the normalized chat execution path, including `/v1/chat/completions`, local `LLMProxy.chat/2`, streaming, reasoning deltas, tools, and usage. Native wire passthrough endpoints require a provider that explicitly supports that native API.
+
+## When provider code is justified
+
+Do not create an LLMProxy provider module merely for a different base URL, credential pool, or model ID. Implement `LLMProxy.Providers.Behaviour` only when ReqLLM does not support the authentication or wire protocol. Prefer adding generally useful protocol support upstream to ReqLLM.
+
+The built-in `LLMProxy.Providers.OpenAICompatible` transport remains for bundled compatibility providers, but it is not the extension mechanism for end-user configuration.
 
 ## OpenAI Codex OAuth tokens
 

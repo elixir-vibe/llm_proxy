@@ -21,6 +21,7 @@ defmodule LLMProxy.Providers.Result do
     :retry_after_ms,
     :provider_body,
     :provider,
+    :provider_name,
     :model
   ]
 
@@ -34,6 +35,7 @@ defmodule LLMProxy.Providers.Result do
           retry_after_ms: non_neg_integer() | nil,
           provider_body: term() | nil,
           provider: module() | nil,
+          provider_name: String.t() | nil,
           model: String.t() | nil
         }
 
@@ -60,10 +62,28 @@ defmodule LLMProxy.Providers.Result do
     }
   end
 
+  @spec with_attempt({:ok, t()} | {:error, t()}, LLMProxy.Providers.Attempt.t()) ::
+          {:ok, t()} | {:error, t()}
+  def with_attempt({state, %__MODULE__{} = result}, %LLMProxy.Providers.Attempt{} = attempt)
+      when state in [:ok, :error] do
+    {state,
+     %{
+       result
+       | provider: attempt.provider,
+         provider_name: attempt.provider_name || attempt.provider.name(),
+         model: attempt.model
+     }}
+  end
+
   @spec with_attempt({:ok, t()} | {:error, t()}, module(), String.t()) ::
           {:ok, t()} | {:error, t()}
   def with_attempt({state, %__MODULE__{} = result}, provider, model)
       when state in [:ok, :error] do
-    {state, %{result | provider: provider, model: model}}
+    provider_name =
+      if function_exported?(provider, :name, 0),
+        do: provider.name(),
+        else: Atom.to_string(provider)
+
+    {state, %{result | provider: provider, provider_name: provider_name, model: model}}
   end
 end

@@ -234,7 +234,28 @@ Return `{:error, reason}` from a hook to reject the request/response. Returning 
 
 ## Catalog routing
 
-Public model names can be backed by one or more upstream deployments. Embedded apps can use the readable `:models` config shape; LLMProxy normalizes it into the internal catalog at boot:
+Public model names can be backed by one or more upstream deployments. Prefer configuration-driven ReqLLM providers for services that differ only by endpoint, credential pool, or model ID:
+
+```elixir
+config :llm_proxy,
+  providers: %{
+    "example-service" => %{
+      adapter: "openai",
+      base_url: "https://api.example.com/v1",
+      token_pool: "example-production"
+    }
+  },
+  models: [
+    [
+      name: "example/model",
+      routes: [[to: "example-service", model: "upstream-model"]]
+    ]
+  ]
+```
+
+No provider-specific Elixir module is required. See [`docs/providers.md`](docs/providers.md) for TOML, credential seeding, token isolation, and extension rules.
+
+Embedded apps can also route aliases across bundled providers; LLMProxy normalizes the readable `:models` shape into the internal catalog at boot:
 
 ```elixir
 config :llm_proxy,
@@ -283,11 +304,11 @@ Retryable provider failures and timeouts open a deployment-level circuit breaker
 - **Anthropic** — Claude models via standard API key
 - **OpenRouter** — OpenRouter models via OpenAI-compatible API
 
-Additional upstream providers can be registered with `LLMProxy.Providers.Registry`.
+Additional upstream services should normally be declared with `providers.<name>.adapter`, `base_url`, and `token_pool`. Register a custom module only for a protocol or authentication mechanism that ReqLLM does not support.
 
 ## Configuration
 
-See [`docs/architecture.md`](docs/architecture.md) for the module hierarchy and boundary rules. See [`docs/providers.md`](docs/providers.md) for custom provider authoring. See [`docs/roadmap.md`](docs/roadmap.md) for standalone release configuration direction.
+Agents configuring or operating LLMProxy should read [`SKILL.md`](SKILL.md). See [`docs/architecture.md`](docs/architecture.md) for module boundaries, [`docs/providers.md`](docs/providers.md) for configuration-driven providers and custom protocols, and [`docs/roadmap.md`](docs/roadmap.md) for remaining work.
 
 Standalone releases also load optional data config from `/etc/llm-proxy/config.toml`; override the path with `LLM_PROXY_CONFIG_TOML`. Embedded/library users should continue to use ordinary `config :llm_proxy` application config.
 
@@ -303,6 +324,7 @@ Environment variables can be loaded from `.env` through Dotenvy.
 | `OPENAI_CODEX_TOKENS` | Comma-separated ChatGPT/OpenAI OAuth tokens for Codex. Plain access tokens are accepted; refreshable entries use `access|refresh|expires_ms|account_id` (`account_id` optional). Standalone releases can also run `bin/codex_login` with the service runtime environment to sign in interactively and persist refreshable credentials in `provider_tokens`. Before login or seeding, Codex requests return `No available OpenAI Codex OAuth tokens: no_tokens`. |
 | `ANTHROPIC_API_KEYS` | Comma-separated Anthropic API keys |
 | `OPENROUTER_API_KEYS` | Comma-separated OpenRouter API keys |
+| `LLM_PROXY_PROVIDER_KEYS` | JSON object mapping configuration-driven token-pool names to API-key arrays, for example `{"example-production":["secret"]}` |
 | `LLM_FALLBACKS` | JSON map of model fallback chains |
 | `LLM_MAX_RETRIES` | Number of fallback models to try, default `1` |
 

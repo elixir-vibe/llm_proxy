@@ -87,11 +87,16 @@ defmodule LLMProxy.Config.Catalog do
       raise ArgumentError, "route config must be a keyword list, got: #{inspect(route)}"
     end
 
+    {provider, provider_name} = route |> Keyword.fetch!(:to) |> provider_target!()
+
     Deployment.new!(
-      provider: route |> Keyword.fetch!(:to) |> provider_module!(),
+      provider: provider,
+      provider_name: provider_name,
       upstream_model: Keyword.fetch!(route, :model),
       order: Keyword.get(route, :order, 1),
-      token_pool: Keyword.get(route, :token_pool),
+      token_pool:
+        Keyword.get(route, :token_pool) ||
+          LLMProxy.Config.provider_value(provider_name, :token_pool),
       timeout_ms: Keyword.get(route, :timeout_ms),
       failure_threshold: Keyword.get(route, :failure_threshold),
       cooldown_ms: Keyword.get(route, :cooldown_ms),
@@ -101,11 +106,15 @@ defmodule LLMProxy.Config.Catalog do
   end
 
   defp route!(%{} = route) do
+    {provider, provider_name} = route |> Map.fetch!(:to) |> provider_target!()
+
     Deployment.new!(
-      provider: route |> Map.fetch!(:to) |> provider_module!(),
+      provider: provider,
+      provider_name: provider_name,
       upstream_model: Map.fetch!(route, :model),
       order: Map.get(route, :order, 1),
-      token_pool: Map.get(route, :token_pool),
+      token_pool:
+        Map.get(route, :token_pool) || LLMProxy.Config.provider_value(provider_name, :token_pool),
       timeout_ms: Map.get(route, :timeout_ms),
       failure_threshold: Map.get(route, :failure_threshold),
       cooldown_ms: Map.get(route, :cooldown_ms),
@@ -114,26 +123,32 @@ defmodule LLMProxy.Config.Catalog do
     )
   end
 
-  defp provider_module!(module) when is_atom(module) do
-    cond do
-      function_exported?(module, :name, 0) -> module
-      module == :openai -> LLMProxy.Providers.OpenAI
-      module == :openai_codex -> LLMProxy.Providers.OpenAICodex
-      module == :anthropic -> LLMProxy.Providers.Anthropic
-      module == :kimi_code -> LLMProxy.Providers.KimiCode
-      module == :openrouter -> LLMProxy.Providers.OpenRouter
-      true -> raise ArgumentError, "unknown LLMProxy provider #{inspect(module)}"
-    end
-  end
-
   defp provider_module!("openai"), do: LLMProxy.Providers.OpenAI
   defp provider_module!("openai-codex"), do: LLMProxy.Providers.OpenAICodex
   defp provider_module!("anthropic"), do: LLMProxy.Providers.Anthropic
-  defp provider_module!("kimi-code"), do: LLMProxy.Providers.KimiCode
   defp provider_module!("openrouter"), do: LLMProxy.Providers.OpenRouter
 
-  defp provider_module!(provider) do
-    raise ArgumentError, "unknown LLMProxy provider #{inspect(provider)}"
+  defp provider_module!(provider_name) do
+    case LLMProxy.Config.provider_value(provider_name, :adapter) do
+      nil ->
+        raise ArgumentError, "unknown LLMProxy provider #{inspect(provider_name)}"
+
+      _adapter ->
+        LLMProxy.Providers.ReqLLM
+    end
+  end
+
+  defp provider_target!(module) when is_atom(module) do
+    if function_exported?(module, :name, 0) do
+      {module, module.name()}
+    else
+      module |> Atom.to_string() |> String.replace("_", "-") |> provider_target!()
+    end
+  end
+
+  defp provider_target!(name) when is_binary(name) do
+    provider_name = String.replace(name, "_", "-")
+    {provider_module!(provider_name), provider_name}
   end
 
   defp model_name(name) when is_atom(name), do: Atom.to_string(name)

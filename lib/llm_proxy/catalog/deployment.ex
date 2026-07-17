@@ -5,6 +5,7 @@ defmodule LLMProxy.Catalog.Deployment do
 
   @enforce_keys [:provider, :upstream_model]
   defstruct provider: nil,
+            provider_name: nil,
             upstream_model: nil,
             order: 1,
             token_pool: nil,
@@ -16,6 +17,7 @@ defmodule LLMProxy.Catalog.Deployment do
 
   @type t :: %__MODULE__{
           provider: module(),
+          provider_name: String.t(),
           upstream_model: String.t(),
           order: pos_integer(),
           token_pool: String.t() | nil,
@@ -30,6 +32,7 @@ defmodule LLMProxy.Catalog.Deployment do
   def new!(attrs) when is_list(attrs) do
     provider = Keyword.fetch!(attrs, :provider)
     upstream_model = Keyword.fetch!(attrs, :upstream_model)
+    provider_name = Keyword.get(attrs, :provider_name) || default_provider_name(provider)
     order = Keyword.get(attrs, :order, 1)
     timeout_ms = Keyword.get(attrs, :timeout_ms)
 
@@ -41,6 +44,7 @@ defmodule LLMProxy.Catalog.Deployment do
     metadata = Keyword.get(attrs, :metadata, %{})
 
     validate_provider!(provider)
+    validate_non_empty_string!(:provider_name, provider_name)
     validate_non_empty_string!(:upstream_model, upstream_model)
     validate_positive_integer!(:order, order)
     validate_optional_positive_integer!(:timeout_ms, timeout_ms)
@@ -51,6 +55,7 @@ defmodule LLMProxy.Catalog.Deployment do
 
     %__MODULE__{
       provider: provider,
+      provider_name: provider_name,
       upstream_model: upstream_model,
       order: order,
       token_pool: Keyword.get(attrs, :token_pool),
@@ -60,6 +65,10 @@ defmodule LLMProxy.Catalog.Deployment do
       weight: weight,
       metadata: metadata
     }
+  end
+
+  defp default_provider_name(provider) do
+    if function_exported?(provider, :name, 0), do: provider.name(), else: Atom.to_string(provider)
   end
 
   defp validate_provider!(provider) when is_atom(provider), do: :ok

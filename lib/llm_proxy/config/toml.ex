@@ -73,6 +73,7 @@ defmodule LLMProxy.Config.TOML do
   defp route(_route), do: %{}
 
   @known_keys %{
+    "adapter" => :adapter,
     "api_keys" => :api_keys,
     "api_version" => :api_version,
     "base_url" => :base_url,

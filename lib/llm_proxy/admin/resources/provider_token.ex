@@ -21,15 +21,7 @@ defmodule LLMProxy.Admin.Resources.ProviderToken do
     column(:proxy, priority: :tertiary)
     column(:added_at, format: :datetime, priority: :tertiary)
 
-    filter(:provider, :select,
-      options: %{
-        "anthropic" => "Anthropic",
-        "kimi-code" => "Kimi Code",
-        "openai" => "OpenAI",
-        "openai-codex" => "OpenAI Codex",
-        "openrouter" => "OpenRouter"
-      }
-    )
+    filter(:provider, :text)
 
     filter(:kind, :select, options: %{"api-key" => "API key", "oauth" => "OAuth"})
     filter(:enabled, :boolean)

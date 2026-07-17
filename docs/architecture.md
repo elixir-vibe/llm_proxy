@@ -35,4 +35,5 @@ Rules of thumb:
 - Adapter behaviours use singular module names (`Cache`); runtime dispatch belongs in explicit submodules (`Cache.Runtime`).
 - `LLMProxy.Storage` is a facade over `config :llm_proxy, storage: ...`; the default `LLMProxy.Storage.Ecto` implementation goes through `LLMProxy.Storage.Repo`, which delegates to `config :llm_proxy, repo: MyApp.Repo`. DB-specific SQL and migrations branch on the configured repo's `__adapter__/0`, and database adapters remain host-provided/optional.
 - `LLMProxy.Admin` is the only service-owned admin surface. It exposes Ecto schemas convention-first through Incant, while modules under `LLMProxy.Admin.Resources.*` override inferred resources automatically. Do not add a parallel public admin UI or public service-owned admin HTTP routes.
-- Provider-specific defaults live in nested provider config (`config :llm_proxy, providers: ...`).
+- Provider-specific defaults live in nested provider config (`config :llm_proxy, providers: ...`). Named providers with an `adapter` are executed by `LLMProxy.Providers.ReqLLM`; endpoint/model differences do not require new LLMProxy modules.
+- Catalog deployments carry `provider_name` and `token_pool` into execution attempts. This keeps credentials isolated when multiple named services share one ReqLLM adapter.

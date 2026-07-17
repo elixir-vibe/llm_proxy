@@ -21,31 +21,31 @@ defmodule LLMProxy.Providers.Anthropic do
   def models, do: LLMProxy.ModelDB.provider_model_ids(:anthropic)
 
   @impl true
-  def call(body, user_id) do
-    with {:ok, token} <- pick_token(user_id) do
-      do_call(body, token)
-    end
+  def call(body, user_id), do: call_from_pool(body, user_id, name())
+
+  def call(body, user_id, %LLMProxy.Providers.Attempt{token_pool: token_pool}) do
+    call_from_pool(body, user_id, token_pool || name())
   end
 
   @impl true
-  def stream(body, user_id) do
-    with {:ok, token} <- pick_token(user_id) do
-      body |> Map.put("stream", true) |> do_stream(token)
-    end
+  def stream(body, user_id), do: stream_from_pool(body, user_id, name())
+
+  def stream(body, user_id, %LLMProxy.Providers.Attempt{token_pool: token_pool}) do
+    stream_from_pool(body, user_id, token_pool || name())
   end
 
   @impl true
-  def call_native(body, user_id) do
-    with {:ok, token} <- pick_token(user_id) do
-      do_call(body, token)
-    end
+  def call_native(body, user_id), do: call_from_pool(body, user_id, name())
+
+  def call_native(body, user_id, %LLMProxy.Providers.Attempt{token_pool: token_pool}) do
+    call_from_pool(body, user_id, token_pool || name())
   end
 
   @impl true
-  def stream_native(body, user_id) do
-    with {:ok, token} <- pick_token(user_id) do
-      body |> Map.put("stream", true) |> do_stream(token)
-    end
+  def stream_native(body, user_id), do: stream_from_pool(body, user_id, name())
+
+  def stream_native(body, user_id, %LLMProxy.Providers.Attempt{token_pool: token_pool}) do
+    stream_from_pool(body, user_id, token_pool || name())
   end
 
   @impl true
@@ -56,8 +56,18 @@ defmodule LLMProxy.Providers.Anthropic do
     Protocol.OpenAI.convert_response(response, :anthropic, model)
   end
 
-  defp pick_token(user_id) do
-    case TokenPool.pick_token("anthropic", user_id) do
+  defp call_from_pool(body, user_id, pool) do
+    with {:ok, token} <- pick_token(pool, user_id), do: do_call(body, token)
+  end
+
+  defp stream_from_pool(body, user_id, pool) do
+    with {:ok, token} <- pick_token(pool, user_id) do
+      body |> Map.put("stream", true) |> do_stream(token)
+    end
+  end
+
+  defp pick_token(pool, user_id) do
+    case TokenPool.pick_token(pool, user_id) do
       {:ok, token} -> {:ok, token}
       {:error, reason} -> Result.unavailable_tokens(reason)
     end
