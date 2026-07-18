@@ -9,6 +9,7 @@ defmodule LLMProxy.RouterTest do
   test "Cowboy keeps active streaming responses alive" do
     protocol_options = :ranch.get_protocol_options(LLMProxy.HTTP.Router.HTTP)
 
+    assert protocol_options.idle_timeout == LLMProxy.Config.provider_receive_timeout_ms()
     assert protocol_options.reset_idle_timeout_on_send == true
   end
 

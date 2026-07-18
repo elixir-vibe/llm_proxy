@@ -89,7 +89,10 @@ defmodule LLMProxy.Application do
          options: [
            ip: {127, 0, 0, 1},
            port: LLMProxy.Config.http_port(),
-           protocol_options: [reset_idle_timeout_on_send: true]
+           protocol_options: [
+             idle_timeout: LLMProxy.Config.provider_receive_timeout_ms(),
+             reset_idle_timeout_on_send: true
+           ]
          ]}
       ]
     else
