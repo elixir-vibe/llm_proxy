@@ -43,6 +43,17 @@ defmodule LLMProxy.Providers.ReqLLMTest do
 
   test "executes a configured provider through ReqLLM and its isolated token pool" do
     test_pid = self()
+    telemetry_handler = {__MODULE__, self(), make_ref()}
+
+    :ok =
+      :telemetry.attach(
+        telemetry_handler,
+        [:req_llm, :request, :start],
+        fn _event, _measurements, metadata, pid -> send(pid, {:request_metadata, metadata}) end,
+        self()
+      )
+
+    on_exit(fn -> :telemetry.detach(telemetry_handler) end)
 
     ReqTest.stub(HTTPStub, fn conn ->
       send(test_pid, {:request, conn.request_path, conn.body_params, conn.req_headers})
@@ -104,6 +115,11 @@ defmodule LLMProxy.Providers.ReqLLMTest do
     assert_receive {:request, "/v1/chat/completions", request_body, headers}
     assert request_body["model"] == "upstream-model"
     assert {"authorization", "Bearer configured-token"} in headers
+
+    assert_receive {:request_metadata, metadata}
+
+    assert metadata.request_options.receive_timeout ==
+             LLMProxy.Config.provider_receive_timeout_ms()
   end
 
   test "normalizes a prior provider tool-call turn before configured execution" do

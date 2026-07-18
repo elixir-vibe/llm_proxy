@@ -86,7 +86,11 @@ defmodule LLMProxy.Application do
         {Plug.Cowboy,
          scheme: :http,
          plug: LLMProxy.HTTP.Router,
-         options: [ip: {127, 0, 0, 1}, port: LLMProxy.Config.http_port()]}
+         options: [
+           ip: {127, 0, 0, 1},
+           port: LLMProxy.Config.http_port(),
+           protocol_options: [reset_idle_timeout_on_send: true]
+         ]}
       ]
     else
       []

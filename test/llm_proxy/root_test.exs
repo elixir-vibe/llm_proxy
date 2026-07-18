@@ -6,6 +6,12 @@ defmodule LLMProxy.RouterTest do
 
   @opts Router.init([])
 
+  test "Cowboy keeps active streaming responses alive" do
+    protocol_options = :ranch.get_protocol_options(LLMProxy.HTTP.Router.HTTP)
+
+    assert protocol_options.reset_idle_timeout_on_send == true
+  end
+
   test "GET /health returns ok" do
     conn =
       conn(:get, "/health")

@@ -110,7 +110,11 @@ defmodule LLMProxy.Providers.ReqLLM do
       }
 
       opts =
-        [api_key: token.token, base_url: base_url]
+        [
+          api_key: token.token,
+          base_url: base_url,
+          receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
+        ]
         |> Keyword.merge(configured_req_options(provider_name))
         |> Keyword.merge(body_options(body))
 
