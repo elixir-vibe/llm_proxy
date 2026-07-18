@@ -1,6 +1,7 @@
 defmodule LLMProxy.Providers.ReqLLM.Projection do
   @moduledoc false
 
+  alias LLMProxy.Providers.ReqLLM.ErrorProjection
   alias LLMProxy.Stream.Event
   alias LLMProxy.Usage
   alias ReqLLM.{Response, StreamEvent, ToolCall}
@@ -70,7 +71,7 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
   end
 
   def events(%StreamEvent{type: :error, data: error}, _model) do
-    [Event.new(%{"error" => %{"message" => inspect(error), "type" => "api_error"}})]
+    [Event.new(%{"error" => ErrorProjection.client_error(error)})]
   end
 
   def events(_event, _model), do: []

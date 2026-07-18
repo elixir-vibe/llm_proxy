@@ -13,7 +13,7 @@ defmodule LLMProxy.Providers.ReqLLM do
   alias Elixir.ReqLLM.{Context, StreamResponse, Tool}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Attempt, Result}
-  alias LLMProxy.Providers.ReqLLM.Projection
+  alias LLMProxy.Providers.ReqLLM.{ErrorProjection, Projection}
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Usage
 
@@ -209,15 +209,11 @@ defmodule LLMProxy.Providers.ReqLLM do
   end
 
   defp req_llm_error(reason, token) do
-    status = error_status(reason)
-    if status == 429, do: TokenPool.mark_rate_limited(token)
+    error = ErrorProjection.project(reason)
+    if error.status == 429, do: TokenPool.mark_rate_limited(token)
 
-    message = if is_exception(reason), do: Exception.message(reason), else: inspect(reason)
-    Result.error(message, status, token)
+    Result.error(error.message, error.status, token,
+      provider_body: %{"error" => ErrorProjection.client_error(reason)}
+    )
   end
-
-  defp error_status(%Request.Error{}), do: 400
-  defp error_status(%{status: status}) when is_integer(status), do: status
-  defp error_status(%{status_code: status}) when is_integer(status), do: status
-  defp error_status(_reason), do: 502
 end
