@@ -14,7 +14,7 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
-  alias LLMProxy.Stream.{Event, SSEWriter}
+  alias LLMProxy.Stream.{Event, Heartbeat, SSEWriter}
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Trace
   alias LLMProxy.Usage
@@ -127,13 +127,19 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
 
     {conn, usage} =
       try do
-        Enum.reduce_while(stream, {conn, zero_usage}, fn %Event{} = event, {conn, usage} ->
-          usage = merge_stream_usage(usage, event)
+        stream
+        |> Heartbeat.wrap()
+        |> Enum.reduce_while({conn, zero_usage}, fn
+          %Heartbeat{}, {conn, usage} ->
+            SSEWriter.reduce_heartbeat(conn, usage)
 
-          case SSEWriter.write_event(conn, encode_stream_event(event.data)) do
-            {:ok, conn} -> {:cont, {conn, usage}}
-            {:error, _reason} -> {:halt, {conn, usage}}
-          end
+          %Event{} = event, {conn, usage} ->
+            usage = merge_stream_usage(usage, event)
+
+            case SSEWriter.write_event(conn, encode_stream_event(event.data)) do
+              {:ok, conn} -> {:cont, {conn, usage}}
+              {:error, _reason} -> {:halt, {conn, usage}}
+            end
         end)
       rescue
         e in [RuntimeError, Jason.DecodeError, Protocol.UndefinedError] ->

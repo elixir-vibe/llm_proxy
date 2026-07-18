@@ -214,12 +214,12 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     Sandbox.allow(SQLite, self(), task_pid)
     send(task_pid, :start_blocking_stream)
 
-    assert_receive {:blocking_stream_waiting, ^task_pid}
+    assert_receive {:blocking_stream_waiting, stream_pid}
     assert %{active: %{streams: 1, total: 1}, serving: true} = LLMProxy.Drain.status()
     assert %{draining: true, ready: false} = LLMProxy.Drain.start()
     assert {:error, :timeout} = LLMProxy.Drain.await_empty(10)
 
-    send(task.pid, :release_blocking_stream)
+    send(stream_pid, :release_blocking_stream)
     conn = Task.await(task)
 
     assert conn.status == 200

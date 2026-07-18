@@ -29,6 +29,17 @@ defmodule LLMProxy.Stream.SSEWriter do
     write_named_event(conn, event_name, Jason.encode!(data))
   end
 
+  def write_heartbeat(conn) do
+    chunk(conn, ": keep-alive\n\n")
+  end
+
+  def reduce_heartbeat(conn, state) do
+    case write_heartbeat(conn) do
+      {:ok, conn} -> {:cont, {conn, state}}
+      {:error, _reason} -> {:halt, {conn, state}}
+    end
+  end
+
   def write_done(conn) do
     chunk(conn, "data: [DONE]\n\n")
   end

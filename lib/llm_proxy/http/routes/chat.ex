@@ -12,7 +12,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   alias LLMProxy.Protocol.{OpenAI, Request}
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
-  alias LLMProxy.Stream.SSEWriter
+  alias LLMProxy.Stream.{Heartbeat, SSEWriter}
   alias LLMProxy.Trace
 
   plug(Auth)
@@ -119,9 +119,14 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   end
 
   defp pipe_stream(conn, stream, from_protocol, model) do
-    Enum.reduce_while(stream, conn, fn event, conn ->
-      conn
-      |> write_stream_event(OpenAI.stream_event(event.data, from_protocol, model))
+    stream
+    |> Heartbeat.wrap()
+    |> Enum.reduce_while(conn, fn
+      %Heartbeat{}, conn ->
+        write_heartbeat(conn)
+
+      event, conn ->
+        write_stream_event(conn, OpenAI.stream_event(event.data, from_protocol, model))
     end)
     |> then(fn conn ->
       case SSEWriter.write_done(conn) do
@@ -129,6 +134,13 @@ defmodule LLMProxy.HTTP.Routes.Chat do
         {:error, _reason} -> conn
       end
     end)
+  end
+
+  defp write_heartbeat(conn) do
+    case SSEWriter.write_heartbeat(conn) do
+      {:ok, conn} -> {:cont, conn}
+      {:error, _reason} -> {:halt, conn}
+    end
   end
 
   defp write_stream_event(conn, nil), do: {:cont, conn}

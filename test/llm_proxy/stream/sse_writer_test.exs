@@ -11,6 +11,7 @@ defmodule LLMProxy.Stream.SSEWriterTest do
     assert conn.state == :chunked
     assert {:ok, conn} = SSEWriter.write_event(conn, %{"message" => "hello"})
     assert {:ok, conn} = SSEWriter.write_named_event(conn, "update", %{"step" => 1})
+    assert {:ok, conn} = SSEWriter.write_heartbeat(conn)
     assert {:ok, _conn} = SSEWriter.write_done(conn)
   end
 end
