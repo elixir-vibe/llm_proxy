@@ -6,7 +6,9 @@ defmodule LLMProxy.Admin.Resources.Trace do
     repo: LLMProxy.Storage.Repo,
     title: "Traces"
 
-  table density: :compact, default_sort: [timestamp: :desc] do
+  table density: :compact,
+        default_sort: [timestamp: :desc],
+        empty_state: "No traces recorded yet. Enable tracing on an API key to start collecting request traces." do
     column(:timestamp, link: true, format: :datetime, priority: :primary)
     column(:key_id, format: :id, priority: :tertiary)
     column(:model, priority: :primary)
