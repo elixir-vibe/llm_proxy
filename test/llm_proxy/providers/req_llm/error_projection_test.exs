@@ -64,4 +64,32 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
              "status" => 502
            }
   end
+
+  test "surfaces the transport reason for connection-level failures" do
+    for reason <- [:econnrefused, :nxdomain, :closed, :timeout] do
+      error = %Req.TransportError{reason: reason}
+
+      projected = ErrorProjection.project(error)
+
+      assert projected.message == "Connection error: #{reason}"
+      assert projected.status == 502
+    end
+  end
+
+  test "surfaces nested transport reasons through the cause chain" do
+    transport = %Req.TransportError{reason: :econnrefused}
+
+    stream_error =
+      APIStreamError.exception(
+        reason: "stream terminated",
+        cause: transport
+      )
+
+    assert ErrorProjection.project(stream_error).message == "Connection error: econnrefused"
+  end
+
+  test "string transport reasons are recognized" do
+    error = %{reason: "econnrefused"}
+    assert ErrorProjection.project(error).message == "Connection error: econnrefused"
+  end
 end

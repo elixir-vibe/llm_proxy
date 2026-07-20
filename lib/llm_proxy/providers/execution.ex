@@ -90,13 +90,13 @@ defmodule LLMProxy.Providers.Execution do
     Result.with_attempt({:ok, result}, attempt)
   end
 
-  defp handle_call_result({:error, %Result{status: status}} = error, attempt, rest, body, user_id)
+  defp handle_call_result({:error, %Result{status: status} = result} = error, attempt, rest, body, user_id)
        when status in @retryable_statuses do
     CircuitBreaker.failure(attempt, retry_after(error))
     Telemetry.emit([:routing, :attempt, :exception], attempt, %{status: status})
 
     Logger.warning(
-      "#{attempt.provider.name()}/#{attempt.model} returned #{status}, trying fallback"
+      "#{attempt.provider.name()}/#{attempt.model} returned #{status} (#{result.error}), trying fallback"
     )
 
     try_call(rest, body, user_id, error)
@@ -107,6 +107,14 @@ defmodule LLMProxy.Providers.Execution do
     Telemetry.emit([:routing, :attempt, :exception], attempt, %{status: 429})
     Logger.warning("#{attempt.provider.name()}/#{attempt.model} rate-limited, trying fallback")
     try_call(rest, body, user_id, error)
+  end
+
+  defp handle_call_result({:error, %Result{} = result} = error, attempt, _rest, _body, _user_id) do
+    Logger.warning(
+      "#{attempt.provider.name()}/#{attempt.model} failed (#{result.status}): #{result.error}"
+    )
+
+    error
   end
 
   defp handle_call_result({:error, _result} = error, _attempt, _rest, _body, _user_id), do: error
@@ -142,7 +150,7 @@ defmodule LLMProxy.Providers.Execution do
   end
 
   defp handle_stream_result(
-         {:error, %Result{status: status}} = error,
+         {:error, %Result{status: status} = result} = error,
          attempt,
          rest,
          body,
@@ -153,7 +161,7 @@ defmodule LLMProxy.Providers.Execution do
     Telemetry.emit([:routing, :stream_attempt, :exception], attempt, %{status: status})
 
     Logger.warning(
-      "#{attempt.provider.name()}/#{attempt.model} returned #{status}, trying fallback (stream)"
+      "#{attempt.provider.name()}/#{attempt.model} returned #{status} (#{result.error}), trying fallback (stream)"
     )
 
     try_stream(rest, body, user_id, error)
@@ -168,6 +176,14 @@ defmodule LLMProxy.Providers.Execution do
     )
 
     try_stream(rest, body, user_id, error)
+  end
+
+  defp handle_stream_result({:error, %Result{} = result} = error, attempt, _rest, _body, _user_id) do
+    Logger.warning(
+      "#{attempt.provider.name()}/#{attempt.model} failed (#{result.status}) (stream): #{result.error}"
+    )
+
+    error
   end
 
   defp handle_stream_result({:error, _result} = error, _attempt, _rest, _body, _user_id),
@@ -255,7 +271,7 @@ defmodule LLMProxy.Providers.Execution do
   end
 
   defp handle_retryable_native_error(
-         {:error, %Result{status: status}} = error,
+         {:error, %Result{status: status} = result} = error,
          attempt,
          rest,
          function,
@@ -267,7 +283,7 @@ defmodule LLMProxy.Providers.Execution do
     Telemetry.emit([:routing, native_event(function), :exception], attempt, %{status: status})
 
     Logger.warning(
-      "#{attempt.provider.name()}/#{attempt.model} returned #{status}, trying fallback (native)"
+      "#{attempt.provider.name()}/#{attempt.model} returned #{status} (#{result.error}), trying fallback (native)"
     )
 
     try_native(

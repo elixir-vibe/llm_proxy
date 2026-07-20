@@ -5,6 +5,18 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   @fallback_message "Upstream provider request failed"
 
+  @transport_reasons [
+    :econnrefused,
+    :econnreset,
+    :nxdomain,
+    :timeout,
+    :closed,
+    :ENOTFOUND,
+    :unreachable,
+    :tls_alert,
+    :certificate_expired
+  ]
+
   @type t :: %{
           message: String.t(),
           code: String.t(),
@@ -55,10 +67,35 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
     |> field(:response_body)
     |> body_message()
     |> case do
-      nil -> safe_reason(field(error, :reason))
+      nil -> reason_message(error)
       message -> message
     end
   end
+
+  # Surface the underlying transport reason (DNS failure, refused connection,
+  # reset, TLS problem, timeout) instead of the opaque fallback so operators
+  # can tell a dead upstream from a generic provider error.
+  defp reason_message(error) do
+    reason = field(error, :reason)
+
+    cond do
+      reason in @transport_reasons -> "Connection error: #{reason}"
+      transport_reason?(reason) -> "Connection error: #{reason}"
+      true -> safe_reason(reason)
+    end
+  end
+
+  defp transport_reason?(reason) when is_atom(reason) do
+    reason
+    |> Atom.to_string()
+    |> String.contains?(["conn", "closed", "reset", "refused", "timeout", "nxdomain", "unreachable"])
+  end
+
+  defp transport_reason?(reason) when is_binary(reason) do
+    String.contains?(reason, ["conn", "closed", "reset", "refused", "timeout", "nxdomain", "unreachable"])
+  end
+
+  defp transport_reason?(_reason), do: false
 
   defp code(%RequestError{code: code}), do: code
 
