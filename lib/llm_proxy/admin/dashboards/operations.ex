@@ -41,7 +41,7 @@ defmodule LLMProxy.Admin.Dashboards.Operations do
       column(:cost_usd, label: "Cost", format: :money, priority: :secondary)
       column(:duration_ms, label: "Duration", format: :duration_ms, priority: :tertiary)
       column(:ttft_ms, label: "TTFT", format: :duration_ms, priority: :tertiary)
-      column(:key_id, label: "Key", priority: :tertiary)
+      column(:key_id, label: "Key", format: :id, priority: :tertiary)
     end
 
     table :service_usage, span: 3, label: "Service usage", query: &__MODULE__.service_usage/2 do
