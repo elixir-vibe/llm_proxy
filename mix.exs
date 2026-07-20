@@ -1,15 +1,23 @@
 defmodule LLMProxy.MixProject do
   use Mix.Project
 
+  @source_url "https://github.com/elixir-vibe/llm_proxy"
+  @version "0.1.0"
+
   def project do
     [
       app: :llm_proxy,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
       releases: releases(),
+      description: description(),
+      package: package(),
+      docs: docs(),
+      source_url: @source_url,
+      homepage_url: @source_url,
       elixirc_options: [
         no_warn_undefined: [
           {Igniter, :add_notice, 2},
@@ -45,6 +53,39 @@ defmodule LLMProxy.MixProject do
     ]
   end
 
+  defp description do
+    "Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, " <>
+      "provider token pools, and OpenAI-compatible HTTP routes."
+  end
+
+  defp package do
+    [
+      name: "llm_proxy",
+      licenses: ["MIT"],
+      links: %{"GitHub" => @source_url},
+      files: ~w(lib priv/repo/migrations .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
+    ]
+  end
+
+  defp docs do
+    [
+      main: "LLMProxy",
+      extras: [
+        "README.md",
+        "CHANGELOG.md",
+        "SKILL.md",
+        "docs/architecture.md",
+        "docs/providers.md",
+        "docs/roadmap.md"
+      ],
+      groups_for_extras: [
+        Guides: ~r/docs\//
+      ],
+      source_ref: "v#{@version}",
+      source_url: @source_url
+    ]
+  end
+
   defp deps do
     [
       {:release_kit, "~> 0.3.0", runtime: false},
@@ -60,7 +101,7 @@ defmodule LLMProxy.MixProject do
       {:dotenvy, "~> 1.1"},
       {:toml, "~> 0.7"},
       {:jason, "~> 1.4"},
-      {:json_codec, "~> 0.2.2", override: true},
+      {:json_codec, "~> 0.2.3"},
       {:incant, git: "git@github.com:elixir-vibe/incant.git", branch: "main"},
       {:safe_rpc, "~> 0.1.12"},
 
@@ -76,6 +117,7 @@ defmodule LLMProxy.MixProject do
       {:mox, "~> 1.1", only: :test},
       {:lazy_html, ">= 0.1.0", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
