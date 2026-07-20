@@ -17,14 +17,14 @@ defmodule LLMProxy.Admin.Dashboards.Operations do
     stat(:input_tokens,
       span: 2,
       label: "Input tokens",
-      format: :number,
+      format: :compact_number,
       query: &__MODULE__.input_tokens/2
     )
 
     stat(:output_tokens,
       span: 2,
       label: "Output tokens",
-      format: :number,
+      format: :compact_number,
       query: &__MODULE__.output_tokens/2
     )
 
