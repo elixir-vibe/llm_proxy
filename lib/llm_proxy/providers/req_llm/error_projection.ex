@@ -88,11 +88,27 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   defp transport_reason?(reason) when is_atom(reason) do
     reason
     |> Atom.to_string()
-    |> String.contains?(["conn", "closed", "reset", "refused", "timeout", "nxdomain", "unreachable"])
+    |> String.contains?([
+      "conn",
+      "closed",
+      "reset",
+      "refused",
+      "timeout",
+      "nxdomain",
+      "unreachable"
+    ])
   end
 
   defp transport_reason?(reason) when is_binary(reason) do
-    String.contains?(reason, ["conn", "closed", "reset", "refused", "timeout", "nxdomain", "unreachable"])
+    String.contains?(reason, [
+      "conn",
+      "closed",
+      "reset",
+      "refused",
+      "timeout",
+      "nxdomain",
+      "unreachable"
+    ])
   end
 
   defp transport_reason?(_reason), do: false

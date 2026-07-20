@@ -90,7 +90,13 @@ defmodule LLMProxy.Providers.Execution do
     Result.with_attempt({:ok, result}, attempt)
   end
 
-  defp handle_call_result({:error, %Result{status: status} = result} = error, attempt, rest, body, user_id)
+  defp handle_call_result(
+         {:error, %Result{status: status} = result} = error,
+         attempt,
+         rest,
+         body,
+         user_id
+       )
        when status in @retryable_statuses do
     CircuitBreaker.failure(attempt, retry_after(error))
     Telemetry.emit([:routing, :attempt, :exception], attempt, %{status: status})

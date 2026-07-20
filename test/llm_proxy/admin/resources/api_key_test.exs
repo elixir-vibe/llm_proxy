@@ -1,24 +1,28 @@
-defmodule LLMProxy.Admin.Resources.ApiKeyTest do
-  use ExUnit.Case, async: false
+if Code.ensure_loaded?(Incant) do
+  defmodule LLMProxy.Admin.Resources.ApiKeyTest do
+    use ExUnit.Case, async: false
 
-  alias Incant.ActionResult
-  alias LLMProxy.Admin.Resources.ApiKey
-  alias LLMProxy.Storage
+    @moduletag :incant
 
-  setup do
-    LLMProxy.TestSupport.checkout_repo()
-  end
+    alias Incant.ActionResult
+    alias LLMProxy.Admin.Resources.ApiKey
+    alias LLMProxy.Storage
 
-  test "creates and deletes API keys" do
-    assert {:ok, %ActionResult.Job{id: "api_key:" <> _id, meta: meta}} =
-             ApiKey.create(%{}, %{"name" => "operator-test", "trace_requests" => true})
+    setup do
+      LLMProxy.TestSupport.checkout_repo()
+    end
 
-    assert %{id: id, name: "operator-test", token: "sk-proxy-" <> _} = meta
-    assert key = Storage.find_key(meta.token)
-    assert key.id == id
-    assert key.trace_requests == true
+    test "creates and deletes API keys" do
+      assert {:ok, %ActionResult.Job{id: "api_key:" <> _id, meta: meta}} =
+               ApiKey.create(%{}, %{"name" => "operator-test", "trace_requests" => true})
 
-    assert {:ok, %ActionResult.Refresh{}} = ApiKey.delete(%{id: id}, %{})
-    assert Storage.list_keys() == []
+      assert %{id: id, name: "operator-test", token: "sk-proxy-" <> _} = meta
+      assert key = Storage.find_key(meta.token)
+      assert key.id == id
+      assert key.trace_requests == true
+
+      assert {:ok, %ActionResult.Refresh{}} = ApiKey.delete(%{id: id}, %{})
+      assert Storage.list_keys() == []
+    end
   end
 end

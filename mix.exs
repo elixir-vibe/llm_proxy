@@ -102,7 +102,7 @@ defmodule LLMProxy.MixProject do
       {:toml, "~> 0.7"},
       {:jason, "~> 1.4"},
       {:json_codec, "~> 0.2.3"},
-      {:incant, git: "git@github.com:elixir-vibe/incant.git", branch: "main"},
+      {:incant, "~> 0.1", optional: true},
       {:safe_rpc, "~> 0.1.12"},
 
       # OpenTelemetry

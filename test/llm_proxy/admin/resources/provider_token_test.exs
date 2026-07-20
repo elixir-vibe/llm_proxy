@@ -1,25 +1,29 @@
-defmodule LLMProxy.Admin.Resources.ProviderTokenTest do
-  use ExUnit.Case, async: false
+if Code.ensure_loaded?(Incant) do
+  defmodule LLMProxy.Admin.Resources.ProviderTokenTest do
+    use ExUnit.Case, async: false
 
-  alias Incant.ActionResult
-  alias LLMProxy.Admin.Resources.ProviderToken
-  alias LLMProxy.Storage
+    @moduletag :incant
 
-  setup do
-    LLMProxy.TestSupport.checkout_repo()
-  end
+    alias Incant.ActionResult
+    alias LLMProxy.Admin.Resources.ProviderToken
+    alias LLMProxy.Storage
 
-  test "enables, disables, and removes provider tokens" do
-    {:ok, token} = Storage.add_token("openai", "api-key", "admin-token")
-    id = to_string(token.id)
+    setup do
+      LLMProxy.TestSupport.checkout_repo()
+    end
 
-    assert {:ok, %ActionResult.Refresh{}} = ProviderToken.disable(%{id: id}, %{})
-    assert [%{enabled: false}] = Storage.list_tokens(%{provider: "openai"})
+    test "enables, disables, and removes provider tokens" do
+      {:ok, token} = Storage.add_token("openai", "api-key", "admin-token")
+      id = to_string(token.id)
 
-    assert {:ok, %ActionResult.Refresh{}} = ProviderToken.enable(%{id: id}, %{})
-    assert [%{enabled: true}] = Storage.list_tokens(%{provider: "openai"})
+      assert {:ok, %ActionResult.Refresh{}} = ProviderToken.disable(%{id: id}, %{})
+      assert [%{enabled: false}] = Storage.list_tokens(%{provider: "openai"})
 
-    assert {:ok, %ActionResult.Refresh{}} = ProviderToken.remove(%{id: id}, %{})
-    assert Storage.list_tokens(%{provider: "openai"}) == []
+      assert {:ok, %ActionResult.Refresh{}} = ProviderToken.enable(%{id: id}, %{})
+      assert [%{enabled: true}] = Storage.list_tokens(%{provider: "openai"})
+
+      assert {:ok, %ActionResult.Refresh{}} = ProviderToken.remove(%{id: id}, %{})
+      assert Storage.list_tokens(%{provider: "openai"}) == []
+    end
   end
 end

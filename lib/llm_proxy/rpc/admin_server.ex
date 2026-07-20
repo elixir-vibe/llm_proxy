@@ -9,18 +9,18 @@ defmodule LLMProxy.RPC.AdminServer do
 
   use SafeRPC.Server
 
-  @services [LLMProxy.Admin, LLMProxy.Ops]
-
   @impl true
   def init(opts) do
     states =
-      Map.new(@services, fn service ->
+      Map.new(services(), fn service ->
         {:ok, state} = service.init(opts)
         {service, state}
       end)
 
     {:ok, states}
   end
+
+  defp services, do: Enum.filter([LLMProxy.Admin, LLMProxy.Ops], &Code.ensure_loaded?/1)
 
   @impl true
   def handle_call(:safe_rpc_describe, _payload, state) do
@@ -54,7 +54,7 @@ defmodule LLMProxy.RPC.AdminServer do
   end
 
   defp dispatch(_kind, {service, _function} = op, payload, meta, state) do
-    if service in @services do
+    if service in services() do
       service.call(op, payload, meta, Map.fetch!(state, service))
     else
       {:error, :unknown_operation}
@@ -65,7 +65,7 @@ defmodule LLMProxy.RPC.AdminServer do
 
   defp describe(state) do
     descriptors =
-      Enum.map(@services, fn service ->
+      Enum.map(services(), fn service ->
         {:ok, descriptor} = SafeRPC.Adapter.Server.describe(service, Map.fetch!(state, service))
         descriptor
       end)
@@ -75,7 +75,7 @@ defmodule LLMProxy.RPC.AdminServer do
 
   defp atoms do
     atoms =
-      @services
+      services()
       |> Enum.flat_map(fn service ->
         {:ok, atoms} = SafeRPC.Adapter.Server.atoms(service, nil)
         atoms

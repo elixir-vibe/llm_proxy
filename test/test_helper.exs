@@ -7,4 +7,8 @@ unless Code.ensure_loaded?(Ecto.Adapters.QuackDB) do
 end
 
 Ecto.Adapters.SQL.Sandbox.mode(LLMProxy.Storage.Repo.SQLite, :manual)
-ExUnit.start(exclude: [:integration])
+
+excluded = [:integration]
+excluded = if Code.ensure_loaded?(Incant), do: excluded, else: [:incant | excluded]
+
+ExUnit.start(exclude: excluded)
