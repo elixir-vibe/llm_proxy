@@ -39,8 +39,8 @@ defmodule LLMProxy.Admin.Dashboards.Operations do
       column(:input_tokens, label: "Input tokens", format: :number, priority: :secondary)
       column(:output_tokens, label: "Output tokens", format: :number, priority: :tertiary)
       column(:cost_usd, label: "Cost", format: :money, priority: :secondary)
-      column(:duration_ms, label: "Duration", format: :number, priority: :tertiary)
-      column(:ttft_ms, label: "TTFT", format: :number, priority: :tertiary)
+      column(:duration_ms, label: "Duration", format: :duration_ms, priority: :tertiary)
+      column(:ttft_ms, label: "TTFT", format: :duration_ms, priority: :tertiary)
       column(:key_id, label: "Key", priority: :tertiary)
     end
 
