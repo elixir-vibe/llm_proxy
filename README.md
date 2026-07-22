@@ -2,7 +2,9 @@
 
 [![Hex.pm](https://img.shields.io/hexpm/v/llm_proxy.svg)](https://hex.pm/packages/llm_proxy) [![Documentation](https://img.shields.io/badge/documentation-gray)](https://hexdocs.pm/llm_proxy)
 
-An Elixir-native LLM gateway for Phoenix applications and standalone services. Route one public model name across providers, enforce API-key budgets and quotas, pool upstream credentials, and record usage, cost, latency, and traces through the same execution path.
+A self-hosted, Elixir-native alternative to LiteLLM. Put one API in front of OpenAI, Anthropic, OpenRouter, Kimi Code, OpenAI Codex, and custom OpenAI-compatible providers—then switch models, add fallbacks, and control spend without changing every application that calls them.
+
+LLMProxy gives applications stable model names such as `fast`, `smart`, or `cheap`. You decide where those names run, how traffic fails over, who may use them, and how much they may spend. Provider credentials and usage data stay in infrastructure you control.
 
 Use LLMProxy directly inside an Elixir application:
 
@@ -27,31 +29,24 @@ curl http://127.0.0.1:4000/v1/chat/completions \
 
 ## Why LLMProxy
 
-- **One core, two deployment modes.** Call `LLMProxy.chat/2` in-process, mount the routes in Phoenix, or run the bundled OTP release. Local, HTTP, ReqLLM, and [SafeRPC](https://hexdocs.pm/safe_rpc) calls share routing, accounting, and policy.
-- **Stable model names over changing providers.** Map an alias such as `fast` to ordered, shuffled, round-robin, weighted, or lowest-cost deployments. Retryable failures fall through to healthy routes, with per-deployment timeouts and circuit breakers.
-- **Governance you own.** API keys can restrict models and enforce token, message, cache, and spend limits. Usage, estimated cost, latency, messages, and traces stay in your configured storage.
-- **Credentials stay isolated.** Provider token pools support multiple upstream keys, stable actor pinning, `Retry-After` cooldowns, and separate pools for services that happen to share a protocol.
-- **Compatible where clients need it.** Serve OpenAI Chat Completions, Responses, Moderations, and Anthropic Messages, including streaming. Use the same gateway as a ReqLLM provider from Elixir.
-- **Policy without a hosted platform.** Add deterministic cache and guardrail modules, export OpenTelemetry spans, and optionally expose operations through Incant.
+- **Connect your applications once.** Point any OpenAI-compatible client at LLMProxy, use the Anthropic Messages API, or call it directly from Elixir. Stop duplicating provider adapters, authentication, retries, and usage tracking in every product.
+- **Change providers without changing clients.** Applications request a public name such as `fast`; you can move it from OpenAI to Anthropic, OpenRouter, or a private endpoint by changing gateway configuration instead of application code.
+- **Keep working when a provider does not.** Route across multiple models, providers, regions, or credentials. Timeouts, retries, health-aware fallbacks, circuit breakers, and load-balancing strategies keep individual failures away from your users.
+- **Control spend before the invoice arrives.** Issue keys per application, customer, or team; restrict which models they can call; and enforce token, request, cache, and dollar budgets. See usage and estimated cost in one place.
+- **Stop spreading provider keys across services.** Store upstream credentials in the gateway, rotate or pool them centrally, and give applications LLMProxy keys with only the access they need.
+- **Self-host without adding a Python control plane.** Run the bundled OTP service as a LiteLLM-style gateway, or embed the same capabilities directly in an Elixir/Phoenix release. Your prompts, traces, credentials, and operational data remain under your control.
 
-## How it fits
+## One model name, many ways to serve it
+
+Your clients call `fast`. LLMProxy can send that traffic to one preferred deployment, balance it across several, or fall back when an upstream is unavailable:
 
 ```text
-Elixir calls          ReqLLM calls          HTTP clients          Remote BEAM apps
-LLMProxy.chat/2       provider: :llm_proxy  /v1/chat/completions  SafeRPC
-       │                     │                       │                │
-       └─────────────────────┴───────────┬───────────┴────────────────┘
-                                         ▼
-                                LLMProxy.Provider
-                                         │
-                   auth → quota → policy → cache → routing
-                                         │
-                    fallback → usage → cost → traces → telemetry
-                                         │
-                      OpenAI / Anthropic / OpenRouter / custom
+                         ┌─ OpenAI / gpt-4.1-mini
+client ── model: fast ───┼─ OpenRouter / google/gemini-2.5-flash
+                         └─ private OpenAI-compatible endpoint
 ```
 
-`LLMProxy.Provider` is the execution boundary. HTTP routes translate wire protocols; they do not implement a second gateway path.
+Change the route centrally and every client keeps working. The same public model name is available through OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, `LLMProxy.chat/2`, and ReqLLM.
 
 ## Installation
 
@@ -127,7 +122,7 @@ end
 
 This mounts `/llm/v1/chat/completions`, `/llm/v1/messages`, `/llm/v1/responses`, `/llm/v1/moderations`, model listing, and feedback routes.
 
-See [Library Mode](https://hexdocs.pm/llm_proxy/library-mode.html) for storage, migrations, ReqLLM, Phoenix, and SafeRPC examples.
+See [Library Mode](https://hexdocs.pm/llm_proxy/library-mode.html) for storage, migrations, ReqLLM, Phoenix, and [SafeRPC](https://hexdocs.pm/safe_rpc) examples.
 
 ## Standalone mode
 
