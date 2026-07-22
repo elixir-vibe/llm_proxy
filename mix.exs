@@ -63,7 +63,7 @@ defmodule LLMProxy.MixProject do
       name: "llm_proxy",
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib priv/repo/migrations .formatter.exs mix.exs README.md CHANGELOG.md LICENSE)
+      files: ~w(lib priv .formatter.exs mix.exs README.md CHANGELOG.md LICENSE SKILL.md docs)
     ]
   end
 
