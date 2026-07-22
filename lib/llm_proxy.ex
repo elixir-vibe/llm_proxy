@@ -1,6 +1,10 @@
 defmodule LLMProxy do
   @moduledoc """
-  OpenAI-compatible proxy for LLM APIs with usage tracking and per-user quotas.
+  Elixir-native LLM gateway for in-process, ReqLLM, SafeRPC, and HTTP calls.
+
+  LLMProxy applies model routing, provider fallback, API-key governance, usage
+  accounting, and tracing through one provider execution boundary. It can run
+  inside an existing application or as a standalone OpenAI-compatible service.
   """
 
   use SafeRPC, service: :llm_proxy, version: "1"

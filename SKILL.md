@@ -136,7 +136,10 @@ Read the consuming repository's `AGENTS.md` and disaster-recovery documentation 
 
 ## References
 
-- `README.md` — embedding, HTTP API, catalog, and runtime overview
-- `docs/providers.md` — configured providers, token pools, OAuth, and custom protocols
-- `docs/architecture.md` — execution boundaries
-- `docs/roadmap.md` — current limitations and remaining work
+- `README.md` — product overview, modes, features, and documentation map
+- `guides/introduction/library-mode.md` — embedded storage, migrations, Phoenix, ReqLLM, and SafeRPC
+- `guides/introduction/standalone-mode.md` — service runtime, TOML, HTTP, and operational boundaries
+- `guides/features/providers-and-routing.md` — configured providers, token pools, OAuth, and routing
+- `guides/deployment/standalone-deployment.md` — release, migration, drain, backup, and rollback
+- `guides/internals/architecture.md` — execution and ownership boundaries
+- `ROADMAP.md` — product boundary and current priorities

@@ -1,89 +1,117 @@
-# LLM Proxy
+# LLMProxy
 
-Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, provider token pools, and OpenAI-compatible HTTP routes.
+[![Hex.pm](https://img.shields.io/hexpm/v/llm_proxy.svg)](https://hex.pm/packages/llm_proxy) [![Documentation](https://img.shields.io/badge/documentation-gray)](https://hexdocs.pm/llm_proxy)
 
-`LLMProxy.Provider` is the primary in-process execution boundary. HTTP routing is a thin adapter around it, so Phoenix apps can use the same accounting, fallback, and provider dispatch without localhost HTTP calls.
+An Elixir-native LLM gateway for Phoenix applications and standalone services. Route one public model name across providers, enforce API-key budgets and quotas, pool upstream credentials, and record usage, cost, latency, and traces through the same execution path.
 
-## What it provides
+Use LLMProxy directly inside an Elixir application:
 
-- **In-process Elixir API** via `LLMProxy.Provider` and `LLMProxy.chat/2`
-- **ReqLLM provider** registered as `:llm_proxy`
-- **Plug HTTP API** for OpenAI-compatible clients
-- **OpenAI Chat Completions** (`/v1/chat/completions`) with streaming support
-- **Anthropic Messages** (`/v1/messages`) with streaming support
-- **OpenAI Responses** (`/v1/responses`) with streaming support
-- **OpenAI Moderations** (`/v1/moderations`)
-- **Provider system** with model-based dispatch, retries, fallback models, and catalog aliases
-- **Catalog routing** with ordered/shuffled deployments, per-deployment timeouts, and circuit breakers
-- **Guardrail hooks** for request/response/stream policy without bundling a policy engine
-- **Deterministic cache hooks** for pluggable non-stream response caching
-- **Token pool** with multiple upstream API keys, stable user pinning, and cooldowns
-- **Usage tracking** for input/output/cache tokens and estimated cost
-- **Quota enforcement** with per-key token/message/cache controls
-- **API key and provider token management through Incant admin surfaces**
+```elixir
+{:ok, response} =
+  LLMProxy.chat("Explain supervision trees in three sentences",
+    model: "fast",
+    api_key: llm_proxy_key
+  )
 
-## Architecture
+ReqLLM.Response.text(response.message)
+```
+
+Or run it as an OpenAI-compatible service:
+
+```bash
+curl http://127.0.0.1:4000/v1/chat/completions \
+  -H "authorization: Bearer $LLM_PROXY_KEY" \
+  -H "content-type: application/json" \
+  -d '{"model":"fast","messages":[{"role":"user","content":"Hello"}]}'
+```
+
+## Why LLMProxy
+
+- **One core, two deployment modes.** Call `LLMProxy.chat/2` in-process, mount the routes in Phoenix, or run the bundled OTP release. Local, HTTP, ReqLLM, and SafeRPC calls share routing, accounting, and policy.
+- **Stable model names over changing providers.** Map an alias such as `fast` to ordered, shuffled, round-robin, weighted, or lowest-cost deployments. Retryable failures fall through to healthy routes, with per-deployment timeouts and circuit breakers.
+- **Governance you own.** API keys can restrict models and enforce token, message, cache, and spend limits. Usage, estimated cost, latency, messages, and traces stay in your configured storage.
+- **Credentials stay isolated.** Provider token pools support multiple upstream keys, stable actor pinning, `Retry-After` cooldowns, and separate pools for services that happen to share a protocol.
+- **Compatible where clients need it.** Serve OpenAI Chat Completions, Responses, Moderations, and Anthropic Messages, including streaming. Use the same gateway as a ReqLLM provider from Elixir.
+- **Policy without a hosted platform.** Add deterministic cache and guardrail modules, export OpenTelemetry spans, and optionally expose operations through Incant.
+
+## How it fits
 
 ```text
-Local Elixir calls       ReqLLM calls           HTTP clients
-LLMProxy.chat/2          provider: :llm_proxy   /v1/chat/completions
-       │                       │                       │
-       └──────────────┬────────┴──────────────┬────────┘
-                      ▼                       ▼
-              LLMProxy.Provider        HTTP route adapters
-                      │
-                      ▼
-       provider resolution / quota / fallback / usage / tracing
-                      │
-                      ▼
-             OpenAI / Anthropic / OpenRouter
+Elixir calls          ReqLLM calls          HTTP clients          Remote BEAM apps
+LLMProxy.chat/2       provider: :llm_proxy  /v1/chat/completions  SafeRPC
+       │                     │                       │                │
+       └─────────────────────┴───────────┬───────────┴────────────────┘
+                                         ▼
+                                LLMProxy.Provider
+                                         │
+                   auth → quota → policy → cache → routing
+                                         │
+                    fallback → usage → cost → traces → telemetry
+                                         │
+                      OpenAI / Anthropic / OpenRouter / custom
 ```
 
-Core request contracts use `ReqLLM.Context` and `ReqLLM.Message` internally. Wire maps stay at HTTP/provider boundaries.
+`LLMProxy.Provider` is the execution boundary. HTTP routes translate wire protocols; they do not implement a second gateway path.
 
-## Local Elixir usage
+## Installation
+
+Add LLMProxy to `mix.exs`:
+
+```elixir
+def deps do
+  [
+    {:llm_proxy, "~> 0.1"}
+  ]
+end
+```
+
+LLMProxy requires Elixir 1.17 or later. Phoenix, SQLite, Igniter, and Incant integrations are optional dependencies; add only the ones your deployment uses.
+
+Choose a mode before configuring storage and serving:
+
+- **Library mode** — use your application's Ecto repo and call LLMProxy in-process. Mount HTTP routes in Phoenix only when needed.
+- **Standalone mode** — build the bundled OTP release with local DuckDB/QuackDB storage and its own HTTP listener.
+
+See [Getting Started](https://hexdocs.pm/llm_proxy/getting-started.html) for the complete setup path.
+
+## Library mode
+
+Point LLMProxy at the host application's repo and disable its separate HTTP listener when you only need in-process calls or Phoenix-mounted routes:
+
+```elixir
+# config/runtime.exs
+config :llm_proxy,
+  repo: MyApp.Repo,
+  http_enabled: false,
+  master_key: System.fetch_env!("LLM_PROXY_MASTER_KEY"),
+  providers: %{
+    "openai" => %{api_keys: System.fetch_env!("OPENAI_API_KEYS")}
+  },
+  models: [
+    fast: [route: [to: :openai, model: "gpt-4.1-mini"]]
+  ]
+```
+
+Install migration aliases and migrate the host repo:
+
+```bash
+mix igniter.install llm_proxy
+mix llm_proxy.migrate
+```
+
+Then call it directly:
 
 ```elixir
 {:ok, response} =
-  LLMProxy.chat("Explain GenServers briefly",
-    model: "openai/gpt-4.1-mini",
-    api_key: raw_or_loaded_llm_proxy_key
+  LLMProxy.chat("Summarize this incident",
+    model: "fast",
+    api_key: System.fetch_env!("LLM_PROXY_MASTER_KEY"),
+    metadata: %{"incident_id" => "inc_123"},
+    tags: ["operations"]
   )
-
-response.body
-response.usage
 ```
 
-## ReqLLM usage
-
-Local in-process provider:
-
-```elixir
-model = %{
-  provider: :llm_proxy,
-  id: "openai/gpt-4.1-mini",
-  model: "openai/gpt-4.1-mini"
-}
-
-{:ok, response} =
-  ReqLLM.Generation.generate_text(model, "Hello",
-    api_key: raw_llm_proxy_key
-  )
-
-ReqLLM.Response.text(response)
-```
-
-Remote BEAM consumers should use SafeRPC with ordinary LLMProxy request structs:
-
-```elixir
-{:ok, descriptor} = SafeRPC.describe(socket)
-{:ok, request} = LLMProxy.Provider.chat_request("Hello", model: "fast")
-{:ok, response} = SafeRPC.call(socket, {LLMProxy, :chat}, request, meta: %{api_key: raw_llm_proxy_key})
-```
-
-## Phoenix embedding
-
-Mount core LLM routes in a host Phoenix router:
+To expose the same gateway through an existing Phoenix endpoint:
 
 ```elixir
 defmodule MyAppWeb.Router do
@@ -92,170 +120,55 @@ defmodule MyAppWeb.Router do
 
   scope "/" do
     pipe_through :api
-
     llm_proxy "/llm", setup: false
   end
 end
 ```
 
-Dev/test storage defaults to the bundled SQLite repo. Standalone production releases use the bundled QuackDB/DuckDB repo and supervise a local Quack server. QuackDB generates the local Quack protocol token at runtime and LLMProxy injects it into the bundled repo; operators do not configure a `QUACKDB_TOKEN` secret.
+This mounts `/llm/v1/chat/completions`, `/llm/v1/messages`, `/llm/v1/responses`, `/llm/v1/moderations`, model listing, and feedback routes.
 
-SQLite remains an optional dependency for downstream apps that want a lightweight embedded repo in non-production hosts:
+See [Library Mode](https://hexdocs.pm/llm_proxy/library-mode.html) for storage, migrations, ReqLLM, Phoenix, and SafeRPC examples.
 
-```elixir
-{:llm_proxy, "~> ..."},
-{:ecto_sqlite3, "~> 0.17"}
-```
+## Standalone mode
 
-Host Phoenix apps can instead provide their own Ecto repo:
+The standalone release runs a local HTTP gateway backed by DuckDB through QuackDB. It listens on `127.0.0.1` and is intended to sit behind your reverse proxy or service mesh.
 
-```elixir
-config :llm_proxy,
-  repo: MyApp.Repo
-```
-
-LLMProxy detects the configured repo adapter with `repo.__adapter__/0` for SQL differences and currently supports SQLite, PostgreSQL, MySQL-compatible, and QuackDB/DuckDB Ecto adapters. PostgreSQL/MySQL adapter dependencies should come from the host app.
-
-The public `LLMProxy.Storage` module is a facade. The default implementation is `LLMProxy.Storage.Ecto`, and advanced hosts can provide a custom storage adapter:
-
-```elixir
-config :llm_proxy,
-  storage: MyApp.LLMProxyStorage
-```
-
-Custom storage modules implement `LLMProxy.Storage.Adapter`.
-
-To install or upgrade the storage schema in a host repo, run the Igniter installer:
+Configure secrets with environment variables:
 
 ```bash
-mix igniter.install llm_proxy
+export MASTER_KEY="replace-with-a-long-random-key"
+export OPENAI_API_KEYS="sk-..."
+export DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
+export PORT="4000"
 ```
 
-The installer adds a `mix llm_proxy.migrate` alias that includes both the host application's migration path and LLMProxy's dependency migration path. Without the installer, pass both paths directly:
+Configure public providers and model aliases as data in `/etc/llm-proxy/config.toml`:
 
-```bash
-mix ecto.migrate \
-  --migrations-path priv/repo/migrations \
-  --migrations-path deps/llm_proxy/priv/repo/migrations
+```toml
+[providers.openai-primary]
+adapter = "openai"
+base_url = "https://api.openai.com/v1"
+token_pool = "openai"
+
+[[models]]
+name = "fast"
+routing = "ordered"
+
+[[models.routes]]
+to = "openai-primary"
+model = "gpt-4.1-mini"
+timeout = 30000
 ```
 
-Release code can do the same through `Ecto.Migrator.run/4` by passing both migration directories.
+Credentials do not belong in TOML. Bootstrap named pools with `LLM_PROXY_PROVIDER_KEYS` or manage persisted tokens through the optional admin integration.
 
-Route groups:
+The release serves health, model, generation, moderation, and feedback routes. Streaming responses include heartbeats during upstream silence and preserve OpenAI or Anthropic event payloads.
 
-- `core: true` — models, chat, messages, responses, moderations
-- `setup: true` — optional setup helper routes; disabled by default
+See [Standalone Mode](https://hexdocs.pm/llm_proxy/standalone-mode.html) and [Standalone Deployment](https://hexdocs.pm/llm_proxy/standalone-deployment.html) for configuration, migrations, release commands, health checks, and shutdown draining.
 
-Admin surfaces are exposed through `LLMProxy.Admin` and Incant/SafeRPC, not through public service HTTP routes.
+## Routing and providers
 
-## Release artifacts
-
-Use ReleaseKit to build the standalone OTP release tarball and manifest consumed by HostKit deployments:
-
-```bash
-MIX_ENV=prod mix release_kit.artifact --out-dir _build/prod/artifacts
-```
-
-This assembles the Mix release and writes:
-
-```text
-_build/prod/artifacts/llm_proxy-<version>.tar.gz
-_build/prod/artifacts/llm_proxy.etf
-```
-
-## Standalone HTTP API
-
-`LLMProxy.Router` can also be run as the app router.
-
-### Core routes
-
-- `GET /health`
-- `GET /v1/models`
-- `GET /models`
-- `POST /v1/chat/completions`
-- `POST /chat/completions`
-- `POST /v1/messages`
-- `POST /v1/responses`
-- `POST /v1/moderations`
-- `POST /moderations`
-- `POST /feedback` / `POST /v1/feedback` — submit trace feedback by `request_id` or `trace_id`
-
-### Admin surface
-
-Administrative resources for keys, provider tokens, traces, messages, and operational dashboards are exposed by `LLMProxy.Admin` for Incant/SafeRPC consumers. They are not mounted on the public HTTP API.
-
-### Optional setup routes
-
-`/setup` is not mounted by default in embeddable router usage. It exists for local/onboarding helper flows such as install script, model listing, and client config snippets.
-
-## Cache hooks
-
-Host apps can configure an optional deterministic cache adapter for non-stream provider calls:
-
-```elixir
-config :llm_proxy,
-  cache: MyApp.LLMCache,
-  cache_policy: [
-    ttl_ms: 60_000,
-    models: %{"no-cache-model" => [enabled: false]}
-  ]
-```
-
-```elixir
-defmodule MyApp.LLMCache do
-  @behaviour LLMProxy.Cache
-
-  def get(key, context), do: :miss
-  def put(key, response, context), do: :ok
-end
-```
-
-Cache keys are derived from the normalized request and resolved deployment attempts. Adapters return `{:hit, %LLMProxy.Response{}}` or `:miss`. Requests can bypass cache with metadata such as `%{"no_cache" => true}` or override TTL with `%{"cache_ttl_ms" => 30_000}`.
-
-## Guardrail hooks
-
-Host apps can configure policy modules around the provider execution path:
-
-```elixir
-config :llm_proxy, guardrails: [MyApp.LLMPolicy]
-```
-
-```elixir
-defmodule MyApp.LLMPolicy do
-  @behaviour LLMProxy.Guardrail
-
-  def before_request(request, _context), do: {:ok, request}
-  def after_response(response, _context), do: {:ok, response}
-  def on_stream_event(event, _context), do: {:ok, event}
-end
-```
-
-Return `{:error, reason}` from a hook to reject the request/response. Returning `{:ok, nil}` from `on_stream_event/2` filters a stream chunk.
-
-## Catalog routing
-
-Public model names can be backed by one or more upstream deployments. Prefer configuration-driven ReqLLM providers for services that differ only by endpoint, credential pool, or model ID:
-
-```elixir
-config :llm_proxy,
-  providers: %{
-    "example-service" => %{
-      adapter: "openai",
-      base_url: "https://api.example.com/v1",
-      token_pool: "example-production"
-    }
-  },
-  models: [
-    [
-      name: "example/model",
-      routes: [[to: "example-service", model: "upstream-model"]]
-    ]
-  ]
-```
-
-No provider-specific Elixir module is required. See [`docs/providers.md`](docs/providers.md) for TOML, credential seeding, token isolation, and extension rules.
-
-Embedded apps can also route aliases across bundled providers; LLMProxy normalizes the readable `:models` shape into the internal catalog at boot:
+A public model can target one or more deployments:
 
 ```elixir
 config :llm_proxy,
@@ -265,118 +178,59 @@ config :llm_proxy,
       routes: [
         [
           to: :openai,
-          model: "gpt-4o-mini",
+          model: "gpt-4.1-mini",
           timeout: 15_000,
           failure_threshold: 3,
           cooldown_ms: 30_000
         ],
-        [to: :anthropic, model: "claude-3-haiku-20240307", order: 2]
+        [to: :anthropic, model: "claude-3-5-haiku-20241022", order: 2]
       ]
     ]
   ]
 ```
 
-Codex subscription models should also use catalog routing instead of relying on a static model list:
+Built-in providers cover OpenAI, Anthropic, OpenRouter, and OpenAI Codex OAuth. For another OpenAI-compatible service, declare a named provider with a ReqLLM `adapter`, `base_url`, and isolated `token_pool`; no provider module is required.
 
-```elixir
-config :llm_proxy,
-  models: [
-    codex: [route: [to: :openai_codex, model: "gpt-5.3-codex-spark"]]
-  ]
-```
+See [Providers and Routing](https://hexdocs.pm/llm_proxy/providers-and-routing.html) for routing semantics, custom endpoints, token pools, Codex OAuth, and native protocol extensions.
 
-The lower-level `:catalog` shape with provider modules and `upstream_model` remains supported for existing applications.
+## Governance and observability
 
-Routing strategies:
+Every authenticated request runs through the same controls:
 
-- `:ordered` — stable ordered fallback by deployment `order`
-- `:shuffle` — shuffle deployments within each `order` group
-- `:round_robin` — rotate deployments within each `order` group
-- `:weighted_shuffle` — weighted random order within each `order` group using deployment `weight`
-- `:lowest_cost` — sort deployments within each `order` group by LLMDB input+output pricing
+1. Resolve the actor and API key.
+2. Check model access, quota windows, and budget limits.
+3. Apply request guardrails and deterministic cache policy.
+4. Select a healthy deployment and credential.
+5. Execute with timeout, retry, fallback, and circuit-breaker handling.
+6. Record usage, estimated cost, latency, trace IDs, messages, and optional bodies.
+7. Emit OpenTelemetry spans and return the trace ID to the caller.
 
-Retryable provider failures and timeouts open a deployment-level circuit breaker after `failure_threshold` failures. Open deployments are skipped until `cooldown_ms` elapses.
+Incant support is optional. When installed, `LLMProxy.Admin` describes resources for API keys, provider tokens, traces, and messages plus an operations dashboard. A separate Incant host can consume those surfaces over SafeRPC; the public gateway does not expose an admin UI.
 
-## Bundled providers
+See [Governance and Observability](https://hexdocs.pm/llm_proxy/governance-and-observability.html), [Cache and Guardrails](https://hexdocs.pm/llm_proxy/cache-and-guardrails.html), and [Admin Integration](https://hexdocs.pm/llm_proxy/admin-integration.html).
 
-- **OpenAI** — GPT/o-series models via standard API key
-- **OpenAI Codex** — ChatGPT subscription Codex backend via OAuth token; streaming uses ReqLLM's Responses WebSocket transport
-- **Anthropic** — Claude models via standard API key
-- **OpenRouter** — OpenRouter models via OpenAI-compatible API
+## Documentation
 
-Additional upstream services should normally be declared with `providers.<name>.adapter`, `base_url`, and `token_pool`. Register a custom module only for a protocol or authentication mechanism that ReqLLM does not support.
-
-## Configuration
-
-Agents configuring or operating LLMProxy should read [`SKILL.md`](SKILL.md). See [`docs/architecture.md`](docs/architecture.md) for module boundaries, [`docs/providers.md`](docs/providers.md) for configuration-driven providers and custom protocols, and [`docs/roadmap.md`](docs/roadmap.md) for remaining work.
-
-Standalone releases also load optional data config from `/etc/llm-proxy/config.toml`; override the path with `LLM_PROXY_CONFIG_TOML`. Embedded/library users should continue to use ordinary `config :llm_proxy` application config.
-
-Environment variables can be loaded from `.env` through Dotenvy.
-
-| Variable | Description |
-|---|---|
-| `PORT` | Server port in prod, default `4000` |
-| `MASTER_KEY` | Admin key |
-| `DATABASE_PATH` | DuckDB database path for standalone QuackDB storage in prod, default `./llm_proxy.duckdb` |
-| `PUBLIC_URL` | Public base URL used by setup helpers and provider headers |
-| `OPENAI_API_KEYS` | Comma-separated OpenAI API keys |
-| `OPENAI_CODEX_TOKENS` | Comma-separated ChatGPT/OpenAI OAuth tokens for Codex. Plain access tokens are accepted; refreshable entries use `access|refresh|expires_ms|account_id` (`account_id` optional). Standalone releases can also run `bin/codex_login` with the service runtime environment to sign in interactively and persist refreshable credentials in `provider_tokens`. Before login or seeding, Codex requests return `No available OpenAI Codex OAuth tokens: no_tokens`. |
-| `ANTHROPIC_API_KEYS` | Comma-separated Anthropic API keys |
-| `OPENROUTER_API_KEYS` | Comma-separated OpenRouter API keys |
-| `LLM_PROXY_PROVIDER_KEYS` | JSON object mapping configuration-driven token-pool names to API-key arrays, for example `{"example-production":["secret"]}` |
-| `LLM_FALLBACKS` | JSON map of model fallback chains |
-| `LLM_MAX_RETRIES` | Number of fallback models to try, default `1` |
-
-Runtime defaults can also be overridden from Elixir config. Provider keys may be atoms or strings; `:openai_codex` normalizes to the bundled `"openai-codex"` provider.
-
-```elixir
-config :llm_proxy,
-  token_cooldown_ms: :timer.hours(4),
-  deployment_failure_threshold: 3,
-  deployment_cooldown_ms: :timer.seconds(30),
-  provider_receive_timeout_ms: :timer.minutes(10),
-  remote_timeout_ms: :timer.seconds(30),
-  providers: [
-    anthropic: [
-      base_url: "https://api.anthropic.com/v1",
-      api_version: "2023-06-01",
-      beta: "fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14",
-      conversion_defaults: [max_tokens: 4096]
-    ],
-    openai: [base_url: "https://api.openai.com/v1"],
-    openai_codex: [base_url: "https://chatgpt.com/backend-api"],
-    openrouter: [base_url: "https://openrouter.ai/api/v1"]
-  ]
-```
-
-HTTP generation routes use Plug request IDs for correlation. Incoming `x-request-id` is reused when valid; otherwise `Plug.RequestId`/`LLMProxy.Trace` generates one. The same value is returned as `x-request-id` and `x-llm-proxy-trace-id`; local calls expose it as `response.trace_id`.
-
-## Setup
-
-```bash
-mix setup
-mix run --no-halt
-```
+- [Getting Started](https://hexdocs.pm/llm_proxy/getting-started.html)
+- [Library Mode](https://hexdocs.pm/llm_proxy/library-mode.html)
+- [Standalone Mode](https://hexdocs.pm/llm_proxy/standalone-mode.html)
+- [Providers and Routing](https://hexdocs.pm/llm_proxy/providers-and-routing.html)
+- [Governance and Observability](https://hexdocs.pm/llm_proxy/governance-and-observability.html)
+- [Cache and Guardrails](https://hexdocs.pm/llm_proxy/cache-and-guardrails.html)
+- [Admin Integration](https://hexdocs.pm/llm_proxy/admin-integration.html)
+- [Standalone Deployment](https://hexdocs.pm/llm_proxy/standalone-deployment.html)
+- [Configuration Cheatsheet](https://hexdocs.pm/llm_proxy/configuration.html)
+- [HTTP API Cheatsheet](https://hexdocs.pm/llm_proxy/http-api.html)
+- [Architecture](https://hexdocs.pm/llm_proxy/architecture.html)
+- [API reference](https://hexdocs.pm/llm_proxy/api-reference.html)
 
 ## Development
 
 ```bash
-mix test
-mix ci            # Compile, format check, test, Credo, Dialyzer, ExDNA, Reach
-mix format
+mix deps.get
+mix ci
 ```
 
-Test files mirror source structure under `test/llm_proxy/**`.
+## License
 
-## Direction
-
-LLMProxy intentionally focuses on a smaller surface than LiteLLM or Portkey:
-
-- embeddable in Phoenix apps
-- Elixir/ReqLLM-native execution, including remote BEAM calls
-- HTTP compatibility where useful
-- strict internal contracts
-- local ownership of usage and quota data
-
-Planned gateway features are tracked in `docs/roadmap.md`.
+MIT © 2026 Danila Poyarkov

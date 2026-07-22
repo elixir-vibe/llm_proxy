@@ -54,8 +54,8 @@ defmodule LLMProxy.MixProject do
   end
 
   defp description do
-    "Embeddable Elixir/Phoenix LLM gateway with usage tracking, quotas, " <>
-      "provider token pools, and OpenAI-compatible HTTP routes."
+    "Elixir-native LLM gateway for embedded and standalone deployments with provider " <>
+      "routing, quotas, usage tracking, and OpenAI-compatible APIs."
   end
 
   defp package do
@@ -63,26 +63,71 @@ defmodule LLMProxy.MixProject do
       name: "llm_proxy",
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib priv .formatter.exs mix.exs README.md CHANGELOG.md LICENSE SKILL.md docs)
+      files: ~w(lib priv guides .formatter.exs mix.exs README.md CHANGELOG.md ROADMAP.md LICENSE)
     ]
   end
 
   defp docs do
     [
-      main: "LLMProxy",
+      main: "readme",
+      source_ref: "v#{@version}",
+      source_url: @source_url,
       extras: [
         "README.md",
         "CHANGELOG.md",
-        "SKILL.md",
-        "docs/architecture.md",
-        "docs/providers.md",
-        "docs/roadmap.md"
+        "ROADMAP.md",
+        "guides/introduction/getting-started.md",
+        "guides/introduction/library-mode.md",
+        "guides/introduction/standalone-mode.md",
+        "guides/features/providers-and-routing.md",
+        "guides/features/governance-and-observability.md",
+        "guides/features/cache-and-guardrails.md",
+        "guides/features/admin-integration.md",
+        "guides/deployment/standalone-deployment.md",
+        "guides/reference/configuration.cheatmd",
+        "guides/reference/http-api.cheatmd",
+        "guides/internals/architecture.md"
       ],
       groups_for_extras: [
-        Guides: ~r/docs\//
+        Introduction: ~r/guides\/introduction\//,
+        Features: ~r/guides\/features\//,
+        Deployment: ~r/guides\/deployment\//,
+        Reference: ~r/guides\/reference\//,
+        Internals: ~r/guides\/internals\//
       ],
-      source_ref: "v#{@version}",
-      source_url: @source_url
+      groups_for_modules: [
+        Core: [
+          LLMProxy,
+          LLMProxy.Actor,
+          LLMProxy.Provider,
+          LLMProxy.Response,
+          LLMProxy.Usage
+        ],
+        "Catalog and Routing": [
+          LLMProxy.Catalog,
+          LLMProxy.Catalog.Model,
+          LLMProxy.Catalog.Deployment,
+          LLMProxy.Providers.Registry,
+          LLMProxy.Providers.Execution
+        ],
+        Extensions: [
+          LLMProxy.Cache,
+          LLMProxy.Guardrail,
+          LLMProxy.Storage,
+          LLMProxy.Storage.Adapter
+        ],
+        "HTTP and Phoenix": [
+          LLMProxy.Router,
+          LLMProxy.HTTP.Router,
+          LLMProxy.Phoenix.Router
+        ],
+        Operations: [
+          LLMProxy.Drain,
+          LLMProxy.Ops,
+          LLMProxy.ReleaseTasks,
+          LLMProxy.Telemetry
+        ]
+      ]
     ]
   end
 

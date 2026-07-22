@@ -1,0 +1,191 @@
+# HTTP API
+
+The standalone router serves core routes at `/`. Phoenix library hosts can mount the same routes under a prefix such as `/llm`.
+
+## Authentication
+
+Generation, moderation, and feedback routes accept either header:
+
+```text
+Authorization: Bearer <llm-proxy-key>
+x-api-key: <llm-proxy-key>
+```
+
+The key is an LLMProxy API key, not an upstream provider key. The configured master key is also accepted for operator calls.
+
+Model listing and health are public.
+
+## Routes
+{: .col-2}
+
+### Health
+
+```text
+GET /health
+```
+
+Standalone router only. Reports version, readiness, drain state, serving state, and active request/stream/agent counts.
+
+### Models
+
+```text
+GET /v1/models
+GET /models
+```
+
+Returns public catalog models in an OpenAI-compatible list envelope.
+
+### Chat Completions
+
+```text
+POST /v1/chat/completions
+POST /chat/completions
+```
+
+OpenAI Chat Completions request and response shape. Supports SSE streaming with `"stream": true`.
+
+### Anthropic Messages
+
+```text
+POST /v1/messages
+```
+
+Anthropic Messages request and response shape. Supports native streaming when the selected provider implements it.
+
+### OpenAI Responses
+
+```text
+POST /v1/responses
+```
+
+OpenAI Responses request and response shape. Supports native streaming when the selected provider implements it.
+
+### Moderations
+
+```text
+POST /v1/moderations
+POST /moderations
+```
+
+OpenAI Moderations request and response shape.
+
+### Feedback
+
+```text
+POST /v1/feedback
+POST /feedback
+```
+
+Attaches a rating and optional comment/metadata to a request or trace.
+
+## Chat Example
+
+```bash
+curl http://127.0.0.1:4000/v1/chat/completions \
+  -H "authorization: Bearer $LLM_PROXY_KEY" \
+  -H "content-type: application/json" \
+  -d '{
+    "model": "fast",
+    "messages": [
+      {"role": "user", "content": "Explain OTP supervision"}
+    ],
+    "temperature": 0.2
+  }'
+```
+
+Streaming:
+
+```bash
+curl --no-buffer http://127.0.0.1:4000/v1/chat/completions \
+  -H "authorization: Bearer $LLM_PROXY_KEY" \
+  -H "content-type: application/json" \
+  -d '{
+    "model": "fast",
+    "messages": [{"role": "user", "content": "Hello"}],
+    "stream": true
+  }'
+```
+
+LLMProxy emits SSE comment heartbeats during upstream silence. Clients should ignore comment lines according to the SSE specification.
+
+## Feedback Example
+
+```bash
+curl -X POST http://127.0.0.1:4000/v1/feedback \
+  -H "authorization: Bearer $LLM_PROXY_KEY" \
+  -H "content-type: application/json" \
+  -d '{
+    "request_id": "request-trace-id",
+    "rating": "positive",
+    "comment": "Useful answer",
+    "metadata": {"source": "product-ui"}
+  }'
+```
+
+`rating` must be `positive`, `negative`, or `neutral`. Supply either `request_id` or `trace_id`.
+
+## Request IDs
+
+Generation routes accept a valid incoming `x-request-id` or generate one. Responses return:
+
+```text
+x-request-id: <trace-id>
+x-llm-proxy-trace-id: <trace-id>
+```
+
+The same identifier links HTTP responses, usage, messages, traces, telemetry, and feedback.
+
+## Request Bodies
+
+Authenticated JSON routes enforce the configured body limit after authentication and quota checks. Default: 32 MB.
+
+Requests above the limit receive HTTP 413. Malformed protocol requests receive structured 400 errors. Authentication failures receive 401, model-access or policy failures receive 403, unknown models receive 404, and upstream errors preserve a canonical provider status when available.
+
+## Phoenix Mounts
+
+```elixir
+defmodule MyAppWeb.Router do
+  use MyAppWeb, :router
+  use LLMProxy.Router
+
+  scope "/" do
+    pipe_through :api
+    llm_proxy "/llm", setup: false
+  end
+end
+```
+
+The example moves each core path below `/llm`:
+
+```text
+/llm/v1/models
+/llm/v1/chat/completions
+/llm/v1/messages
+/llm/v1/responses
+/llm/v1/moderations
+/llm/v1/feedback
+```
+
+## Optional Setup Routes
+
+Phoenix mounts may opt into setup helpers:
+
+```elixir
+llm_proxy "/llm", setup: true
+```
+
+This adds:
+
+```text
+GET /llm/setup/install.sh
+GET /llm/setup/models
+GET /llm/setup/config
+GET /llm/setup/env
+GET /llm/setup/extension
+```
+
+Setup routes are disabled by default and are intended for controlled local/onboarding flows. Review their authentication and network exposure before enabling them.
+
+## Admin Boundary
+
+The public HTTP router does not expose LLMProxy admin resources. API-key management, provider tokens, traces, messages, and the operations dashboard are available through the optional Incant integration over a separately secured local or SafeRPC boundary.

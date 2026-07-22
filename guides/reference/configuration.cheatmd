@@ -1,0 +1,447 @@
+# Configuration
+
+Library mode uses ordinary Elixir application configuration. Standalone mode additionally reads environment variables and optional TOML provider/model data.
+
+## Application Options
+{: .col-2}
+
+### Repo
+
+```elixir
+config :llm_proxy, repo: MyApp.Repo
+```
+
+Ecto repo used by the default storage adapter. Library hosts normally provide an already supervised repo. Standalone production uses `LLMProxy.Storage.Repo.QuackDB`.
+
+### Storage Adapter
+
+```elixir
+config :llm_proxy, storage: MyApp.LLMProxyStorage
+```
+
+Module implementing `LLMProxy.Storage.Adapter`. Default: `LLMProxy.Storage.Ecto`.
+
+### HTTP Enabled
+
+```elixir
+config :llm_proxy, http_enabled: false
+```
+
+Whether LLMProxy starts its own loopback Cowboy listener. Default: `true`. Disable in library mode unless a separate listener is intentional.
+
+### HTTP Port
+
+```elixir
+config :llm_proxy, http: [port: 4000]
+```
+
+Port for the bundled listener. The listener binds `127.0.0.1`.
+
+### Master Key
+
+```elixir
+config :llm_proxy, master_key: System.fetch_env!("LLM_PROXY_MASTER_KEY")
+```
+
+Bootstrap/operator credential. It bypasses ordinary model and quota checks.
+
+### RPC Socket
+
+```elixir
+config :llm_proxy, rpc_socket: "/run/llm-proxy/rpc.sock"
+```
+
+Starts the SafeRPC server for chat, operations, and optional Incant admin calls.
+
+### Public URL
+
+```elixir
+config :llm_proxy, public_url: "https://llm.example.com"
+```
+
+Public base URL used by setup helpers and provider headers.
+
+### Request Body Limit
+
+```elixir
+config :llm_proxy, body_limit_bytes: 32_000_000
+```
+
+Maximum authenticated JSON request body. Must be a positive integer. Default: 32 MB.
+
+### Remote Timeout
+
+```elixir
+config :llm_proxy, remote_timeout_ms: 30_000
+```
+
+Default SafeRPC request timeout. Default: 30 seconds.
+
+### Provider Receive Timeout
+
+```elixir
+config :llm_proxy, provider_receive_timeout_ms: :timer.minutes(10)
+```
+
+Provider transport timeout and standalone Cowboy idle ceiling. Default: 10 minutes.
+
+### Token Cooldown
+
+```elixir
+config :llm_proxy, token_cooldown_ms: :timer.hours(4)
+```
+
+Default credential cooldown after rate limiting. Default: 4 hours.
+
+### Deployment Failure Threshold
+
+```elixir
+config :llm_proxy, deployment_failure_threshold: 3
+```
+
+Default consecutive retryable failures before opening a deployment circuit. Default: 3.
+
+### Deployment Cooldown
+
+```elixir
+config :llm_proxy, deployment_cooldown_ms: 30_000
+```
+
+Default open-circuit cooldown. Default: 30 seconds.
+
+### Max Retries
+
+```elixir
+config :llm_proxy, max_retries: 1
+```
+
+Compatibility retry/fallback limit for configured fallback chains. Default: 1.
+
+### Fallbacks
+
+```elixir
+config :llm_proxy,
+  fallbacks: %{"primary" => ["secondary"]}
+```
+
+Compatibility map for model fallback chains. Catalog routes are preferred for new configurations.
+
+### Cache Adapter
+
+```elixir
+config :llm_proxy, cache: MyApp.LLMCache
+```
+
+Module implementing `LLMProxy.Cache`. Unset by default.
+
+### Cache Policy
+
+```elixir
+config :llm_proxy,
+  cache_policy: [
+    enabled: true,
+    ttl_ms: 60_000,
+    models: %{"fresh" => [enabled: false]}
+  ]
+```
+
+Default and per-model deterministic cache policy.
+
+### Guardrails
+
+```elixir
+config :llm_proxy, guardrails: [MyApp.RequestPolicy]
+```
+
+Ordered modules implementing `LLMProxy.Guardrail`.
+
+## Provider Configuration
+{: .col-2}
+
+### Built-in Provider Keys
+
+```elixir
+config :llm_proxy,
+  providers: %{
+    "openai" => %{api_keys: "sk-a,sk-b"},
+    "anthropic" => %{api_keys: "sk-ant-..."},
+    "openrouter" => %{api_keys: "sk-or-..."},
+    "openai-codex" => %{oauth_tokens: "access|refresh|expires_ms|account"}
+  }
+```
+
+Runtime bootstrap values are persisted into provider-token storage.
+
+### Named Provider
+
+```elixir
+config :llm_proxy,
+  providers: %{
+    "example-service" => %{
+      adapter: "openai",
+      base_url: "https://api.example.com/v1",
+      token_pool: "example-production"
+    }
+  }
+```
+
+Uses an existing ReqLLM adapter without a custom provider module.
+
+### Provider Base URL
+
+```elixir
+%{base_url: "https://api.example.com/v1"}
+```
+
+Default endpoint for a named or built-in provider.
+
+### Provider Token Pool
+
+```elixir
+%{token_pool: "example-production"}
+```
+
+Default credential pool for provider routes.
+
+### Anthropic Defaults
+
+```elixir
+%{
+  api_version: "2023-06-01",
+  beta: "feature-a,feature-b",
+  conversion_defaults: %{max_tokens: 4096}
+}
+```
+
+Provider-specific headers and request-conversion defaults.
+
+## Model Configuration
+{: .col-2}
+
+### Single Route
+
+```elixir
+config :llm_proxy,
+  models: [
+    fast: [route: [to: :openai, model: "gpt-4.1-mini"]]
+  ]
+```
+
+Public alias `fast` targets one upstream deployment.
+
+### Multiple Routes
+
+```elixir
+config :llm_proxy,
+  models: [
+    fast: [
+      routing: :ordered,
+      routes: [
+        [to: :openai, model: "gpt-4.1-mini"],
+        [to: :anthropic, model: "claude-3-5-haiku-20241022", order: 2]
+      ]
+    ]
+  ]
+```
+
+### Routing
+
+```elixir
+routing: :round_robin
+```
+
+`:ordered`, `:shuffle`, `:round_robin`, `:weighted_shuffle`, or `:lowest_cost`.
+
+### Route Timeout
+
+```elixir
+timeout: 30_000
+```
+
+Per-attempt timeout in milliseconds. `timeout_ms` is also accepted.
+
+### Route Circuit Breaker
+
+```elixir
+failure_threshold: 3,
+cooldown_ms: 30_000
+```
+
+Overrides deployment defaults.
+
+### Route Order
+
+```elixir
+order: 2
+```
+
+Fallback group. Lower groups are attempted first.
+
+### Route Weight
+
+```elixir
+weight: 3
+```
+
+Relative weight for `:weighted_shuffle`.
+
+### Route Token Pool
+
+```elixir
+token_pool: "special-production"
+```
+
+Overrides the provider's default pool.
+
+## Standalone Environment
+{: .col-2}
+
+### Master Key
+
+```text
+MASTER_KEY=...
+```
+
+Bootstrap/operator credential.
+
+### Port
+
+```text
+PORT=4000
+```
+
+Standalone loopback HTTP port. Default: `4000`.
+
+### Database Path
+
+```text
+DATABASE_PATH=/var/lib/llm-proxy/llm_proxy.duckdb
+```
+
+DuckDB database file. Default: `./llm_proxy.duckdb`.
+
+### Public URL
+
+```text
+PUBLIC_URL=https://llm.example.com
+```
+
+Public URL for setup helpers and provider headers.
+
+### Provider Keys
+
+```text
+OPENAI_API_KEYS=sk-a,sk-b
+ANTHROPIC_API_KEYS=sk-ant-...
+OPENROUTER_API_KEYS=sk-or-...
+OPENAI_CODEX_TOKENS=access|refresh|expires_ms|account
+```
+
+Comma-separated bootstrap credentials.
+
+### Named Provider Keys
+
+```text
+LLM_PROXY_PROVIDER_KEYS={"example-production":["secret"]}
+```
+
+JSON object mapping token-pool names to credential arrays.
+
+### TOML Path
+
+```text
+LLM_PROXY_CONFIG_TOML=/etc/llm-proxy/config.toml
+```
+
+Provider/model data file. Default: `/etc/llm-proxy/config.toml`.
+
+### RPC Socket
+
+```text
+LLM_PROXY_RPC_SOCKET=/run/llm-proxy/rpc.sock
+```
+
+SafeRPC Unix socket path.
+
+### Body Limit
+
+```text
+LLM_PROXY_BODY_LIMIT_BYTES=32000000
+```
+
+Positive integer byte limit. Default: 32 MB.
+
+### Fallbacks
+
+```text
+LLM_FALLBACKS={"primary":["secondary"]}
+```
+
+JSON compatibility fallback map.
+
+### Max Retries
+
+```text
+LLM_MAX_RETRIES=1
+```
+
+Compatibility fallback count. Default: `1`.
+
+### QuackDB URI
+
+```text
+QUACKDB_URI=http://127.0.0.1:9494
+```
+
+HTTP URI used by the QuackDB Ecto adapter.
+
+### QuackDB Endpoint
+
+```text
+QUACKDB_ENDPOINT=quack:localhost:9494
+```
+
+Managed QuackDB listener endpoint.
+
+### OTLP Endpoint
+
+```text
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+```
+
+Enables OpenTelemetry OTLP export when set.
+
+## Standalone TOML
+{: .col-2}
+
+### Provider
+
+```toml
+[providers.example-service]
+adapter = "openai"
+base_url = "https://api.example.com/v1"
+token_pool = "example-production"
+```
+
+### Model
+
+```toml
+[[models]]
+name = "example/model"
+routing = "ordered"
+```
+
+### Route
+
+```toml
+[[models.routes]]
+to = "example-service"
+model = "upstream-model"
+timeout = 30000
+failure_threshold = 3
+cooldown_ms = 30000
+order = 1
+weight = 1
+```
+
+TOML contains data only. Unknown keys are rejected; arbitrary atoms are not created.
