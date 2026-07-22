@@ -143,7 +143,7 @@ Generation, moderation, and feedback routes authenticate with `Authorization: Be
 
 ## SafeRPC calls
 
-A remote BEAM consumer can call the same execution path over a Unix socket:
+A remote BEAM consumer can call the same execution path over a Unix socket with [SafeRPC](https://hexdocs.pm/safe_rpc):
 
 ```elixir
 {:ok, request} = LLMProxy.Provider.chat_request("Hello", model: "fast")

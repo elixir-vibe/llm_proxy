@@ -12,7 +12,7 @@ The production release starts:
 - the LLMProxy provider registry and model catalog;
 - routing, circuit-breaker, drain, and token-pool processes;
 - a managed local QuackDB server over DuckDB storage;
-- an optional SafeRPC Unix socket;
+- an optional [SafeRPC](https://hexdocs.pm/safe_rpc) Unix socket;
 - OpenTelemetry instrumentation when an OTLP endpoint is configured.
 
 The loopback bind is intentional. Put a reverse proxy, ingress, or service mesh in front of LLMProxy when serving other hosts.

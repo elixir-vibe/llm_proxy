@@ -1,6 +1,6 @@
 # Standalone Deployment
 
-The standalone OTP release owns its HTTP listener, DuckDB-backed storage, provider token pools, model catalog, and optional SafeRPC socket.
+The standalone OTP release owns its HTTP listener, DuckDB-backed storage, provider token pools, model catalog, and optional [SafeRPC](https://hexdocs.pm/safe_rpc) socket.
 
 This guide covers the release itself. Package deployment systems should wrap these steps with immutable artifacts, secret injection, service supervision, backups, and rollback appropriate to the host.
 

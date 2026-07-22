@@ -1,6 +1,6 @@
 # Architecture
 
-LLMProxy has one provider-execution boundary with several transport adapters around it. Authentication, quota checks, policy, routing, accounting, and tracing do not belong in HTTP-only code.
+LLMProxy has one provider-execution boundary with several transport adapters around it, including local Unix-socket calls through [SafeRPC](https://hexdocs.pm/safe_rpc). Authentication, quota checks, policy, routing, accounting, and tracing do not belong in HTTP-only code.
 
 ## Request path
 

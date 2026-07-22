@@ -27,7 +27,7 @@ curl http://127.0.0.1:4000/v1/chat/completions \
 
 ## Why LLMProxy
 
-- **One core, two deployment modes.** Call `LLMProxy.chat/2` in-process, mount the routes in Phoenix, or run the bundled OTP release. Local, HTTP, ReqLLM, and SafeRPC calls share routing, accounting, and policy.
+- **One core, two deployment modes.** Call `LLMProxy.chat/2` in-process, mount the routes in Phoenix, or run the bundled OTP release. Local, HTTP, ReqLLM, and [SafeRPC](https://hexdocs.pm/safe_rpc) calls share routing, accounting, and policy.
 - **Stable model names over changing providers.** Map an alias such as `fast` to ordered, shuffled, round-robin, weighted, or lowest-cost deployments. Retryable failures fall through to healthy routes, with per-deployment timeouts and circuit breakers.
 - **Governance you own.** API keys can restrict models and enforce token, message, cache, and spend limits. Usage, estimated cost, latency, messages, and traces stay in your configured storage.
 - **Credentials stay isolated.** Provider token pools support multiple upstream keys, stable actor pinning, `Retry-After` cooldowns, and separate pools for services that happen to share a protocol.

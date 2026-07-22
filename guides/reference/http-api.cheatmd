@@ -188,4 +188,4 @@ Setup routes are disabled by default and are intended for controlled local/onboa
 
 ## Admin Boundary
 
-The public HTTP router does not expose LLMProxy admin resources. API-key management, provider tokens, traces, messages, and the operations dashboard are available through the optional Incant integration over a separately secured local or SafeRPC boundary.
+The public HTTP router does not expose LLMProxy admin resources. API-key management, provider tokens, traces, messages, and the operations dashboard are available through the optional Incant integration over a separately secured local or [SafeRPC](https://hexdocs.pm/safe_rpc) boundary.

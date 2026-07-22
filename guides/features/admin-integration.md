@@ -5,7 +5,7 @@ LLMProxy can expose an optional Incant admin surface for operational work. Incan
 The integration follows a service-owned model:
 
 - LLMProxy owns resource definitions, queries, policies, and actions.
-- SafeRPC transports portable admin contracts and operation requests.
+- [SafeRPC](https://hexdocs.pm/safe_rpc) transports portable admin contracts and operation requests.
 - A local or separate Incant host renders the UI and dispatches operations.
 - The public LLM gateway does not mount an admin UI or admin HTTP API.
 

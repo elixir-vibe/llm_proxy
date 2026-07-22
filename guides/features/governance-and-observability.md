@@ -1,6 +1,6 @@
 # Governance and Observability
 
-LLMProxy applies authentication, model access, limits, accounting, and tracing at the provider execution boundary. In-process, ReqLLM, SafeRPC, and HTTP callers therefore receive the same controls.
+LLMProxy applies authentication, model access, limits, accounting, and tracing at the provider execution boundary. In-process, ReqLLM, [SafeRPC](https://hexdocs.pm/safe_rpc), and HTTP callers therefore receive the same controls.
 
 ## API keys
 

@@ -51,7 +51,7 @@ Bootstrap/operator credential. It bypasses ordinary model and quota checks.
 config :llm_proxy, rpc_socket: "/run/llm-proxy/rpc.sock"
 ```
 
-Starts the SafeRPC server for chat, operations, and optional Incant admin calls.
+Starts the [SafeRPC](https://hexdocs.pm/safe_rpc) server for chat, operations, and optional Incant admin calls.
 
 ### Public URL
 
