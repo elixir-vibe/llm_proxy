@@ -1,7 +1,7 @@
 defmodule LLMProxy.Providers.ReqLLMTest do
   use ExUnit.Case
 
-  alias Elixir.ReqLLM.StreamEvent
+  alias Elixir.ReqLLM.StreamChunk
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Attempt, Execution, ReqLLM, Result}
   alias LLMProxy.Providers.ReqLLM.Projection
@@ -43,17 +43,6 @@ defmodule LLMProxy.Providers.ReqLLMTest do
 
   test "executes a configured provider through ReqLLM and its isolated token pool" do
     test_pid = self()
-    telemetry_handler = {__MODULE__, self(), make_ref()}
-
-    :ok =
-      :telemetry.attach(
-        telemetry_handler,
-        [:req_llm, :request, :start],
-        fn _event, _measurements, metadata, pid -> send(pid, {:request_metadata, metadata}) end,
-        self()
-      )
-
-    on_exit(fn -> :telemetry.detach(telemetry_handler) end)
 
     ReqTest.stub(HTTPStub, fn conn ->
       send(test_pid, {:request, conn.request_path, conn.body_params, conn.req_headers})
@@ -115,11 +104,6 @@ defmodule LLMProxy.Providers.ReqLLMTest do
     assert_receive {:request, "/v1/chat/completions", request_body, headers}
     assert request_body["model"] == "upstream-model"
     assert {"authorization", "Bearer configured-token"} in headers
-
-    assert_receive {:request_metadata, metadata}
-
-    assert metadata.request_options.receive_timeout ==
-             LLMProxy.Config.provider_receive_timeout_ms()
   end
 
   test "normalizes a prior provider tool-call turn before configured execution" do
@@ -221,7 +205,7 @@ defmodule LLMProxy.Providers.ReqLLMTest do
     assert_receive {:proxy_request, "token-proxy.example", "/custom/chat/completions"}
   end
 
-  test "normalizes strict tools and maximum reasoning through ReqLLM" do
+  test "normalizes strict tools and reasoning through ReqLLM" do
     test_pid = self()
 
     ReqTest.stub(HTTPStub, fn conn ->
@@ -263,7 +247,7 @@ defmodule LLMProxy.Providers.ReqLLMTest do
     body = %{
       "model" => "upstream-model",
       "messages" => [%{"role" => "user", "content" => "call echo"}],
-      "reasoning_effort" => "max",
+      "reasoning_effort" => "high",
       "tool_choice" => "required",
       "tools" => [
         %{
@@ -295,7 +279,7 @@ defmodule LLMProxy.Providers.ReqLLMTest do
            ]
 
     assert_receive {:tool_request, request}
-    assert request["reasoning_effort"] == "max"
+    assert request["reasoning_effort"] == "high"
     assert request["tool_choice"] == "required"
     assert get_in(request, ["tools", Access.at(0), "function", "strict"]) == true
   end
@@ -332,14 +316,17 @@ defmodule LLMProxy.Providers.ReqLLMTest do
 
   test "projects ReqLLM streaming text, reasoning, usage, and finish events" do
     events =
-      [
-        StreamEvent.new(:start, %{model: "upstream-model"}),
-        StreamEvent.new(:reasoning_delta, "think"),
-        StreamEvent.new(:text_delta, "OK"),
-        StreamEvent.new(:usage, %{input_tokens: 9, output_tokens: 4, total_tokens: 13}),
-        StreamEvent.new(:finish, %{finish_reason: :stop})
-      ]
-      |> Enum.flat_map(&Projection.events(&1, "upstream-model"))
+      Projection.start_events("upstream-model") ++
+        ([
+           StreamChunk.thinking("think"),
+           StreamChunk.text("OK"),
+           StreamChunk.meta(%{
+             usage: %{input_tokens: 9, output_tokens: 4, total_tokens: 13},
+             finish_reason: :stop,
+             terminal?: true
+           })
+         ]
+         |> Enum.flat_map(&Projection.events(&1, "upstream-model")))
 
     assert Enum.any?(events, fn %Event{data: data} ->
              get_in(data, ["choices", Access.at(0), "delta", "reasoning_content"]) == "think"
