@@ -67,10 +67,11 @@ defmodule LLMProxy.Providers.ReqLLM do
 
   defp stream_with_token(body, attempt, token) do
     with {:ok, model, context, opts} <- request(attempt, token, body),
-         {:ok, %StreamResponse{stream: chunks}} <-
-           ReqLLM.Generation.stream_text(model, context, opts) do
-      projected = Stream.flat_map(chunks, &Projection.events(&1, attempt.model))
-      stream = Stream.concat(Projection.start_events(attempt.model), projected)
+         {:ok, response} <- ReqLLM.Generation.stream_text(model, context, opts) do
+      stream =
+        response
+        |> StreamResponse.events()
+        |> Stream.flat_map(&Projection.events(&1, attempt.model))
 
       {:ok, Result.stream(stream, token)}
     else

@@ -5,6 +5,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
   alias LLMProxy.Stream.Event
   alias ReqLLM.Error.API.Request, as: APIRequestError
   alias ReqLLM.Error.API.Stream, as: APIStreamError
+  alias ReqLLM.StreamEvent
 
   test "projects nested stream errors without exposing Elixir terms or upstream headers" do
     request_error =
@@ -18,7 +19,9 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
         headers: [
           {"set-cookie", "secret-cookie"},
           {"x-trace-id", "upstream-trace"}
-        ]
+        ],
+        provider_code: "access_terminated_error",
+        retryable: false
       )
 
     stream_error =
@@ -44,7 +47,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
                  }
                }
              }
-           ] = Projection.events(%{type: :error, data: stream_error}, "k3")
+           ] = Projection.events(StreamEvent.new(:error, stream_error), "k3")
 
     rendered = inspect(ErrorProjection.client_error(stream_error))
     refute rendered =~ "ReqLLM.Error"

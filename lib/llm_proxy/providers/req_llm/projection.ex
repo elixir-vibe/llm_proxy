@@ -4,7 +4,7 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
   alias LLMProxy.Providers.ReqLLM.ErrorProjection
   alias LLMProxy.Stream.Event
   alias LLMProxy.Usage
-  alias ReqLLM.{Response, ToolCall}
+  alias ReqLLM.{Response, StreamEvent, ToolCall}
 
   @spec response(Response.t(), String.t()) :: map()
   def response(%Response{} = response, model) do
@@ -24,43 +24,20 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
     }
   end
 
-  @spec start_events(String.t()) :: [Event.t()]
-  def start_events(model) do
+  @spec events(StreamEvent.t(), String.t()) :: [Event.t()]
+  def events(%StreamEvent{type: :start}, model) do
     [Event.new(stream_chunk(model, %{"role" => "assistant"}, nil))]
   end
 
-  @spec events(map(), String.t()) :: [Event.t()]
-  def events(%{type: type, text: text}, model) when type in [:content, :thinking] do
-    key = if type == :thinking, do: "reasoning_content", else: "content"
-    [Event.new(stream_chunk(model, %{key => text}, nil))]
+  def events(%StreamEvent{type: :text_delta, data: text}, model) do
+    [Event.new(stream_chunk(model, %{"content" => text}, nil))]
   end
 
-  def events(%{type: type, data: text}, model)
-      when type in [:text_delta, :reasoning_delta] do
-    key = if type == :reasoning_delta, do: "reasoning_content", else: "content"
-    [Event.new(stream_chunk(model, %{key => text}, nil))]
+  def events(%StreamEvent{type: :reasoning_delta, data: text}, model) do
+    [Event.new(stream_chunk(model, %{"reasoning_content" => text}, nil))]
   end
 
-  def events(%{type: :tool_call, name: name, arguments: arguments} = chunk, model) do
-    metadata = Map.get(chunk, :metadata, %{})
-    index = metadata_value(metadata, :index, 0)
-
-    tool_call = %{
-      "index" => index,
-      "type" => "function",
-      "function" => %{"name" => name, "arguments" => Jason.encode!(arguments)}
-    }
-
-    tool_call =
-      case metadata_value(metadata, :id) do
-        nil -> tool_call
-        id -> Map.put(tool_call, "id", id)
-      end
-
-    [Event.new(stream_chunk(model, %{"tool_calls" => [tool_call]}, nil))]
-  end
-
-  def events(%{type: :tool_call, data: call}, model) do
+  def events(%StreamEvent{type: :tool_call, data: call}, model) do
     delta = %{
       "tool_calls" => [
         %{
@@ -75,27 +52,7 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
     [Event.new(stream_chunk(model, delta, nil))]
   end
 
-  def events(%{type: :usage, data: stream_usage}, model), do: usage_events(stream_usage, model)
-
-  def events(%{type: :finish, data: data}, model) do
-    [Event.new(stream_chunk(model, %{}, finish_reason(data.finish_reason)))]
-  end
-
-  def events(%{type: :error, data: error}, _model) do
-    [Event.new(%{"error" => ErrorProjection.client_error(error)})]
-  end
-
-  def events(%{type: :meta, metadata: metadata}, model) do
-    usage_events(metadata_value(metadata, :usage), model) ++
-      tool_argument_events(metadata_value(metadata, :tool_call_args), model) ++
-      finish_events(metadata, model)
-  end
-
-  def events(_event, _model), do: []
-
-  defp usage_events(nil, _model), do: []
-
-  defp usage_events(stream_usage, model) do
+  def events(%StreamEvent{type: :usage, data: stream_usage}, model) do
     rendered = usage(stream_usage)
 
     data = %{
@@ -109,28 +66,15 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
     [Event.new(data, usage: Usage.from_openai(rendered))]
   end
 
-  defp tool_argument_events(nil, _model), do: []
-
-  defp tool_argument_events(arguments, model) do
-    function = %{"arguments" => metadata_value(arguments, :fragment, "")}
-    tool_call = %{"index" => metadata_value(arguments, :index, 0), "function" => function}
-    [Event.new(stream_chunk(model, %{"tool_calls" => [tool_call]}, nil))]
+  def events(%StreamEvent{type: :finish, data: data}, model) do
+    [Event.new(stream_chunk(model, %{}, finish_reason(data.finish_reason)))]
   end
 
-  defp finish_events(metadata, model) do
-    terminal? = metadata_value(metadata, :terminal?, false)
-    reason = metadata_value(metadata, :finish_reason)
-
-    if terminal? or not is_nil(reason) do
-      [Event.new(stream_chunk(model, %{}, finish_reason(reason)))]
-    else
-      []
-    end
+  def events(%StreamEvent{type: :error, data: error}, _model) do
+    [Event.new(%{"error" => ErrorProjection.client_error(error)})]
   end
 
-  defp metadata_value(map, key, default \\ nil) do
-    Map.get(map, key, Map.get(map, Atom.to_string(key), default))
-  end
+  def events(_event, _model), do: []
 
   defp message(response) do
     %{"role" => "assistant", "content" => Response.text(response)}
