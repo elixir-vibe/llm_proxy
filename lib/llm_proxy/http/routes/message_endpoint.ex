@@ -106,35 +106,58 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   end
 
   defp handle_stream(conn, provider, stream, api_key, model, token, trace_id) do
-    conn = SSEWriter.start_sse(conn)
-    {conn, usage} = pipe_stream(conn, provider, stream, token)
-    UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
-    conn
+    outcome = pipe_stream(conn, provider, stream, model, token)
+
+    case outcome do
+      {:preflight_failure, conn, reason} ->
+        error = Result.stream_failure(provider, model, token, reason)
+        handle_provider_error(conn, {:provider, error})
+
+      {:pending, conn, usage} ->
+        conn = SSEWriter.start_sse(conn)
+        UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
+        conn
+
+      {:started, conn, usage} ->
+        UsageTracking.track_usage(api_key, model, usage, tracking_opts(provider, trace_id))
+        conn
+    end
   end
 
-  defp pipe_stream(conn, provider, stream, token) do
-    zero_usage = Usage.zero()
+  defp pipe_stream(conn, provider, stream, model, token) do
+    stream
+    |> Heartbeat.wrap()
+    |> Enum.reduce_while({:pending, conn, Usage.zero()}, fn
+      %Heartbeat.Failure{reason: reason}, {:pending, conn, _usage} ->
+        {:halt, {:preflight_failure, conn, reason}}
 
-    try do
-      stream
-      |> Heartbeat.wrap()
-      |> Enum.reduce_while({conn, zero_usage}, fn
-        %Heartbeat{}, {conn, usage} ->
-          SSEWriter.reduce_heartbeat(conn, usage)
+      %Heartbeat.Failure{reason: reason}, {:started, conn, usage} ->
+        conn = write_stream_failure(conn, provider, model, token, reason)
+        {:halt, {:started, conn, usage}}
 
-        %Event{} = event, {conn, usage} ->
-          data = event.data
-          usage = merge_stream_usage(usage, event, provider)
+      event, {:pending, conn, usage} ->
+        conn = SSEWriter.start_sse(conn)
+        reduce_stream_item(event, {:started, conn, usage}, provider)
 
-          case SSEWriter.write_named_event(conn, event.event || data["type"] || "unknown", data) do
-            {:ok, conn} -> {:cont, {conn, usage}}
-            {:error, _reason} -> {:halt, {conn, usage}}
-          end
-      end)
-    rescue
-      e in [RuntimeError, Jason.DecodeError, Protocol.UndefinedError] ->
-        handle_stream_error(conn, e, token)
-        {conn, zero_usage}
+      event, {:started, _conn, _usage} = state ->
+        reduce_stream_item(event, state, provider)
+    end)
+  end
+
+  defp reduce_stream_item(%Heartbeat{}, {:started, conn, usage}, _provider) do
+    case SSEWriter.write_heartbeat(conn) do
+      {:ok, conn} -> {:cont, {:started, conn, usage}}
+      {:error, _reason} -> {:halt, {:started, conn, usage}}
+    end
+  end
+
+  defp reduce_stream_item(%Event{} = event, {:started, conn, usage}, provider) do
+    data = event.data
+    usage = merge_stream_usage(usage, event, provider)
+
+    case SSEWriter.write_named_event(conn, event.event || data["type"] || "unknown", data) do
+      {:ok, conn} -> {:cont, {:started, conn, usage}}
+      {:error, _reason} -> {:halt, {:started, conn, usage}}
     end
   end
 
@@ -164,24 +187,14 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
 
   defp merge_stream_usage(usage, _event, _provider), do: usage
 
-  defp handle_stream_error(conn, error, token) do
-    error_msg = Exception.message(error)
+  defp write_stream_failure(conn, provider, model, token, reason) do
+    error = Result.stream_failure(provider, model, token, reason)
+    error_event = %{"type" => "error", "error" => Result.client_error(error)}
 
-    is_rate_limit =
-      String.contains?(error_msg, "429") || String.contains?(error_msg, "rate_limit")
-
-    if is_rate_limit && token, do: TokenPool.mark_rate_limited(token)
-    Logger.error("Stream error: #{error_msg}")
-
-    error_event = %{
-      "type" => "error",
-      "error" => %{
-        "type" => if(is_rate_limit, do: "rate_limit_error", else: "api_error"),
-        "message" => error_msg
-      }
-    }
-
-    SSEWriter.write_named_event(conn, "error", error_event)
+    case SSEWriter.write_named_event(conn, "error", error_event) do
+      {:ok, conn} -> conn
+      {:error, _reason} -> conn
+    end
   end
 
   defp tracking_opts(provider, trace_id) do

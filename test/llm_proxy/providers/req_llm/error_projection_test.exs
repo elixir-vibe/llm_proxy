@@ -2,6 +2,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
   use ExUnit.Case, async: true
 
   alias LLMProxy.Providers.ReqLLM.{ErrorProjection, Projection}
+  alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.Event
   alias ReqLLM.Error.API.Request, as: APIRequestError
   alias ReqLLM.Error.API.Stream, as: APIStreamError
@@ -48,6 +49,11 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
                }
              }
            ] = Projection.events(StreamEvent.new(:error, stream_error), "k3")
+
+    result = Result.stream_failure(LLMProxy.Providers.ReqLLM, "gpt-5.6-sol", nil, stream_error)
+    assert result.status == 403
+    assert result.error == "Quota exhausted. Upgrade your plan."
+    assert Result.client_error(result)["code"] == "access_terminated_error"
 
     rendered = inspect(ErrorProjection.client_error(stream_error))
     refute rendered =~ "ReqLLM.Error"

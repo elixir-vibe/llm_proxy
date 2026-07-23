@@ -62,6 +62,31 @@ defmodule LLMProxy.Providers.Result do
     }
   end
 
+  @spec stream_failure(module(), String.t(), token(), term()) :: t()
+  def stream_failure(provider, model, token, reason)
+      when is_atom(provider) and is_binary(model) do
+    result =
+      if Code.ensure_loaded?(provider) and function_exported?(provider, :stream_error, 2) do
+        provider.stream_error(reason, token)
+      else
+        error("Upstream provider stream failed", 502, token)
+      end
+
+    %{result | provider: provider, provider_name: provider_name(provider), model: model}
+  end
+
+  @spec client_error(t()) :: map()
+  def client_error(%__MODULE__{provider_body: %{"error" => error}}) when is_map(error), do: error
+
+  def client_error(%__MODULE__{error: message, status: status}) do
+    %{
+      "message" => message || "Upstream provider stream failed",
+      "type" => error_type(status),
+      "code" => error_type(status),
+      "status" => status || 502
+    }
+  end
+
   @spec with_attempt({:ok, t()} | {:error, t()}, LLMProxy.Providers.Attempt.t()) ::
           {:ok, t()} | {:error, t()}
   def with_attempt({state, %__MODULE__{} = result}, %LLMProxy.Providers.Attempt{} = attempt)
@@ -79,11 +104,18 @@ defmodule LLMProxy.Providers.Result do
           {:ok, t()} | {:error, t()}
   def with_attempt({state, %__MODULE__{} = result}, provider, model)
       when state in [:ok, :error] do
-    provider_name =
-      if function_exported?(provider, :name, 0),
-        do: provider.name(),
-        else: Atom.to_string(provider)
-
-    {state, %{result | provider: provider, provider_name: provider_name, model: model}}
+    {state, %{result | provider: provider, provider_name: provider_name(provider), model: model}}
   end
+
+  defp provider_name(provider) do
+    if function_exported?(provider, :name, 0),
+      do: provider.name(),
+      else: Atom.to_string(provider)
+  end
+
+  defp error_type(401), do: "authentication_error"
+  defp error_type(403), do: "permission_error"
+  defp error_type(429), do: "rate_limit_error"
+  defp error_type(status) when is_integer(status) and status >= 500, do: "upstream_error"
+  defp error_type(_status), do: "api_error"
 end

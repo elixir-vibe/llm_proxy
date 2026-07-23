@@ -36,11 +36,15 @@ defmodule LLMProxy.Providers.Behaviour do
   @doc "Streaming native passthrough. Routes pass the validated native wire body explicitly."
   @callback stream_native(body :: map(), user_id :: String.t()) :: stream_result()
 
+  @doc "Project an exception raised while lazily consuming a provider stream"
+  @callback stream_error(reason :: term(), token :: map() | nil) ::
+              LLMProxy.Providers.Result.t()
+
   @doc "Extract usage from a non-streaming response body"
   @callback extract_usage(response :: map()) :: usage()
 
   @doc "Convert native response to OpenAI chat completion format"
   @callback to_openai_response(response :: map(), model :: String.t()) :: map()
 
-  @optional_callbacks [call_native: 2, stream_native: 2]
+  @optional_callbacks [call_native: 2, stream_native: 2, stream_error: 2]
 end

@@ -80,6 +80,9 @@ defmodule LLMProxy.Providers.ReqLLM do
   end
 
   @impl true
+  def stream_error(reason, token), do: req_llm_error(reason, token)
+
+  @impl true
   def extract_usage(response) when is_map(response) do
     response
     |> Map.get("usage", %{})

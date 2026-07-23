@@ -8,6 +8,15 @@ defmodule LLMProxy.Stream.Heartbeat do
 
   @default_interval_ms 15_000
 
+  defmodule Failure do
+    @moduledoc "A boundary marker for failures raised by a lazy upstream stream."
+
+    @enforce_keys [:reason]
+    defstruct [:reason]
+
+    @type t :: %__MODULE__{reason: term()}
+  end
+
   defstruct []
 
   @type t :: %__MODULE__{}
@@ -28,19 +37,27 @@ defmodule LLMProxy.Stream.Heartbeat do
 
     task =
       Task.async(fn ->
-        Enum.each(stream, fn event ->
-          send(owner, {tag, :event, event})
+        try do
+          Enum.each(stream, fn event ->
+            send(owner, {tag, :event, event})
 
-          receive do
-            {^tag, :continue} -> :ok
-          end
-        end)
+            receive do
+              {^tag, :continue} -> :ok
+            end
+          end)
 
-        send(owner, {tag, :done})
+          send(owner, {tag, :done})
+        catch
+          kind, reason ->
+            error = Exception.normalize(kind, reason, __STACKTRACE__)
+            send(owner, {tag, :failure, error})
+        end
       end)
 
-    %{tag: tag, task: task}
+    %{tag: tag, task: task, terminal?: false}
   end
+
+  defp next(%{terminal?: true} = state, _interval_ms), do: {:halt, state}
 
   defp next(%{tag: tag} = state, interval_ms) do
     receive do
@@ -48,8 +65,11 @@ defmodule LLMProxy.Stream.Heartbeat do
         send(state.task.pid, {tag, :continue})
         {[event], state}
 
+      {^tag, :failure, reason} ->
+        {[%Failure{reason: reason}], %{state | terminal?: true}}
+
       {^tag, :done} ->
-        {:halt, state}
+        {:halt, %{state | terminal?: true}}
     after
       interval_ms -> {[%__MODULE__{}], state}
     end

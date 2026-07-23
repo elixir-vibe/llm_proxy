@@ -11,7 +11,15 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
   defmodule FakeChatProvider do
     def name, do: "fake-chat"
-    def models, do: ["fake-chat-model", "fake-chat-error", "fake-chat-detailed-error"]
+
+    def models,
+      do: [
+        "fake-chat-model",
+        "fake-chat-error",
+        "fake-chat-detailed-error",
+        "fake-chat-preflight-failure",
+        "fake-chat-midstream-failure"
+      ]
 
     def call(%{"model" => "fake-chat-error"}, _user_id) do
       {:error, Result.error("upstream failed", 502, nil)}
@@ -40,6 +48,34 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
        )}
     end
 
+    def stream(%{"model" => "fake-chat-preflight-failure"}, _user_id) do
+      stream = Stream.map([:request], fn _request -> raise "model is not available" end)
+      {:ok, Result.stream(stream, nil)}
+    end
+
+    def stream(%{"model" => "fake-chat-midstream-failure"}, _user_id) do
+      stream =
+        Stream.resource(
+          fn -> :first end,
+          fn
+            :first ->
+              event =
+                Event.new(%{
+                  "id" => "chat-failure",
+                  "choices" => [%{"delta" => %{"content" => "partial"}}]
+                })
+
+              {[event], :failure}
+
+            :failure ->
+              raise "upstream disconnected"
+          end,
+          fn _state -> :ok end
+        )
+
+      {:ok, Result.stream(stream, nil)}
+    end
+
     def stream(_body, _user_id) do
       {:ok,
        Result.stream(
@@ -52,6 +88,21 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
          ],
          nil
        )}
+    end
+
+    def stream_error(reason, token) do
+      message = Exception.message(reason)
+
+      Result.error(message, 400, token,
+        provider_body: %{
+          "error" => %{
+            "message" => message,
+            "type" => "invalid_request_error",
+            "code" => "invalid_request_error",
+            "status" => 400
+          }
+        }
+      )
     end
 
     def extract_usage(response) do
@@ -189,6 +240,56 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 12
     assert updated_key.output_tokens == 7
+  end
+
+  test "returns an HTTP provider error when a lazy stream fails before its first event" do
+    {:ok, _key, raw_key} = Storage.create_key("preflight-stream-error-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/completions", %{
+        "model" => "fake-chat-preflight-failure",
+        "stream" => true,
+        "messages" => [%{"role" => "user", "content" => "hello"}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> Chat.call(Chat.init([]))
+
+    assert conn.status == 400
+    assert conn.state == :sent
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "error" => %{
+               "message" => "model is not available",
+               "details" => %{
+                 "error" => %{
+                   "message" => "model is not available",
+                   "type" => "invalid_request_error",
+                   "code" => "invalid_request_error",
+                   "status" => 400
+                 }
+               }
+             }
+           }
+  end
+
+  test "renders a protocol error and DONE when a lazy stream fails after output" do
+    {:ok, _key, raw_key} = Storage.create_key("midstream-error-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/completions", %{
+        "model" => "fake-chat-midstream-failure",
+        "stream" => true,
+        "messages" => [%{"role" => "user", "content" => "hello"}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> Chat.call(Chat.init([]))
+
+    assert conn.status == 200
+    assert conn.state == :chunked
+    assert conn.resp_body =~ "partial"
+    assert conn.resp_body =~ "upstream disconnected"
+    assert conn.resp_body =~ "invalid_request_error"
+    assert conn.resp_body =~ "data: [DONE]"
   end
 
   test "stream remains active until the response stream finishes" do

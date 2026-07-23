@@ -11,7 +11,13 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
     def name, do: "fake-responses"
 
     def models,
-      do: ["fake-responses-model", "fake-responses-error", "fake-responses-rate-limited"]
+      do: [
+        "fake-responses-model",
+        "fake-responses-error",
+        "fake-responses-rate-limited",
+        "fake-responses-preflight-failure",
+        "fake-responses-midstream-failure"
+      ]
 
     def call_native(%{"model" => "fake-responses-error"}, _user_id) do
       {:error, Result.error("response failed", 500, nil)}
@@ -37,6 +43,27 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
        )}
     end
 
+    def stream_native(
+          %{"model" => "fake-responses-preflight-failure", "stream" => true},
+          _user_id
+        ) do
+      stream = Stream.map([:request], fn _request -> raise "responses model unavailable" end)
+      {:ok, Result.stream(stream, nil)}
+    end
+
+    def stream_native(
+          %{"model" => "fake-responses-midstream-failure", "stream" => true},
+          _user_id
+        ) do
+      stream =
+        Stream.concat(
+          [Event.new(%{"type" => "response.output_text.delta", "delta" => "partial"})],
+          Stream.map([:failure], fn _event -> raise "responses upstream disconnected" end)
+        )
+
+      {:ok, Result.stream(stream, nil)}
+    end
+
     def stream_native(%{"stream" => true}, _user_id) do
       {:ok,
        Result.stream(
@@ -49,6 +76,8 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
          nil
        )}
     end
+
+    def stream_error(reason, token), do: Result.error(Exception.message(reason), 400, token)
   end
 
   setup do
@@ -102,6 +131,42 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 9
     assert updated_key.output_tokens == 4
+  end
+
+  test "returns HTTP errors for responses streams rejected before the first event" do
+    {:ok, _key, raw_key} = Storage.create_key("responses-preflight-failure")
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{
+        "model" => "fake-responses-preflight-failure",
+        "input" => [%{"role" => "user", "content" => "hello"}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
+
+    assert conn.status == 400
+    assert conn.state == :sent
+
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) ==
+             "responses model unavailable"
+  end
+
+  test "renders responses error events and DONE after midstream failures" do
+    {:ok, _key, raw_key} = Storage.create_key("responses-midstream-failure")
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{
+        "model" => "fake-responses-midstream-failure",
+        "input" => [%{"role" => "user", "content" => "hello"}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
+
+    assert conn.status == 200
+    assert conn.resp_body =~ "partial"
+    assert conn.resp_body =~ "responses upstream disconnected"
+    assert conn.resp_body =~ ~s("type":"error")
+    assert conn.resp_body =~ "data: [DONE]"
   end
 
   test "rejects invalid input message shapes" do

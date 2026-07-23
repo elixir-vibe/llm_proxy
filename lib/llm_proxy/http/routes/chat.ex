@@ -106,49 +106,74 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     HTTP.send_json(conn, 403, %{error: inspect(reason)})
   end
 
-  defp finish_stream(conn, %Result{
-         kind: :stream,
-         stream: stream,
-         provider: used_provider,
-         model: used_model
-       }) do
-    conn = SSEWriter.start_sse(conn)
-    from_protocol = provider_protocol(used_provider)
+  defp finish_stream(conn, %Result{kind: :stream} = result) do
+    from_protocol = provider_protocol(result.provider)
 
-    pipe_stream(conn, stream, from_protocol, used_model)
-  end
-
-  defp pipe_stream(conn, stream, from_protocol, model) do
-    stream
+    result.stream
     |> Heartbeat.wrap()
-    |> Enum.reduce_while(conn, fn
-      %Heartbeat{}, conn ->
-        write_heartbeat(conn)
+    |> Enum.reduce_while({:pending, conn}, fn
+      %Heartbeat.Failure{reason: reason}, {:pending, conn} ->
+        {:halt, {:preflight_failure, conn, reason}}
 
-      event, conn ->
-        write_stream_event(conn, OpenAI.stream_event(event.data, from_protocol, model))
+      %Heartbeat.Failure{reason: reason}, {:started, conn} ->
+        {:halt, {:started, write_stream_failure(conn, result, reason)}}
+
+      event, {:pending, conn} ->
+        conn = SSEWriter.start_sse(conn)
+        reduce_stream_item(event, {:started, conn}, from_protocol, result.model)
+
+      event, {:started, _conn} = state ->
+        reduce_stream_item(event, state, from_protocol, result.model)
     end)
-    |> then(fn conn ->
-      case SSEWriter.write_done(conn) do
-        {:ok, conn} -> conn
-        {:error, _reason} -> conn
-      end
-    end)
+    |> finish_stream_result(result)
   end
 
-  defp write_heartbeat(conn) do
+  defp reduce_stream_item(%Heartbeat{}, {:started, conn}, _from_protocol, _model) do
     case SSEWriter.write_heartbeat(conn) do
-      {:ok, conn} -> {:cont, conn}
-      {:error, _reason} -> {:halt, conn}
+      {:ok, conn} -> {:cont, {:started, conn}}
+      {:error, _reason} -> {:halt, {:started, conn}}
     end
   end
 
-  defp write_stream_event(conn, nil), do: {:cont, conn}
+  defp reduce_stream_item(event, {:started, conn}, from_protocol, model) do
+    case OpenAI.stream_event(event.data, from_protocol, model) do
+      nil ->
+        {:cont, {:started, conn}}
 
-  defp write_stream_event(conn, data) do
-    case SSEWriter.write_event(conn, data) do
-      {:ok, conn} -> {:cont, conn}
-      {:error, _reason} -> {:halt, conn}
+      data ->
+        case SSEWriter.write_event(conn, data) do
+          {:ok, conn} -> {:cont, {:started, conn}}
+          {:error, _reason} -> {:halt, {:started, conn}}
+        end
+    end
+  end
+
+  defp finish_stream_result({:preflight_failure, conn, reason}, result) do
+    error = Result.stream_failure(result.provider, result.model, result.token, reason)
+    handle_provider_error(conn, {:provider, error})
+  end
+
+  defp finish_stream_result({:pending, conn}, _result) do
+    conn
+    |> SSEWriter.start_sse()
+    |> write_done()
+  end
+
+  defp finish_stream_result({:started, conn}, _result), do: write_done(conn)
+
+  defp write_stream_failure(conn, result, reason) do
+    error = Result.stream_failure(result.provider, result.model, result.token, reason)
+
+    case SSEWriter.write_event(conn, %{"error" => Result.client_error(error)}) do
+      {:ok, conn} -> conn
+      {:error, _reason} -> conn
+    end
+  end
+
+  defp write_done(conn) do
+    case SSEWriter.write_done(conn) do
+      {:ok, conn} -> conn
+      {:error, _reason} -> conn
     end
   end
 
