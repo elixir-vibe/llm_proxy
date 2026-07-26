@@ -9,24 +9,88 @@ defmodule LLMProxy.Repo.Migrations.WidenTokenCounters do
   end
 
   defp widen_quackdb_columns do
-    execute("ALTER TABLE api_keys ALTER COLUMN quota_4h_input TYPE BIGINT")
-    execute("ALTER TABLE api_keys ALTER COLUMN quota_4h_output TYPE BIGINT")
-    execute("ALTER TABLE api_keys ALTER COLUMN quota_week_input TYPE BIGINT")
-    execute("ALTER TABLE api_keys ALTER COLUMN quota_week_output TYPE BIGINT")
-    execute("ALTER TABLE api_keys ALTER COLUMN input_tokens TYPE BIGINT")
-    execute("ALTER TABLE api_keys ALTER COLUMN output_tokens TYPE BIGINT")
-    execute("ALTER TABLE api_keys ALTER COLUMN cache_read_tokens TYPE BIGINT")
-    execute("ALTER TABLE api_keys ALTER COLUMN cache_write_tokens TYPE BIGINT")
+    drop(index(:api_keys, [:hash]))
+    drop(index(:usage_log, [:key_id]))
+    drop(index(:usage_log, [:timestamp]))
+    drop(index(:traces, [:key_id]))
+    drop(index(:traces, [:model]))
+    drop(index(:traces, [:session_id]))
+    drop(index(:traces, [:timestamp]))
+    drop(index(:message_log, [:key_id]))
+    drop(index(:message_log, [:timestamp]))
 
-    execute("ALTER TABLE usage_log ALTER COLUMN input_tokens TYPE BIGINT")
-    execute("ALTER TABLE usage_log ALTER COLUMN output_tokens TYPE BIGINT")
-    execute("ALTER TABLE usage_log ALTER COLUMN cache_read_tokens TYPE BIGINT")
-    execute("ALTER TABLE usage_log ALTER COLUMN cache_write_tokens TYPE BIGINT")
+    alter table(:api_keys) do
+      modify(:quota_4h_input, :bigint)
+    end
 
-    execute("ALTER TABLE traces ALTER COLUMN input_tokens TYPE BIGINT")
-    execute("ALTER TABLE traces ALTER COLUMN output_tokens TYPE BIGINT")
+    alter table(:api_keys) do
+      modify(:quota_4h_output, :bigint)
+    end
 
-    execute("ALTER TABLE message_log ALTER COLUMN input_tokens TYPE BIGINT")
-    execute("ALTER TABLE message_log ALTER COLUMN output_tokens TYPE BIGINT")
+    alter table(:api_keys) do
+      modify(:quota_week_input, :bigint)
+    end
+
+    alter table(:api_keys) do
+      modify(:quota_week_output, :bigint)
+    end
+
+    alter table(:api_keys) do
+      modify(:input_tokens, :bigint)
+    end
+
+    alter table(:api_keys) do
+      modify(:output_tokens, :bigint)
+    end
+
+    alter table(:api_keys) do
+      modify(:cache_read_tokens, :bigint)
+    end
+
+    alter table(:api_keys) do
+      modify(:cache_write_tokens, :bigint)
+    end
+
+    alter table(:usage_log) do
+      modify(:input_tokens, :bigint)
+    end
+
+    alter table(:usage_log) do
+      modify(:output_tokens, :bigint)
+    end
+
+    alter table(:usage_log) do
+      modify(:cache_read_tokens, :bigint)
+    end
+
+    alter table(:usage_log) do
+      modify(:cache_write_tokens, :bigint)
+    end
+
+    alter table(:traces) do
+      modify(:input_tokens, :bigint)
+    end
+
+    alter table(:traces) do
+      modify(:output_tokens, :bigint)
+    end
+
+    alter table(:message_log) do
+      modify(:input_tokens, :bigint)
+    end
+
+    alter table(:message_log) do
+      modify(:output_tokens, :bigint)
+    end
+
+    create(unique_index(:api_keys, [:hash]))
+    create(index(:usage_log, [:key_id]))
+    create(index(:usage_log, [:timestamp]))
+    create(index(:traces, [:key_id]))
+    create(index(:traces, [:model]))
+    create(index(:traces, [:session_id]))
+    create(index(:traces, [:timestamp]))
+    create(index(:message_log, [:key_id]))
+    create(index(:message_log, [:timestamp]))
   end
 end
