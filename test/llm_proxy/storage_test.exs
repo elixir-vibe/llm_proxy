@@ -42,6 +42,29 @@ defmodule LLMProxy.StorageTest do
       assert changeset.errors[:budget_limits]
     end
 
+    test "aggregate token counters exceed the signed 32-bit range" do
+      {:ok, key, _raw_key} = Storage.create_key("large-counter-user")
+
+      Storage.update_key_usage(key, %{
+        input: 2_147_459_072,
+        output: 1_000,
+        cache_read: 2_115_365_218,
+        cache_write: 0
+      })
+
+      Storage.update_key_usage(key, %{
+        input: 324_601,
+        output: 2_000,
+        cache_read: 40_000_000,
+        cache_write: 0
+      })
+
+      [updated_key] = Storage.list_keys()
+      assert updated_key.input_tokens == 2_147_783_673
+      assert updated_key.output_tokens == 3_000
+      assert updated_key.cache_read_tokens == 2_155_365_218
+    end
+
     test "list_keys returns all keys" do
       {:ok, _k1, _} = Storage.create_key("user-1")
       {:ok, _k2, _} = Storage.create_key("user-2")

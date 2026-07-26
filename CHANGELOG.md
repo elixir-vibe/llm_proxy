@@ -6,6 +6,7 @@
 
 - Streaming endpoints now wait for the first upstream event before committing HTTP 200, return immediate lazy-stream failures as HTTP errors, and render sanitized protocol error events when providers fail after streaming begins.
 - OpenAI Codex stream failures now preserve safe upstream reasons, while trace-correlated diagnostics distinguish upstream failures from local storage errors without exposing request, query, or credential data.
+- Token counters now use 64-bit database columns, and accounting exceptions are reported internally without turning a completed model stream into a client failure.
 
 ### Security
 

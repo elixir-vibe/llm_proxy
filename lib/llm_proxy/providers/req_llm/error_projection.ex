@@ -25,19 +25,22 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   @spec project(term()) :: t()
   def project(%QuackDB.Error{}) do
-    %{message: "Internal stream processing failed", code: "internal_error", status: 500}
+    projected_error("Internal stream processing failed", "internal_error", 500)
   end
 
   def project(reason) do
     chain = error_chain(reason)
     status = Enum.find_value(chain, &status/1) || 502
 
-    %{
-      message: Enum.find_value(chain, &message/1) || @fallback_message,
-      code: Enum.find_value(chain, &code/1) || status_code(status),
-      status: status
-    }
+    projected_error(
+      Enum.find_value(chain, &message/1) || @fallback_message,
+      Enum.find_value(chain, &code/1) || status_code(status),
+      status
+    )
   end
+
+  @spec accounting_error() :: t()
+  def accounting_error, do: projected_error("Usage accounting failed", "accounting_error", 500)
 
   @spec client_error(term()) :: map()
   def client_error(reason) do
@@ -50,6 +53,9 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
       "status" => error.status
     }
   end
+
+  defp projected_error(message, code, status),
+    do: %{message: message, code: code, status: status}
 
   defp error_chain(reason), do: error_chain(reason, [], 0)
 

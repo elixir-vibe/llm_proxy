@@ -43,45 +43,29 @@ defmodule LLMProxy.Telemetry do
   end
 
   def record_stream_exception(%StreamContext{} = context, reason, stacktrace) do
-    public_error = ErrorProjection.project(reason)
-    exception_type = exception_type(reason)
-    {diagnostic_code, diagnostic_message, diagnostic_suffix} = diagnostic(reason, public_error)
-
-    Logger.error(
-      "Stream pipeline failed provider=#{context.provider} model=#{context.model} " <>
-        "trace_id=#{context.trace_id} status=#{public_error.status} code=#{diagnostic_code} " <>
-        "exception=#{exception_type} reason=#{inspect(diagnostic_message)}#{diagnostic_suffix}"
-    )
-
-    safe_exception = RuntimeError.exception(diagnostic_message)
-
-    Tracer.record_exception(
-      safe_exception,
-      sanitize_stacktrace(stacktrace),
-      [
-        {:"llm_proxy.exception.original_type", exception_type},
-        {:"llm_proxy.error.code", diagnostic_code}
-      ] ++ diagnostic_attributes(reason)
-    )
-
-    Tracer.set_status(OpenTelemetry.status(:error, diagnostic_message))
-
-    metadata =
-      context
-      |> Map.merge(%{
-        error_code: diagnostic_code,
-        error_message: diagnostic_message,
-        exception_type: exception_type,
-        lazy: true,
-        public_error_code: public_error.code,
-        public_error_message: public_error.message
-      })
-      |> Map.merge(diagnostic_metadata(reason))
-
-    :telemetry.execute(
+    record_exception(
+      "Stream pipeline failed",
       [:llm_proxy, :routing, :stream_attempt, :exception],
-      %{status: public_error.status, system_time: System.system_time()},
-      metadata
+      context,
+      reason,
+      stacktrace,
+      ErrorProjection.project(reason),
+      %{lazy: true}
+    )
+  end
+
+  def record_accounting_exception(provider, model, trace_id, reason, stacktrace) do
+    context = stream_context(provider, model, trace_id)
+    error = ErrorProjection.accounting_error()
+
+    record_exception(
+      "Usage accounting failed",
+      [:llm_proxy, :accounting, :exception],
+      context,
+      reason,
+      stacktrace,
+      error,
+      %{}
     )
   end
 
@@ -97,6 +81,54 @@ defmodule LLMProxy.Telemetry do
         },
         metadata
       )
+    )
+  end
+
+  defp record_exception(
+         log_label,
+         event,
+         context,
+         reason,
+         stacktrace,
+         public_error,
+         metadata
+       ) do
+    exception_type = exception_type(reason)
+    {diagnostic_code, diagnostic_message, diagnostic_suffix} = diagnostic(reason, public_error)
+
+    Logger.error(
+      "#{log_label} provider=#{context.provider} model=#{context.model} " <>
+        "trace_id=#{context.trace_id} status=#{public_error.status} code=#{diagnostic_code} " <>
+        "exception=#{exception_type} reason=#{inspect(diagnostic_message)}#{diagnostic_suffix}"
+    )
+
+    Tracer.record_exception(
+      RuntimeError.exception(diagnostic_message),
+      sanitize_stacktrace(stacktrace),
+      [
+        {:"llm_proxy.exception.original_type", exception_type},
+        {:"llm_proxy.error.code", diagnostic_code}
+      ] ++ diagnostic_attributes(reason)
+    )
+
+    Tracer.set_status(OpenTelemetry.status(:error, diagnostic_message))
+
+    event_metadata =
+      context
+      |> Map.merge(metadata)
+      |> Map.merge(%{
+        error_code: diagnostic_code,
+        error_message: diagnostic_message,
+        exception_type: exception_type,
+        public_error_code: public_error.code,
+        public_error_message: public_error.message
+      })
+      |> Map.merge(diagnostic_metadata(reason))
+
+    :telemetry.execute(
+      event,
+      %{status: public_error.status, system_time: System.system_time()},
+      event_metadata
     )
   end
 

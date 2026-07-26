@@ -7,6 +7,7 @@ defmodule LLMProxy.Accounting.UsageTracking do
 
   alias LLMProxy.Pricing
   alias LLMProxy.Storage
+  alias LLMProxy.Telemetry
   alias LLMProxy.Usage
 
   @spec track_usage(map(), String.t(), Usage.t(), map()) :: :ok | term()
@@ -52,6 +53,23 @@ defmodule LLMProxy.Accounting.UsageTracking do
     Logger.info(
       "Completed #{api_key.name} model=#{model} in=#{usage.input_tokens} out=#{usage.output_tokens} cost=$#{Float.round(cost_usd, 6)}#{duration}"
     )
+  rescue
+    reason in [
+      QuackDB.Error,
+      DBConnection.ConnectionError,
+      Ecto.ConstraintError,
+      Ecto.QueryError,
+      Ecto.StaleEntryError
+    ] ->
+      Telemetry.record_accounting_exception(
+        to_string(opts[:provider] || "unknown"),
+        model,
+        trace_id(opts),
+        reason,
+        __STACKTRACE__
+      )
+
+      :ok
   end
 
   @spec maybe_record_trace(map(), String.t(), map(), map(), Usage.t(), map()) :: term()
@@ -79,6 +97,9 @@ defmodule LLMProxy.Accounting.UsageTracking do
       :ok
     end
   end
+
+  defp trace_id(%{metadata: %{"trace_id" => trace_id}}) when is_binary(trace_id), do: trace_id
+  defp trace_id(_opts), do: "unknown"
 
   def log_user_message(api_key, model, route, extractor) when is_function(extractor, 0) do
     case extractor.() do
