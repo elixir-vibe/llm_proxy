@@ -8,6 +8,8 @@ defmodule LLMProxy.Telemetry do
 
   alias LLMProxy.Providers.ReqLLM.ErrorProjection
 
+  @sensitive_markers ["authorization", "bearer ", "password=", "secret=", "token="]
+
   defmodule StreamContext do
     @moduledoc false
 
@@ -41,32 +43,45 @@ defmodule LLMProxy.Telemetry do
   end
 
   def record_stream_exception(%StreamContext{} = context, reason, stacktrace) do
-    error = ErrorProjection.project(reason)
+    public_error = ErrorProjection.project(reason)
     exception_type = exception_type(reason)
+    {diagnostic_code, diagnostic_message, diagnostic_suffix} = diagnostic(reason, public_error)
 
     Logger.error(
-      "Upstream stream failed provider=#{context.provider} model=#{context.model} " <>
-        "trace_id=#{context.trace_id} status=#{error.status} code=#{error.code} " <>
-        "exception=#{exception_type} reason=#{inspect(error.message)}"
+      "Stream pipeline failed provider=#{context.provider} model=#{context.model} " <>
+        "trace_id=#{context.trace_id} status=#{public_error.status} code=#{diagnostic_code} " <>
+        "exception=#{exception_type} reason=#{inspect(diagnostic_message)}#{diagnostic_suffix}"
     )
 
-    safe_exception = RuntimeError.exception(error.message)
+    safe_exception = RuntimeError.exception(diagnostic_message)
 
-    Tracer.record_exception(safe_exception, sanitize_stacktrace(stacktrace), [
-      {:"llm_proxy.exception.original_type", exception_type}
-    ])
+    Tracer.record_exception(
+      safe_exception,
+      sanitize_stacktrace(stacktrace),
+      [
+        {:"llm_proxy.exception.original_type", exception_type},
+        {:"llm_proxy.error.code", diagnostic_code}
+      ] ++ diagnostic_attributes(reason)
+    )
 
-    Tracer.set_status(OpenTelemetry.status(:error, error.message))
+    Tracer.set_status(OpenTelemetry.status(:error, diagnostic_message))
+
+    metadata =
+      context
+      |> Map.merge(%{
+        error_code: diagnostic_code,
+        error_message: diagnostic_message,
+        exception_type: exception_type,
+        lazy: true,
+        public_error_code: public_error.code,
+        public_error_message: public_error.message
+      })
+      |> Map.merge(diagnostic_metadata(reason))
 
     :telemetry.execute(
       [:llm_proxy, :routing, :stream_attempt, :exception],
-      %{status: error.status, system_time: System.system_time()},
-      Map.merge(context, %{
-        error_code: error.code,
-        error_message: error.message,
-        exception_type: exception_type,
-        lazy: true
-      })
+      %{status: public_error.status, system_time: System.system_time()},
+      metadata
     )
   end
 
@@ -93,6 +108,47 @@ defmodule LLMProxy.Telemetry do
       "llm_proxy.stream.phase" => "consume"
     }
   end
+
+  defp diagnostic(%QuackDB.Error{} = reason, _public_error) do
+    code = "quackdb_#{reason.code || :unknown}"
+    message = safe_diagnostic_message(reason.message, code)
+    suffix = " source=#{reason.source || :unknown} retriable=#{reason.retriable? == true}"
+    {code, message, suffix}
+  end
+
+  defp diagnostic(_reason, public_error),
+    do: {public_error.code, public_error.message, ""}
+
+  defp diagnostic_attributes(%QuackDB.Error{} = reason) do
+    [
+      {:"llm_proxy.storage.code", to_string(reason.code || :unknown)},
+      {:"llm_proxy.storage.source", to_string(reason.source || :unknown)},
+      {:"llm_proxy.storage.retriable", reason.retriable? == true}
+    ]
+  end
+
+  defp diagnostic_attributes(_reason), do: []
+
+  defp diagnostic_metadata(%QuackDB.Error{} = reason) do
+    %{
+      storage_code: to_string(reason.code || :unknown),
+      storage_retriable: reason.retriable? == true,
+      storage_source: to_string(reason.source || :unknown)
+    }
+  end
+
+  defp diagnostic_metadata(_reason), do: %{}
+
+  defp safe_diagnostic_message(message, fallback) when is_binary(message) do
+    normalized = message |> String.split() |> Enum.join(" ") |> String.slice(0, 500)
+    downcased = String.downcase(normalized)
+
+    if Enum.any?(@sensitive_markers, &String.contains?(downcased, &1)),
+      do: fallback,
+      else: normalized
+  end
+
+  defp safe_diagnostic_message(_message, fallback), do: fallback
 
   defp sanitize_stacktrace(stacktrace) do
     Enum.map(stacktrace, fn

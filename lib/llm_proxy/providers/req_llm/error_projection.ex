@@ -24,6 +24,10 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
         }
 
   @spec project(term()) :: t()
+  def project(%QuackDB.Error{}) do
+    %{message: "Internal stream processing failed", code: "internal_error", status: 500}
+  end
+
   def project(reason) do
     chain = error_chain(reason)
     status = Enum.find_value(chain, &status/1) || 502

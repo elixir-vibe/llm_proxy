@@ -62,6 +62,24 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
     refute rendered =~ "set-cookie"
   end
 
+  test "classifies local storage failures without exposing database details" do
+    error =
+      QuackDB.Error.new(:transaction_conflict, "Conflict on usage_log",
+        source: :server,
+        retriable?: true,
+        query: "INSERT secret-token"
+      )
+
+    assert ErrorProjection.client_error(error) == %{
+             "message" => "Internal stream processing failed",
+             "type" => "internal_error",
+             "code" => "internal_error",
+             "status" => 500
+           }
+
+    refute inspect(ErrorProjection.client_error(error)) =~ "secret-token"
+  end
+
   test "falls back to a stable generic error instead of inspecting unknown terms" do
     assert ErrorProjection.client_error({:unexpected, self()}) == %{
              "message" => "Upstream provider request failed",
