@@ -6,6 +6,10 @@
 
 - Streaming endpoints now wait for the first upstream event before committing HTTP 200, return immediate lazy-stream failures as HTTP errors, and render sanitized protocol error events when providers fail after streaming begins.
 
+### Security
+
+- Require SafeRPC 0.1.15 or later for bounded frames, strict request validation, executable ETF rejection, and isolated listener failures.
+
 ## 0.1.0 - 2026-07-22
 
 ### Added
