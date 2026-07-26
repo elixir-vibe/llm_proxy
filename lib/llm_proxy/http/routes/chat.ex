@@ -13,7 +13,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.{Heartbeat, SSEWriter}
-  alias LLMProxy.Trace
+  alias LLMProxy.{Telemetry, Trace}
 
   plug(Auth)
   plug(QuotaCheck)
@@ -77,7 +77,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
              usage_metadata: Map.to_list(meta)
            ) do
         {:ok, %Result{kind: :stream} = result} ->
-          finish_stream(conn, result)
+          finish_stream(conn, result, request_id)
 
         {:error, reason} ->
           handle_provider_error(conn, reason)
@@ -106,11 +106,12 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     HTTP.send_json(conn, 403, %{error: inspect(reason)})
   end
 
-  defp finish_stream(conn, %Result{kind: :stream} = result) do
+  defp finish_stream(conn, %Result{kind: :stream} = result, trace_id) do
     from_protocol = provider_protocol(result.provider)
+    telemetry = Telemetry.stream_context(result.provider.name(), result.model, trace_id)
 
     result.stream
-    |> Heartbeat.wrap()
+    |> Heartbeat.wrap(telemetry: telemetry)
     |> Enum.reduce_while({:pending, conn}, fn
       %Heartbeat.Failure{reason: reason}, {:pending, conn} ->
         {:halt, {:preflight_failure, conn, reason}}

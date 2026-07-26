@@ -75,15 +75,24 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   # Surface the underlying transport reason (DNS failure, refused connection,
   # reset, TLS problem, timeout) instead of the opaque fallback so operators
   # can tell a dead upstream from a generic provider error.
+  defp reason_message(%RuntimeError{message: message}), do: safe_reason(message)
+
   defp reason_message(error) do
-    reason = field(error, :reason)
+    reason = field(error, :reason) || field(error, :original)
 
     cond do
+      message = websocket_close_message(reason) -> message
       reason in @transport_reasons -> "Connection error: #{reason}"
       transport_reason?(reason) -> "Connection error: #{reason}"
       true -> safe_reason(reason)
     end
   end
+
+  defp websocket_close_message({side, code, _detail})
+       when side in [:local, :remote] and is_integer(code),
+       do: "WebSocket closed #{code}"
+
+  defp websocket_close_message(_reason), do: nil
 
   defp transport_reason?(reason) when is_atom(reason) do
     reason

@@ -13,6 +13,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.OpenAICodex.{Events, OAuth, ToolSchema}
+  alias LLMProxy.Providers.ReqLLM.ErrorProjection
   alias LLMProxy.Providers.Result
   alias LLMProxy.Response, as: ProxyResponse
   alias LLMProxy.TokenPool.Server, as: TokenPool
@@ -79,6 +80,16 @@ defmodule LLMProxy.Providers.OpenAICodex do
       stream = Stream.map(stream_response.stream, &Events.responses_event/1)
       {:ok, Result.stream(Stream.reject(stream, &is_nil/1), token)}
     end
+  end
+
+  @impl true
+  def stream_error(reason, token) do
+    error = ErrorProjection.project(reason)
+    if error.status == 429 and token, do: TokenPool.mark_rate_limited(token)
+
+    Result.error(error.message, error.status, token,
+      provider_body: %{"error" => ErrorProjection.client_error(reason)}
+    )
   end
 
   @impl true

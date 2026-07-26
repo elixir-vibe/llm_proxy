@@ -15,6 +15,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.{Event, Heartbeat, SSEWriter}
+  alias LLMProxy.Telemetry
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Trace
   alias LLMProxy.Usage
@@ -106,7 +107,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   end
 
   defp handle_stream(conn, provider, stream, api_key, model, token, trace_id) do
-    outcome = pipe_stream(conn, provider, stream, model, token)
+    outcome = pipe_stream(conn, provider, stream, model, token, trace_id)
 
     case outcome do
       {:preflight_failure, conn, reason} ->
@@ -124,9 +125,11 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
     end
   end
 
-  defp pipe_stream(conn, provider, stream, model, token) do
+  defp pipe_stream(conn, provider, stream, model, token, trace_id) do
+    telemetry = Telemetry.stream_context(provider.name(), model, trace_id)
+
     stream
-    |> Heartbeat.wrap()
+    |> Heartbeat.wrap(telemetry: telemetry)
     |> Enum.reduce_while({:pending, conn, Usage.zero()}, fn
       %Heartbeat.Failure{reason: reason}, {:pending, conn, _usage} ->
         {:halt, {:preflight_failure, conn, reason}}

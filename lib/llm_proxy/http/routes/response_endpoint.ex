@@ -15,9 +15,8 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.{Event, Heartbeat, SSEWriter}
+  alias LLMProxy.{Telemetry, Trace, Usage}
   alias LLMProxy.TokenPool.Server, as: TokenPool
-  alias LLMProxy.Trace
-  alias LLMProxy.Usage
 
   plug(Auth)
   plug(QuotaCheck)
@@ -122,9 +121,11 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   end
 
   defp handle_stream(conn, provider, stream, api_key, model, token, trace_id) do
+    telemetry = Telemetry.stream_context(provider.name(), model, trace_id)
+
     outcome =
       stream
-      |> Heartbeat.wrap()
+      |> Heartbeat.wrap(telemetry: telemetry)
       |> Enum.reduce_while({:pending, conn, Usage.zero()}, fn
         %Heartbeat.Failure{reason: reason}, {:pending, conn, usage} ->
           {:halt, {:preflight_failure, conn, usage, reason}}

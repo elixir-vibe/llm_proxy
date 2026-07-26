@@ -82,6 +82,19 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
     end
   end
 
+  test "surfaces a safe runtime error message" do
+    error = RuntimeError.exception("WebSocket closed 1000")
+
+    assert ErrorProjection.project(error).message == "WebSocket closed 1000"
+  end
+
+  test "surfaces a WebSocket close code without exposing close details" do
+    error = ErlangError.exception(original: {:remote, 1000, "private upstream detail"})
+
+    assert ErrorProjection.project(error).message == "WebSocket closed 1000"
+    refute ErrorProjection.project(error).message =~ "private"
+  end
+
   test "surfaces nested transport reasons through the cause chain" do
     transport = %Req.TransportError{reason: :econnrefused}
 

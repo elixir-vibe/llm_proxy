@@ -4,7 +4,7 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   alias LLMProxy.{Catalog, ModelDB}
   alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Providers.Attempt
-  alias LLMProxy.Providers.{OpenAICodex, Registry}
+  alias LLMProxy.Providers.{OpenAICodex, Registry, Result}
   alias LLMProxy.Providers.OpenAICodex.Events
   alias ReqLLM.StreamChunk
 
@@ -89,6 +89,20 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
     assert Enum.at(context.messages, 0).content |> hd() |> Map.fetch!(:text) == "hello"
     assert Enum.at(context.messages, 1).role == :tool
     assert Enum.at(context.messages, 1).tool_call_id == "call_1"
+  end
+
+  test "lazy stream errors preserve a safe upstream reason" do
+    result = OpenAICodex.stream_error(RuntimeError.exception("WebSocket closed 1000"), nil)
+
+    assert result.status == 502
+    assert result.error == "WebSocket closed 1000"
+
+    assert Result.client_error(result) == %{
+             "message" => "WebSocket closed 1000",
+             "type" => "upstream_error",
+             "code" => "upstream_error",
+             "status" => 502
+           }
   end
 
   test "extract_usage handles Responses usage" do
