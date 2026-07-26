@@ -43,6 +43,6 @@ defmodule LLMProxy.Repo.Migrations.WidenTokenCounters do
       modify(:cache_write_tokens, :bigint)
     end
 
-    create(unique_index(:api_keys, [:hash]))
+    create_if_not_exists(unique_index(:api_keys, [:hash]))
   end
 end
