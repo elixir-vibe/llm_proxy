@@ -21,9 +21,16 @@ defmodule LLMProxy.Providers.ResultTest do
              Result.error("rate limited", 429, nil, retry_after_ms: 100)
   end
 
-  test "constructs unavailable token errors" do
-    assert {:error, %Result{kind: :error, error: "No available tokens: no_tokens", status: 503}} =
-             Result.unavailable_tokens(:no_tokens)
+  test "constructs unavailable token errors without exposing pool internals" do
+    assert {:error,
+            %Result{
+              kind: :error,
+              error: "No available provider credentials",
+              status: 503
+            } = result} = Result.unavailable_tokens({:no_tokens, :private_pool})
+
+    assert Result.client_error(result)["code"] == "service_unavailable"
+    refute Jason.encode!(Result.client_error(result)) =~ "private_pool"
   end
 
   test "forwards only normalized provider error fields" do

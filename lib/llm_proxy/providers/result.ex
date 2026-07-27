@@ -47,7 +47,21 @@ defmodule LLMProxy.Providers.Result do
   def stream(stream, token), do: %__MODULE__{kind: :stream, stream: stream, token: token}
 
   @spec unavailable_tokens(term()) :: {:error, t()}
-  def unavailable_tokens(reason), do: {:error, error("No available tokens: #{reason}", 503, nil)}
+  def unavailable_tokens(_reason) do
+    message = "No available provider credentials"
+
+    {:error,
+     error(message, 503, nil,
+       provider_body: %{
+         "error" => %{
+           "message" => message,
+           "type" => "service_unavailable",
+           "code" => "service_unavailable",
+           "status" => 503
+         }
+       }
+     )}
+  end
 
   @spec error(String.t(), pos_integer(), token(), keyword()) :: t()
   def error(error, status, token, opts \\ [])
