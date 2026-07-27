@@ -144,7 +144,7 @@ LLMProxy resolves an ordered list of deployment attempts, then:
 6. falls through to the next eligible route;
 7. records the provider and model that ultimately handled the request.
 
-Authentication failures and other non-retryable errors are returned directly. Timeouts and retryable upstream failures participate in fallback. Circuit breakers move through closed, open, and half-open states per deployment.
+Authentication failures and other non-retryable errors are returned directly. OpenAI-compatible HTTP failures contain one `error` object: structured provider fields are forwarded without duplicate wrapper layers, while internal Elixir terms and synthetic inspected stream reasons are normalized before reaching clients. Timeouts and retryable upstream failures participate in fallback. Circuit breakers move through closed, open, and half-open states per deployment.
 
 ## Built-in providers
 

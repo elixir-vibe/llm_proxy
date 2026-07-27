@@ -113,6 +113,20 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
     refute ErrorProjection.project(error).message =~ "private"
   end
 
+  test "projects a structured stream cause instead of its inspected wrapper" do
+    error =
+      APIStreamError.exception(
+        reason: ~s(Stream failed: {:remote, 1000, ""}),
+        cause: {:remote, 1000, ""}
+      )
+
+    client_error = ErrorProjection.client_error(error)
+
+    assert client_error["message"] == "WebSocket closed 1000"
+    refute Jason.encode!(client_error) =~ "{:remote"
+    refute Jason.encode!(client_error) =~ "Stream failed:"
+  end
+
   test "surfaces nested transport reasons through the cause chain" do
     transport = %Req.TransportError{reason: :econnrefused}
 

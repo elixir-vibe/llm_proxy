@@ -91,7 +91,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
          {:provider, %Result{error: error, status: status, provider: provider} = result}
        ) do
     log_provider_error(provider, error, status)
-    HTTP.send_json(conn, status, %{error: provider_error_body(result)})
+    HTTP.send_json(conn, status, %{error: Result.client_error(result)})
   end
 
   defp handle_provider_error(conn, {:permission, reason}) do
@@ -193,12 +193,6 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     |> HTTP.send_json(503, %{
       error: %{code: "draining", message: "LLMProxy is draining and not accepting new requests"}
     })
-  end
-
-  defp provider_error_body(%Result{error: error, provider_body: nil}), do: error
-
-  defp provider_error_body(%Result{error: error, provider_body: provider_body}) do
-    %{message: error, details: provider_body}
   end
 
   defp log_provider_error(nil, error, status),

@@ -76,7 +76,13 @@ defmodule LLMProxy.Providers.Result do
   end
 
   @spec client_error(t()) :: map()
-  def client_error(%__MODULE__{provider_body: %{"error" => error}}) when is_map(error), do: error
+  def client_error(%__MODULE__{provider_body: %{"error" => error}} = result),
+    do: provider_client_error(error, result)
+
+  def client_error(%__MODULE__{provider_body: %{error: error}} = result),
+    do: provider_client_error(error, result)
+
+  def client_error(%__MODULE__{provider_body: error}) when is_map(error), do: error
 
   def client_error(%__MODULE__{error: message, status: status}) do
     %{
@@ -106,6 +112,14 @@ defmodule LLMProxy.Providers.Result do
       when state in [:ok, :error] do
     {state, %{result | provider: provider, provider_name: provider_name(provider), model: model}}
   end
+
+  defp provider_client_error(error, _result) when is_map(error), do: error
+
+  defp provider_client_error(message, %__MODULE__{} = result) when is_binary(message),
+    do: client_error(%{result | error: message, provider_body: nil})
+
+  defp provider_client_error(_error, %__MODULE__{} = result),
+    do: client_error(%{result | provider_body: nil})
 
   defp provider_name(provider) do
     if function_exported?(provider, :name, 0),

@@ -260,14 +260,9 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     assert Jason.decode!(conn.resp_body) == %{
              "error" => %{
                "message" => "model is not available",
-               "details" => %{
-                 "error" => %{
-                   "message" => "model is not available",
-                   "type" => "invalid_request_error",
-                   "code" => "invalid_request_error",
-                   "status" => 400
-                 }
-               }
+               "type" => "invalid_request_error",
+               "code" => "invalid_request_error",
+               "status" => 400
              }
            }
   end
@@ -382,7 +377,15 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
       |> Chat.call(Chat.init([]))
 
     assert conn.status == 502
-    assert Jason.decode!(conn.resp_body) == %{"error" => "upstream failed"}
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "error" => %{
+               "message" => "upstream failed",
+               "type" => "upstream_error",
+               "code" => "upstream_error",
+               "status" => 502
+             }
+           }
   end
 
   test "returns captured upstream provider error details" do
@@ -400,13 +403,8 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
     assert Jason.decode!(conn.resp_body) == %{
              "error" => %{
-               "message" => "Provider returned error",
-               "details" => %{
-                 "error" => %{
-                   "message" => "Invalid schema for response_format 'response'",
-                   "code" => "invalid_json_schema"
-                 }
-               }
+               "message" => "Invalid schema for response_format 'response'",
+               "code" => "invalid_json_schema"
              }
            }
   end

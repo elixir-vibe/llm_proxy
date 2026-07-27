@@ -82,13 +82,17 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
     end
   end
 
+  # Synthetic stream errors stringify their cause with inspect/1. Project the
+  # structured cause from the error chain instead of forwarding that wrapper.
+  defp reason_message(%ReqLLM.Error.API.Stream{cause: cause}) when not is_nil(cause), do: nil
+
   # Surface the underlying transport reason (DNS failure, refused connection,
   # reset, TLS problem, timeout) instead of the opaque fallback so operators
   # can tell a dead upstream from a generic provider error.
   defp reason_message(%RuntimeError{message: message}), do: safe_reason(message)
 
   defp reason_message(error) do
-    reason = field(error, :reason) || field(error, :original)
+    reason = field(error, :reason) || field(error, :original) || error
 
     cond do
       message = websocket_close_message(reason) -> message
