@@ -8,7 +8,9 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   require Logger
 
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
+  alias LLMProxy.Providers.{HTTPResult, Result}
   alias LLMProxy.Telemetry
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias LLMProxy.Trace
@@ -57,7 +59,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
         moderate(conn, conn.assigns.api_key, attrs, trace_id)
 
       {:error, message} ->
-        HTTP.send_json(conn, 400, %{error: message})
+        ErrorResponse.send_openai(conn, 400, "invalid_request_error", message)
     end
   end
 
@@ -68,8 +70,8 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
       {:ok, token} ->
         request_moderation(conn, attrs, token, trace_id)
 
-      {:error, reason} ->
-        HTTP.send_json(conn, 503, %{error: "No OpenAI token available: #{reason}"})
+      {:error, _reason} ->
+        ErrorResponse.send_openai(conn, 503, "service_unavailable", "No OpenAI token available")
     end
   end
 
@@ -82,12 +84,25 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
         )
 
       case post_moderation(req, attrs, trace_id) do
-        {:ok, %{status: status, body: response}} ->
+        {:ok, %{status: status, body: response}} when status in 200..299 ->
           HTTP.send_json(conn, status, response)
 
+        {:ok, %{status: status} = response} ->
+          {:error, result} =
+            HTTPResult.handle_response(token, Map.put_new(response, :headers, %{}))
+
+          safe_error =
+            ErrorResponse.safe_message(result.error, "Moderation provider request failed")
+
+          Logger.error("Moderation provider error (#{status}): #{safe_error}")
+          ErrorResponse.send_openai(conn, status, Result.client_error(result))
+
         {:error, exception} ->
-          Logger.error("Moderation error: #{Exception.message(exception)}")
-          HTTP.send_json(conn, 502, %{error: Exception.message(exception)})
+          {:error, result} = HTTPResult.handle_exception(exception)
+          safe_error = ErrorResponse.safe_message(result.error, "Moderation transport failed")
+          Logger.error("Moderation transport error (#{result.status}): #{safe_error}")
+
+          ErrorResponse.send_openai(conn, result.status, Result.client_error(result))
       end
     end)
     |> handle_drain_race(conn)
@@ -106,14 +121,16 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   defp handle_drain_race({:error, :draining}, conn) do
     conn
     |> Plug.Conn.put_resp_header("retry-after", "30")
-    |> HTTP.send_json(503, %{
-      error: %{code: "draining", message: "LLMProxy is draining and not accepting new requests"}
-    })
+    |> ErrorResponse.send_openai(
+      503,
+      "draining",
+      "LLMProxy is draining and not accepting new requests"
+    )
   end
 
   defp handle_drain_race(result, _conn), do: result
 
   match _ do
-    HTTP.send_json(conn, 404, %{error: "Not found"})
+    ErrorResponse.send_openai(conn, 404, "not_found_error", "Not found")
   end
 end

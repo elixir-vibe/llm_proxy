@@ -33,14 +33,34 @@ defmodule LLMProxy.Plugs.JSONBodyParserTest do
     assert_too_large(conn)
   end
 
+  test "returns a protocol-native error for malformed JSON" do
+    conn =
+      conn(:post, "/v1/messages", "{invalid-json")
+      |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> JSONBodyParser.call(JSONBodyParser.init([]))
+
+    assert conn.halted
+    assert conn.status == 400
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "type" => "error",
+             "error" => %{
+               "type" => "invalid_json",
+               "message" => "Request body is not valid JSON"
+             }
+           }
+  end
+
   defp assert_too_large(conn) do
     assert conn.halted
     assert conn.status == 413
 
     assert Jason.decode!(conn.resp_body) == %{
              "error" => %{
+               "message" => "Request body exceeds the 100 bytes limit",
+               "type" => "request_too_large",
                "code" => "request_too_large",
-               "message" => "Request body exceeds the 100 bytes limit"
+               "status" => 413
              }
            }
   end

@@ -39,7 +39,9 @@ defmodule LLMProxy.RouterTest do
       |> Router.call(@opts)
 
     assert conn.status == 401
-    assert Jason.decode!(conn.resp_body) == %{"error" => "Missing API key"}
+
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) ==
+             "Missing API key"
   end
 
   test "accepts authenticated image-bearing JSON bodies above Plug's default limit" do

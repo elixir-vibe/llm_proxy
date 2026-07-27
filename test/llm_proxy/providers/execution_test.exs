@@ -19,6 +19,14 @@ defmodule LLMProxy.Providers.ExecutionTest do
     def stream(_body, _user_id), do: {:error, Result.error("server error", 500, nil)}
   end
 
+  defmodule RaisingProvider do
+    def name, do: "raising"
+
+    def call(_body, _user_id) do
+      raise "provider failed with headers: authorization=Bearer secret"
+    end
+  end
+
   defmodule RateLimitedProvider do
     def name, do: "limited"
     def call(_body, _user_id), do: {:error, Result.error("rate limited", 429, nil)}
@@ -102,6 +110,13 @@ defmodule LLMProxy.Providers.ExecutionTest do
     test "returns error when provider fails with retryable error but no fallbacks" do
       assert {:error, %Result{status: 500}} =
                Execution.call(FailProvider, request("m"), "user", "m")
+    end
+
+    test "does not expose raised provider internals" do
+      attempt = %Attempt{provider: RaisingProvider, model: "m", timeout_ms: nil}
+
+      assert {:error, %Result{status: 500, error: "Internal provider execution failed"}} =
+               Execution.call_attempts([attempt], request("m"), "user")
     end
   end
 

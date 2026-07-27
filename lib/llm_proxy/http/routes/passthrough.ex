@@ -8,6 +8,7 @@ defmodule LLMProxy.HTTP.Routes.Passthrough do
 
   require Logger
 
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Providers.Result
 
   defmodule ResultHandler do
@@ -42,7 +43,7 @@ defmodule LLMProxy.HTTP.Routes.Passthrough do
     @enforce_keys [:send_error, :provider_error_type, :on_provider_error]
     defstruct [:send_error, :provider_error_type, :on_provider_error]
 
-    @type send_error :: (Plug.Conn.t(), pos_integer(), String.t(), String.t() -> Plug.Conn.t())
+    @type send_error :: (Plug.Conn.t(), pos_integer(), String.t(), term() -> Plug.Conn.t())
     @type provider_error_type :: (pos_integer() -> String.t())
     @type on_provider_error :: (Result.t() -> :ok)
 
@@ -110,17 +111,25 @@ defmodule LLMProxy.HTTP.Routes.Passthrough do
         handler.send_error.(conn, 404, "not_found_error", reason)
 
       {:guardrail, reason} ->
-        handler.send_error.(conn, 403, "permission_error", inspect(reason))
+        message = ErrorResponse.safe_message(reason, "Request blocked by guardrail")
+        handler.send_error.(conn, 403, "permission_error", message)
     end
   end
 
   defp send_provider_error(
          conn,
          provider,
-         %Result{error: error, status: status},
+         %Result{error: error, status: status} = result,
          %ErrorHandler{} = handler
        ) do
-    Logger.error("#{provider.name()} error (#{status}): #{error}")
-    handler.send_error.(conn, status, handler.provider_error_type.(status), error)
+    safe_error = ErrorResponse.safe_message(error, "Provider request failed")
+    Logger.error("#{provider.name()} error (#{status}): #{safe_error}")
+
+    handler.send_error.(
+      conn,
+      status,
+      handler.provider_error_type.(status),
+      Result.client_error(result)
+    )
   end
 end

@@ -71,8 +71,11 @@ defmodule LLMProxy.RouterDynamicTest do
     assert dynamic_conn.status == 200
     assert dynamic_conn.resp_body == "dynamic"
     assert prefix_collision_conn.status == 404
-    assert Jason.decode!(prefix_collision_conn.resp_body) == %{"error" => "Not found"}
+
+    assert get_in(Jason.decode!(prefix_collision_conn.resp_body), ["error", "message"]) ==
+             "Not found"
+
     assert missing_conn.status == 404
-    assert Jason.decode!(missing_conn.resp_body) == %{"error" => "Not found"}
+    assert get_in(Jason.decode!(missing_conn.resp_body), ["error", "message"]) == "Not found"
   end
 end

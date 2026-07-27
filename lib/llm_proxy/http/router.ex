@@ -6,6 +6,7 @@ defmodule LLMProxy.HTTP.Router do
   use Plug.Router
 
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.HTTP.RouteSpec
 
@@ -35,7 +36,7 @@ defmodule LLMProxy.HTTP.Router do
 
   match _ do
     case Dynamic.dispatch(conn) do
-      nil -> HTTP.send_json(conn, 404, %{error: "Not found"})
+      nil -> ErrorResponse.send(conn, 404, "not_found_error", "Not found")
       conn -> conn
     end
   end

@@ -9,6 +9,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.HTTP.Routes.Passthrough
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Protocol.Request
@@ -192,7 +193,18 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
 
   defp write_stream_failure(conn, provider, model, token, reason) do
     error = Result.stream_failure(provider, model, token, reason)
-    error_event = %{"type" => "error", "error" => Result.client_error(error)}
+    client_error = Result.client_error(error)
+
+    message =
+      ErrorResponse.safe_message(client_error["message"], "Upstream provider request failed")
+
+    error_event = %{
+      "type" => "error",
+      "error" => %{
+        "type" => error_type(error.status),
+        "message" => message
+      }
+    }
 
     case SSEWriter.write_named_event(conn, "error", error_event) do
       {:ok, conn} -> conn
@@ -223,7 +235,11 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
 
   defp handle_drain_race(result, _conn), do: result
 
+  defp send_error(conn, status, type, %{} = error) do
+    ErrorResponse.send_anthropic(conn, status, type, error["message"] || error[:message])
+  end
+
   defp send_error(conn, status, type, message) do
-    HTTP.send_json(conn, status, %{type: "error", error: %{type: type, message: message}})
+    ErrorResponse.send_anthropic(conn, status, type, message)
   end
 end

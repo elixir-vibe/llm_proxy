@@ -359,8 +359,10 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
     assert Jason.decode!(conn.resp_body) == %{
              "error" => %{
+               "message" => "Unsupported or malformed message",
+               "type" => "invalid_message",
                "code" => "invalid_message",
-               "message" => "Unsupported or malformed message"
+               "status" => 400
              }
            }
   end
@@ -404,7 +406,9 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     assert Jason.decode!(conn.resp_body) == %{
              "error" => %{
                "message" => "Invalid schema for response_format 'response'",
-               "code" => "invalid_json_schema"
+               "type" => "invalid_json_schema",
+               "code" => "invalid_json_schema",
+               "status" => 400
              }
            }
   end
@@ -432,6 +436,6 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
       |> Chat.call(Chat.init([]))
 
     assert conn.status == 403
-    assert Jason.decode!(conn.resp_body)["error"] =~ "not allowed"
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) =~ "not allowed"
   end
 end

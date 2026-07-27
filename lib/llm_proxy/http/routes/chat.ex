@@ -8,6 +8,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
 
   alias LLMProxy.Actor
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Protocol.{OpenAI, Request}
   alias LLMProxy.Provider
@@ -26,7 +27,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   end
 
   match _ do
-    HTTP.send_json(conn, 404, %{error: "Not found"})
+    ErrorResponse.send_openai(conn, 404, "not_found_error", "Not found")
   end
 
   defp handle_chat(conn) do
@@ -44,7 +45,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
         end
 
       {:error, %Request.Error{} = error} ->
-        HTTP.send_json(conn, 400, %{error: %{code: error.code, message: error.message}})
+        ErrorResponse.send_openai(conn, 400, error.code, error.message)
     end
   end
 
@@ -90,20 +91,26 @@ defmodule LLMProxy.HTTP.Routes.Chat do
          conn,
          {:provider, %Result{error: error, status: status, provider: provider} = result}
        ) do
-    log_provider_error(provider, error, status)
-    HTTP.send_json(conn, status, %{error: Result.client_error(result)})
+    log_provider_error(
+      provider,
+      ErrorResponse.safe_message(error, "Provider request failed"),
+      status
+    )
+
+    ErrorResponse.send_openai(conn, status, Result.client_error(result))
   end
 
   defp handle_provider_error(conn, {:permission, reason}) do
-    HTTP.send_json(conn, 403, %{error: reason})
+    ErrorResponse.send_openai(conn, 403, "permission_error", reason)
   end
 
   defp handle_provider_error(conn, {:not_found, reason}) do
-    HTTP.send_json(conn, 404, %{error: reason})
+    ErrorResponse.send_openai(conn, 404, "not_found_error", reason)
   end
 
   defp handle_provider_error(conn, {:guardrail, reason}) do
-    HTTP.send_json(conn, 403, %{error: inspect(reason)})
+    message = ErrorResponse.safe_message(reason, "Request blocked by guardrail")
+    ErrorResponse.send_openai(conn, 403, "permission_error", message)
   end
 
   defp finish_stream(conn, %Result{kind: :stream} = result, trace_id) do
@@ -165,7 +172,9 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   defp write_stream_failure(conn, result, reason) do
     error = Result.stream_failure(result.provider, result.model, result.token, reason)
 
-    case SSEWriter.write_event(conn, %{"error" => Result.client_error(error)}) do
+    client_error = ErrorResponse.openai_error(error.status, Result.client_error(error))
+
+    case SSEWriter.write_event(conn, %{"error" => client_error}) do
       {:ok, conn} -> conn
       {:error, _reason} -> conn
     end
@@ -190,9 +199,11 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   defp drain_rejected(conn) do
     conn
     |> Plug.Conn.put_resp_header("retry-after", "30")
-    |> HTTP.send_json(503, %{
-      error: %{code: "draining", message: "LLMProxy is draining and not accepting new requests"}
-    })
+    |> ErrorResponse.send_openai(
+      503,
+      "draining",
+      "LLMProxy is draining and not accepting new requests"
+    )
   end
 
   defp log_provider_error(nil, error, status),

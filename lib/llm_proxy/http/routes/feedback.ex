@@ -5,6 +5,7 @@ defmodule LLMProxy.HTTP.Routes.Feedback do
   use Plug.Router
 
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Plugs.{Auth, JSONBodyParser}
   alias LLMProxy.Storage
 
@@ -20,17 +21,17 @@ defmodule LLMProxy.HTTP.Routes.Feedback do
           {:ok, feedback} ->
             HTTP.send_json(conn, 201, render_feedback(feedback))
 
-          {:error, changeset} ->
-            HTTP.send_json(conn, 400, %{error: "Invalid feedback", details: errors(changeset)})
+          {:error, _changeset} ->
+            ErrorResponse.send_openai(conn, 400, "invalid_feedback", "Invalid feedback")
         end
 
       {:error, reason} ->
-        HTTP.send_json(conn, 400, %{error: reason})
+        ErrorResponse.send_openai(conn, 400, "invalid_feedback", reason)
     end
   end
 
   match _ do
-    HTTP.send_json(conn, 404, %{error: "Not found"})
+    ErrorResponse.send_openai(conn, 404, "not_found_error", "Not found")
   end
 
   defp feedback_attrs(api_key, params) do
@@ -89,9 +90,5 @@ defmodule LLMProxy.HTTP.Routes.Feedback do
       metadata: feedback.metadata,
       timestamp: feedback.timestamp
     }
-  end
-
-  defp errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {message, _opts} -> message end)
   end
 end

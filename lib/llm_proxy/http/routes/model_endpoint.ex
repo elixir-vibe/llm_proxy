@@ -6,6 +6,7 @@ defmodule LLMProxy.HTTP.Routes.ModelEndpoint do
   use Plug.Router
 
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
 
   plug(:match)
   plug(:dispatch)
@@ -15,6 +16,6 @@ defmodule LLMProxy.HTTP.Routes.ModelEndpoint do
   end
 
   match _ do
-    HTTP.send_json(conn, 404, %{error: "Not found"})
+    ErrorResponse.send_openai(conn, 404, "not_found_error", "Not found")
   end
 end

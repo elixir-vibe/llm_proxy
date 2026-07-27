@@ -41,7 +41,9 @@ defmodule LLMProxy.Plugs.QuotaCheckTest do
 
     assert conn.halted
     assert conn.status == 429
-    assert Jason.decode!(conn.resp_body)["error"] =~ "4h input quota exceeded"
+
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) =~
+             "4h input quota exceeded"
   end
 
   test "bypasses quota checks for the master key" do

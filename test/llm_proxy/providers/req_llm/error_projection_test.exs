@@ -62,6 +62,27 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
     refute rendered =~ "set-cookie"
   end
 
+  test "rejects unsafe provider message and code fields" do
+    error =
+      APIRequestError.exception(
+        reason: "failed",
+        status: 502,
+        response_body: %{
+          "message" => "headers: authorization=Bearer secret",
+          "code" => "bad {:code"
+        },
+        provider_code: "bad {:code",
+        retryable: false
+      )
+
+    rendered = Jason.encode!(ErrorProjection.client_error(error))
+
+    refute rendered =~ "secret"
+    refute rendered =~ "headers"
+    refute rendered =~ "{:"
+    assert ErrorProjection.client_error(error)["code"] == "upstream_error"
+  end
+
   test "classifies local storage failures without exposing database details" do
     error =
       QuackDB.Error.new(:transaction_conflict, "Conflict on usage_log",

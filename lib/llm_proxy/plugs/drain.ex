@@ -8,7 +8,7 @@ defmodule LLMProxy.Plugs.Drain do
 
   import Plug.Conn
 
-  alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
 
   @behaviour Plug
 
@@ -22,12 +22,11 @@ defmodule LLMProxy.Plugs.Drain do
     if LLMProxy.Drain.draining?() do
       conn
       |> put_resp_header("retry-after", "30")
-      |> HTTP.send_json(503, %{
-        error: %{
-          code: "draining",
-          message: "LLMProxy is draining and not accepting new requests"
-        }
-      })
+      |> ErrorResponse.send(
+        503,
+        "draining",
+        "LLMProxy is draining and not accepting new requests"
+      )
       |> halt()
     else
       conn

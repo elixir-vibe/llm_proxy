@@ -10,7 +10,8 @@ defmodule LLMProxy.Plugs.JSONBodyParser do
 
   import Plug.Conn
 
-  alias LLMProxy.{Config, HTTP}
+  alias LLMProxy.Config
+  alias LLMProxy.HTTP.ErrorResponse
 
   @spec body_limit_bytes() :: pos_integer()
   def body_limit_bytes, do: Config.body_limit_bytes()
@@ -41,6 +42,7 @@ defmodule LLMProxy.Plugs.JSONBodyParser do
     Plug.Parsers.call(conn, parser_opts)
   rescue
     Plug.Parsers.RequestTooLargeError -> send_too_large(conn, limit)
+    Plug.Parsers.ParseError -> send_invalid_json(conn)
   end
 
   defp declared_length_exceeds?(conn, limit) do
@@ -58,12 +60,17 @@ defmodule LLMProxy.Plugs.JSONBodyParser do
 
   defp send_too_large(conn, limit) do
     conn
-    |> HTTP.send_json(413, %{
-      error: %{
-        code: "request_too_large",
-        message: "Request body exceeds the #{format_limit(limit)} limit"
-      }
-    })
+    |> ErrorResponse.send(
+      413,
+      "request_too_large",
+      "Request body exceeds the #{format_limit(limit)} limit"
+    )
+    |> halt()
+  end
+
+  defp send_invalid_json(conn) do
+    conn
+    |> ErrorResponse.send(400, "invalid_json", "Request body is not valid JSON")
     |> halt()
   end
 

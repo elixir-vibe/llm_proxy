@@ -3,6 +3,7 @@ defmodule LLMProxy.Providers.HTTPResult do
   Converts upstream HTTP responses and exceptions into `LLMProxy.Providers.Result` values.
   """
 
+  alias LLMProxy.Providers.ReqLLM.ErrorProjection
   alias LLMProxy.Providers.Result
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
@@ -31,7 +32,11 @@ defmodule LLMProxy.Providers.HTTPResult do
   end
 
   def handle_exception(exception) do
-    result(Exception.message(exception), 502, nil)
+    error = ErrorProjection.project(exception)
+
+    result(error.message, error.status, nil,
+      provider_body: %{"error" => ErrorProjection.client_error(exception)}
+    )
   end
 
   def result(error, status, token, opts \\ []) do
@@ -51,7 +56,7 @@ defmodule LLMProxy.Providers.HTTPResult do
   def extract(%{"error" => %{"message" => message}}), do: message
   def extract(%{"error" => message}) when is_binary(message), do: message
   def extract(body) when is_binary(body), do: body
-  def extract(body), do: inspect(body)
+  def extract(_body), do: "Upstream provider request failed"
 
   defp mark_rate_limited(429, token, retry_after_ms) when not is_nil(token) do
     TokenPool.mark_rate_limited(token, retry_after_ms || LLMProxy.Config.token_cooldown_ms())

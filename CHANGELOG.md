@@ -8,6 +8,7 @@
 - OpenAI Codex stream failures now preserve safe upstream reasons, while trace-correlated diagnostics distinguish upstream failures from local storage errors without exposing request, query, or credential data.
 - Token counters now use 64-bit database columns, and accounting exceptions are reported internally without turning a completed model stream into a client failure.
 - OpenAI-compatible provider failures now return one normalized error object, forwarding structured upstream fields without duplicate `details.error` wrappers or inspected Elixir terms.
+- Public HTTP and SSE errors now use protocol-native OpenAI or Anthropic envelopes across authentication, quotas, JSON parsing, draining, guardrails, moderation, routing, and provider failures; only bounded safe fields reach clients.
 
 ### Security
 

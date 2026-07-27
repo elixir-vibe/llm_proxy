@@ -162,12 +162,14 @@ defmodule LLMProxy.Providers.OpenAICodex do
   defp pick_token(user_id) do
     case TokenPool.pick_token_by_kind(name(), "oauth", user_id) do
       {:ok, token} -> normalize_token_refresh(refresh_token_if_needed(token))
-      {:error, reason} -> provider_error("No available OpenAI Codex OAuth tokens: #{reason}", 503)
+      {:error, _reason} -> provider_error("No available OpenAI Codex OAuth tokens", 503)
     end
   end
 
   defp normalize_token_refresh({:ok, token}), do: {:ok, token}
-  defp normalize_token_refresh({:error, reason}), do: provider_error(to_string(reason), 503)
+
+  defp normalize_token_refresh({:error, _reason}),
+    do: provider_error("OpenAI Codex token refresh failed", 503)
 
   defp generate(%Request{} = request, token, stream?: false) do
     model_spec = "openai_codex:#{request.model}"
@@ -175,11 +177,11 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
     case ReqLLM.generate_text(model_spec, context, generation_opts(request, token, false)) do
       {:ok, response} -> {:ok, response}
-      {:error, reason} -> provider_error(error_message(reason), 502)
+      {:error, reason} -> {:error, stream_error(reason, nil)}
     end
   rescue
-    exception in [ArgumentError, RuntimeError] ->
-      provider_error(Exception.message(exception), 502)
+    _exception in [ArgumentError, RuntimeError] ->
+      provider_error("OpenAI Codex request failed", 502)
   end
 
   defp generate(%Request{} = request, token, stream?: true) do
@@ -188,11 +190,11 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
     case ReqLLM.stream_text(model_spec, context, generation_opts(request, token, true)) do
       {:ok, response} -> {:ok, response}
-      {:error, reason} -> provider_error(error_message(reason), 502)
+      {:error, reason} -> {:error, stream_error(reason, nil)}
     end
   rescue
-    exception in [ArgumentError, RuntimeError] ->
-      provider_error(Exception.message(exception), 502)
+    _exception in [ArgumentError, RuntimeError] ->
+      provider_error("OpenAI Codex request failed", 502)
   end
 
   defp generation_opts(%Request{} = request, token, stream?) do
@@ -207,9 +209,6 @@ defmodule LLMProxy.Providers.OpenAICodex do
     |> maybe_put(:stop, request.stop)
     |> maybe_put(:parallel_tool_calls, request.body["parallel_tool_calls"])
   end
-
-  defp error_message(%_{} = exception), do: Exception.message(exception)
-  defp error_message(reason), do: inspect(reason)
 
   defp maybe_put(list, _key, nil) when is_list(list), do: list
   defp maybe_put(list, key, value) when is_list(list), do: Keyword.put(list, key, value)

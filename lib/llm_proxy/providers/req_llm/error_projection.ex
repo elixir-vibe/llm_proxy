@@ -4,6 +4,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   alias LLMProxy.Protocol.Request.Error, as: RequestError
 
   @fallback_message "Upstream provider request failed"
+  @max_message_length 2_000
 
   @transport_reasons [
     :econnrefused,
@@ -55,7 +56,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   end
 
   defp projected_error(message, code, status),
-    do: %{message: message, code: code, status: status}
+    do: %{message: message, code: safe_code(code, status_code(status)), status: status}
 
   defp error_chain(reason), do: error_chain(reason, [], 0)
 
@@ -70,7 +71,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
     end
   end
 
-  defp message(%RequestError{message: message}), do: message
+  defp message(%RequestError{message: message}), do: safe_reason(message)
 
   defp message(error) do
     error
@@ -78,7 +79,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
     |> body_message()
     |> case do
       nil -> reason_message(error)
-      message -> message
+      message -> safe_reason(message)
     end
   end
 
@@ -167,14 +168,47 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   defp body_code(_body), do: nil
 
   defp safe_reason(reason) when is_binary(reason) do
-    if String.contains?(reason, ["%ReqLLM.", "#Splode", "headers:"]) do
-      nil
-    else
-      reason
-    end
+    reason = String.trim(reason)
+    downcased = String.downcase(reason)
+
+    unsafe? =
+      reason == "" or
+        String.contains?(reason, [
+          "{:",
+          "%{",
+          "=>",
+          "#PID<",
+          "#Port<",
+          "#Reference<",
+          "#Function<",
+          "%ReqLLM.",
+          "#Splode"
+        ]) or
+        String.contains?(downcased, [
+          "authorization:",
+          "authorization=",
+          "bearer ",
+          "set-cookie",
+          "cookie:",
+          "headers:",
+          "request_body",
+          "request body:",
+          "tool_arguments",
+          "tool arguments:",
+          "query:"
+        ])
+
+    if unsafe?, do: nil, else: String.slice(reason, 0, @max_message_length)
   end
 
   defp safe_reason(_reason), do: nil
+
+  defp safe_code(code, fallback)
+       when is_binary(code) and byte_size(code) <= 128 do
+    if Regex.match?(~r/\A[a-zA-Z0-9_.-]+\z/, code), do: code, else: fallback
+  end
+
+  defp safe_code(_code, fallback), do: fallback
 
   defp status_code(401), do: "authentication_error"
   defp status_code(403), do: "permission_error"

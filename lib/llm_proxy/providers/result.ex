@@ -82,7 +82,8 @@ defmodule LLMProxy.Providers.Result do
   def client_error(%__MODULE__{provider_body: %{error: error}} = result),
     do: provider_client_error(error, result)
 
-  def client_error(%__MODULE__{provider_body: error}) when is_map(error), do: error
+  def client_error(%__MODULE__{provider_body: error} = result) when is_map(error),
+    do: provider_client_error(error, result)
 
   def client_error(%__MODULE__{error: message, status: status}) do
     %{
@@ -113,13 +114,44 @@ defmodule LLMProxy.Providers.Result do
     {state, %{result | provider: provider, provider_name: provider_name(provider), model: model}}
   end
 
-  defp provider_client_error(error, _result) when is_map(error), do: error
+  defp provider_client_error(error, %__MODULE__{} = result) when is_map(error) do
+    status = result.status || 502
+    fallback_code = error_type(status)
+    code = normalize_error_code(error_field(error, "code", :code), fallback_code)
+    type = normalize_error_code(error_field(error, "type", :type), code)
+    message = normalize_error_message(error_field(error, "message", :message), result.error)
+
+    %{
+      "message" => message,
+      "type" => type,
+      "code" => code,
+      "status" => status
+    }
+    |> maybe_put_param(error_field(error, "param", :param))
+  end
 
   defp provider_client_error(message, %__MODULE__{} = result) when is_binary(message),
     do: client_error(%{result | error: message, provider_body: nil})
 
   defp provider_client_error(_error, %__MODULE__{} = result),
     do: client_error(%{result | provider_body: nil})
+
+  defp error_field(error, string_key, atom_key),
+    do: Map.get(error, string_key) || Map.get(error, atom_key)
+
+  defp normalize_error_code(code, _fallback) when is_binary(code) and code != "", do: code
+  defp normalize_error_code(_code, fallback), do: fallback
+
+  defp normalize_error_message(message, _fallback) when is_binary(message) and message != "",
+    do: message
+
+  defp normalize_error_message(_message, fallback) when is_binary(fallback) and fallback != "",
+    do: fallback
+
+  defp normalize_error_message(_message, _fallback), do: "Upstream provider stream failed"
+
+  defp maybe_put_param(error, param) when is_binary(param), do: Map.put(error, "param", param)
+  defp maybe_put_param(error, _param), do: error
 
   defp provider_name(provider) do
     if function_exported?(provider, :name, 0),

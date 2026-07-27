@@ -136,6 +136,23 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpointTest do
     assert updated_key.output_tokens == 3
   end
 
+  test "returns Anthropic authentication errors before parsing" do
+    conn =
+      Plug.Test.conn(:post, "/v1/messages", "{invalid-json")
+      |> Plug.Conn.put_req_header("content-type", "application/json")
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
+
+    assert conn.status == 401
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "type" => "error",
+             "error" => %{
+               "type" => "authentication_error",
+               "message" => "Missing API key"
+             }
+           }
+  end
+
   test "returns HTTP errors for message streams rejected before the first event" do
     {:ok, _key, raw_key} = Storage.create_key("messages-preflight-failure")
 

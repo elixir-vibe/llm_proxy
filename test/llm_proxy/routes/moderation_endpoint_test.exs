@@ -28,7 +28,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpointTest do
       |> ModerationEndpoint.call(ModerationEndpoint.init([]))
 
     assert conn.status == 400
-    assert Jason.decode!(conn.resp_body) == %{"error" => "input is required"}
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "input is required"
   end
 
   test "returns 503 when no OpenAI token is available" do
@@ -40,7 +40,47 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpointTest do
       |> ModerationEndpoint.call(ModerationEndpoint.init([]))
 
     assert conn.status == 503
-    assert Jason.decode!(conn.resp_body)["error"] =~ "No OpenAI token available"
+
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) ==
+             "No OpenAI token available"
+  end
+
+  test "normalizes upstream moderation errors" do
+    Application.put_env(:llm_proxy, :req_plug, {ReqTest, ModerationsStub})
+
+    ReqTest.stub(ModerationsStub, fn conn ->
+      conn
+      |> Plug.Conn.put_status(400)
+      |> ReqTest.json(%{
+        "error" => %{
+          "message" => "Invalid moderation input",
+          "code" => "invalid_input",
+          "headers" => %{"authorization" => "Bearer secret"}
+        }
+      })
+    end)
+
+    {:ok, _key, raw_key} = Storage.create_key("moderation-error-user")
+    {:ok, _token} = Storage.add_token("openai", "api-key", "openai-token")
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{"input" => "hello"})
+      |> TestSupport.put_bearer(raw_key)
+      |> ModerationEndpoint.call(ModerationEndpoint.init([]))
+
+    assert conn.status == 400
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "error" => %{
+               "message" => "Invalid moderation input",
+               "type" => "invalid_input",
+               "code" => "invalid_input",
+               "status" => 400
+             }
+           }
+
+    refute conn.resp_body =~ "authorization"
+    refute conn.resp_body =~ "secret"
   end
 
   test "proxies moderation requests" do

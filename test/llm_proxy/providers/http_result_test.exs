@@ -1,7 +1,7 @@
 defmodule LLMProxy.Providers.HTTPResultTest do
   use ExUnit.Case, async: true
 
-  alias LLMProxy.Providers.HTTPResult
+  alias LLMProxy.Providers.{HTTPResult, Result}
 
   describe "retry_after_ms/1" do
     test "parses retry-after seconds" do
@@ -27,13 +27,13 @@ defmodule LLMProxy.Providers.HTTPResultTest do
     test "marks rate-limited tokens" do
       {:ok, token} = LLMProxy.Storage.add_token("openai", "api-key", "token")
 
-      assert {:error, %LLMProxy.Providers.Result{status: 429, token: ^token}} =
+      assert {:error, %Result{status: 429, token: ^token}} =
                HTTPResult.handle_response(token, 429, %{"error" => "slow down"})
     end
 
     test "keeps nil-token rate limits as provider errors" do
       assert {:error,
-              %LLMProxy.Providers.Result{
+              %Result{
                 status: 429,
                 token: nil,
                 provider_body: "slow down"
@@ -41,7 +41,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
                HTTPResult.handle_response(nil, 429, %{"error" => "slow down"})
 
       assert {:error,
-              %LLMProxy.Providers.Result{
+              %Result{
                 status: 429,
                 token: nil,
                 retry_after_ms: 3_000,
@@ -56,9 +56,20 @@ defmodule LLMProxy.Providers.HTTPResultTest do
   end
 
   describe "handle_exception/1" do
-    test "wraps exceptions" do
-      assert {:error, %LLMProxy.Providers.Result{status: 502, error: "boom"}} =
+    test "projects exceptions through the sanitized provider boundary" do
+      assert {:error, result = %Result{status: 502, error: "boom"}} =
                HTTPResult.handle_exception(%RuntimeError{message: "boom"})
+
+      assert Result.client_error(result)["message"] == "boom"
+    end
+
+    test "does not expose exception internals" do
+      exception = RuntimeError.exception("request failed, headers: authorization=Bearer secret")
+      assert {:error, result} = HTTPResult.handle_exception(exception)
+
+      rendered = Jason.encode!(Result.client_error(result))
+      refute rendered =~ "secret"
+      refute rendered =~ "headers"
     end
   end
 
@@ -84,13 +95,9 @@ defmodule LLMProxy.Providers.HTTPResultTest do
       assert HTTPResult.extract("raw error text") == "raw error text"
     end
 
-    test "inspects other values" do
-      body = %{"status" => "fail"}
-      assert HTTPResult.extract(body) == inspect(body)
-    end
-
-    test "inspects nil" do
-      assert HTTPResult.extract(nil) == "nil"
+    test "uses a stable fallback for other values" do
+      assert HTTPResult.extract(%{"status" => "fail"}) == "Upstream provider request failed"
+      assert HTTPResult.extract(nil) == "Upstream provider request failed"
     end
   end
 end

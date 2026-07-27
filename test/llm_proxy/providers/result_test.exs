@@ -26,6 +26,43 @@ defmodule LLMProxy.Providers.ResultTest do
              Result.unavailable_tokens(:no_tokens)
   end
 
+  test "forwards only normalized provider error fields" do
+    result =
+      Result.error("provider failed", 400, nil,
+        provider_body: %{
+          "error" => %{
+            "message" => "Invalid schema",
+            "code" => "invalid_json_schema",
+            "param" => "response_format",
+            "headers" => %{"authorization" => "Bearer secret"},
+            "request" => %{"tool_arguments" => "private"}
+          }
+        }
+      )
+
+    assert Result.client_error(result) == %{
+             "message" => "Invalid schema",
+             "type" => "invalid_json_schema",
+             "code" => "invalid_json_schema",
+             "status" => 400,
+             "param" => "response_format"
+           }
+  end
+
+  test "falls back when provider error fields contain internal terms" do
+    result =
+      Result.error("provider failed", 502, nil,
+        provider_body: %{"error" => %{"message" => {:remote, 1000, ""}, "code" => %{}}}
+      )
+
+    assert Result.client_error(result) == %{
+             "message" => "provider failed",
+             "type" => "upstream_error",
+             "code" => "upstream_error",
+             "status" => 502
+           }
+  end
+
   test "attaches routing attempt metadata" do
     assert {:ok, %Result{provider: String, model: "model"}} =
              Result.response(%{}, nil)

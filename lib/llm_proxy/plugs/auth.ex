@@ -6,7 +6,8 @@ defmodule LLMProxy.Plugs.Auth do
 
   import Plug.Conn
 
-  alias LLMProxy.{Actor, Config, HTTP, Storage}
+  alias LLMProxy.{Actor, Config, Storage}
+  alias LLMProxy.HTTP.ErrorResponse
 
   def init(opts), do: opts
 
@@ -15,15 +16,18 @@ defmodule LLMProxy.Plugs.Auth do
 
     cond do
       is_nil(raw_key) ->
-        conn |> HTTP.send_json(401, %{error: "Missing API key"}) |> halt()
+        conn |> ErrorResponse.send(401, "authentication_error", "Missing API key") |> halt()
 
       raw_key == Config.master_key() ->
         assign(conn, :api_key, Actor.master_key())
 
       true ->
         case Storage.find_key(raw_key) do
-          nil -> conn |> HTTP.send_json(401, %{error: "Invalid API key"}) |> halt()
-          key -> assign(conn, :api_key, key)
+          nil ->
+            conn |> ErrorResponse.send(401, "authentication_error", "Invalid API key") |> halt()
+
+          key ->
+            assign(conn, :api_key, key)
         end
     end
   end

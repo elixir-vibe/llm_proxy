@@ -246,8 +246,10 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
 
     assert Jason.decode!(conn.resp_body) == %{
              "error" => %{
+               "message" => "Model 'missing-model' not found",
                "type" => "not_found_error",
-               "message" => "Model 'missing-model' not found"
+               "code" => "not_found_error",
+               "status" => 404
              }
            }
   end

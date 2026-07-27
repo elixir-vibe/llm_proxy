@@ -31,7 +31,15 @@ defmodule LLMProxy.Plugs.AuthTest do
 
       assert conn.status == 401
       assert conn.halted
-      assert %{"error" => "Missing API key"} = Jason.decode!(conn.resp_body)
+
+      assert %{
+               "error" => %{
+                 "message" => "Missing API key",
+                 "type" => "authentication_error",
+                 "code" => "authentication_error",
+                 "status" => 401
+               }
+             } = Jason.decode!(conn.resp_body)
     end
 
     test "returns 401 with empty Authorization header" do
@@ -104,7 +112,7 @@ defmodule LLMProxy.Plugs.AuthTest do
 
       assert conn.status == 401
       assert conn.halted
-      assert %{"error" => "Invalid API key"} = Jason.decode!(conn.resp_body)
+      assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "Invalid API key"
     end
   end
 

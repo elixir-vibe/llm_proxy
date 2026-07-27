@@ -51,6 +51,8 @@ defmodule LLMProxy.HTTP.Routes.FeedbackTest do
       |> Feedback.call(Feedback.init([]))
 
     assert conn.status == 400
-    assert Jason.decode!(conn.resp_body)["error"] == "request_id or trace_id is required"
+
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) ==
+             "request_id or trace_id is required"
   end
 end

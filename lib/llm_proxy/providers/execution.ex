@@ -326,6 +326,9 @@ defmodule LLMProxy.Providers.Execution do
 
   defp invoke(%Attempt{timeout_ms: nil} = attempt, function, args) do
     apply_attempt(attempt, function, args)
+  rescue
+    _error in [RuntimeError, ArgumentError] ->
+      {:error, Result.error("Internal provider execution failed", 500, nil)}
   end
 
   defp invoke(%Attempt{timeout_ms: timeout_ms} = attempt, function, args) do
@@ -336,8 +339,8 @@ defmodule LLMProxy.Providers.Execution do
       nil -> {:error, Result.error("Provider timed out after #{timeout_ms}ms", 504, nil)}
     end
   rescue
-    error in [RuntimeError, ArgumentError] ->
-      {:error, Result.error(Exception.message(error), 500, nil)}
+    _error in [RuntimeError, ArgumentError] ->
+      {:error, Result.error("Internal provider execution failed", 500, nil)}
   end
 
   defp apply_attempt(%Attempt{provider: provider} = attempt, function, args) do

@@ -9,6 +9,7 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
   alias LLMProxy.HTTP
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.HTTP.Routes.Passthrough
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Protocol.Request
@@ -195,7 +196,8 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
 
   defp write_stream_failure(conn, provider, model, token, reason) do
     error = Result.stream_failure(provider, model, token, reason)
-    error_event = %{"type" => "error", "error" => Result.client_error(error)}
+    client_error = ErrorResponse.openai_error(error.status, Result.client_error(error))
+    error_event = %{"type" => "error", "error" => client_error}
 
     case SSEWriter.write_event(conn, error_event) do
       {:ok, conn} -> conn
@@ -238,7 +240,11 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
 
   defp handle_drain_race(result, _conn), do: result
 
+  defp send_error(conn, status, _type, %{} = error) do
+    ErrorResponse.send_openai(conn, status, error)
+  end
+
   defp send_error(conn, status, type, message) do
-    HTTP.send_json(conn, status, %{error: %{type: type, message: message}})
+    ErrorResponse.send_openai(conn, status, type, message)
   end
 end

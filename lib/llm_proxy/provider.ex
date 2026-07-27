@@ -16,6 +16,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Actor
   alias LLMProxy.Cache.Runtime, as: CacheRuntime
   alias LLMProxy.GuardrailPipeline
+  alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Attempt, Execution, Registry, Result}
   alias LLMProxy.Response
@@ -596,9 +597,11 @@ defmodule LLMProxy.Provider do
         )
 
       {:error, reason} ->
+        status = error_status(reason)
+
         Req.Request.halt(
           req_request,
-          Req.Response.new(status: error_status(reason), body: inspect(reason))
+          Req.Response.new(status: status, body: %{"error" => req_llm_error(reason, status)})
         )
     end
   end
@@ -641,6 +644,36 @@ defmodule LLMProxy.Provider do
     }
   end
 
+  defp req_llm_error({:provider, %Result{} = result}, status),
+    do: ErrorResponse.openai_error(status, Result.client_error(result))
+
+  defp req_llm_error({:request, %Request.Error{} = error}, status),
+    do: ErrorResponse.openai_error(status, error.code, error.message)
+
+  defp req_llm_error({:permission, message}, status),
+    do: ErrorResponse.openai_error(status, "permission_error", message)
+
+  defp req_llm_error({:not_found, message}, status),
+    do: ErrorResponse.openai_error(status, "not_found_error", message)
+
+  defp req_llm_error({:missing_api_key, _reason}, status),
+    do: ErrorResponse.openai_error(status, "authentication_error", "Missing API key")
+
+  defp req_llm_error({:invalid_api_key, _reason}, status),
+    do: ErrorResponse.openai_error(status, "authentication_error", "Invalid API key")
+
+  defp req_llm_error({:guardrail, reason}, status),
+    do:
+      ErrorResponse.openai_error(
+        status,
+        "permission_error",
+        ErrorResponse.safe_message(reason, "Request blocked by guardrail")
+      )
+
+  defp req_llm_error(_reason, status),
+    do: ErrorResponse.openai_error(status, "internal_error", "LLMProxy request failed")
+
+  defp error_status({:request, %Request.Error{}}), do: 400
   defp error_status({:not_found, _}), do: 404
   defp error_status({:permission, _}), do: 403
   defp error_status({:missing_api_key, _}), do: 401

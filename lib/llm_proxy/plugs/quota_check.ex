@@ -6,7 +6,8 @@ defmodule LLMProxy.Plugs.QuotaCheck do
 
   import Plug.Conn
 
-  alias LLMProxy.{HTTP, Storage}
+  alias LLMProxy.HTTP.ErrorResponse
+  alias LLMProxy.Storage
 
   def init(opts), do: opts
 
@@ -19,7 +20,7 @@ defmodule LLMProxy.Plugs.QuotaCheck do
 
       {:error, reason} ->
         conn
-        |> HTTP.send_json(429, %{error: reason})
+        |> ErrorResponse.send(429, "rate_limit_error", reason)
         |> halt()
     end
   end

@@ -131,7 +131,7 @@ defmodule LLMProxy.Providers.ReqLLM do
 
     case Enum.find(ReqLLM.Providers.list(), &(Atom.to_string(&1) == adapter_name)) do
       nil ->
-        {:error, "unknown ReqLLM adapter #{inspect(configured)} for provider #{provider_name}"}
+        {:error, "unknown ReqLLM adapter for provider #{provider_name}"}
 
       adapter ->
         {:ok, adapter}
