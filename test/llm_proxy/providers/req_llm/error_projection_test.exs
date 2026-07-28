@@ -62,6 +62,58 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
     refute rendered =~ "set-cookie"
   end
 
+  test "projects safe fields from WebSocket provider error events" do
+    event =
+      {:websocket_error_event,
+       %{
+         "type" => "error",
+         "error" => %{
+           "message" => "Our servers are currently overloaded. Please try again later.",
+           "code" => "server_overloaded",
+           "status" => 503,
+           "request_body" => "private request"
+         }
+       }}
+
+    stream_error =
+      APIStreamError.exception(
+        reason: "Stream failed with a provider event",
+        cause: event
+      )
+
+    assert ErrorProjection.client_error(stream_error) == %{
+             "message" => "Our servers are currently overloaded. Please try again later.",
+             "type" => "server_overloaded",
+             "code" => "server_overloaded",
+             "status" => 503
+           }
+
+    refute Jason.encode!(ErrorProjection.client_error(stream_error)) =~ "private request"
+  end
+
+  test "rejects unsafe WebSocket provider error fields" do
+    event =
+      {:websocket_error_event,
+       %{
+         "error" => %{
+           "message" => "authorization=Bearer secret",
+           "code" => "bad {:code",
+           "status" => 200
+         }
+       }}
+
+    client_error = ErrorProjection.client_error(event)
+
+    assert client_error == %{
+             "message" => "Upstream provider request failed",
+             "type" => "upstream_error",
+             "code" => "upstream_error",
+             "status" => 502
+           }
+
+    refute Jason.encode!(client_error) =~ "secret"
+  end
+
   test "rejects unsafe provider message and code fields" do
     error =
       APIRequestError.exception(

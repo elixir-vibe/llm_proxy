@@ -73,6 +73,13 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   defp message(%RequestError{message: message}), do: safe_reason(message)
 
+  defp message({:websocket_error_event, event}) when is_map(event) do
+    event
+    |> provider_event_body()
+    |> body_message()
+    |> safe_reason()
+  end
+
   defp message(error) do
     error
     |> field(:response_body)
@@ -139,6 +146,9 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   defp code(%RequestError{code: code}), do: code
 
+  defp code({:websocket_error_event, event}) when is_map(event),
+    do: event |> provider_event_body() |> body_code()
+
   defp code(error) do
     field(error, :provider_code) ||
       error |> field(:response_body) |> body_code()
@@ -146,12 +156,19 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   defp status(%RequestError{}), do: 400
 
+  defp status({:websocket_error_event, event}) when is_map(event),
+    do: event |> provider_event_body() |> body_status()
+
   defp status(error) do
     case field(error, :status) || field(error, :status_code) do
       status when is_integer(status) and status >= 400 and status <= 599 -> status
       _other -> nil
     end
   end
+
+  defp provider_event_body(%{"error" => error}) when is_map(error), do: error
+  defp provider_event_body(%{error: error}) when is_map(error), do: error
+  defp provider_event_body(event), do: event
 
   defp body_message(%{"message" => message}) when is_binary(message), do: message
   defp body_message(%{message: message}) when is_binary(message), do: message
@@ -166,6 +183,15 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   defp body_code(%{"error" => error}) when is_map(error), do: body_code(error)
   defp body_code(%{error: error}) when is_map(error), do: body_code(error)
   defp body_code(_body), do: nil
+
+  defp body_status(%{"status" => status}) when is_integer(status), do: valid_status(status)
+  defp body_status(%{status: status}) when is_integer(status), do: valid_status(status)
+  defp body_status(%{"error" => error}) when is_map(error), do: body_status(error)
+  defp body_status(%{error: error}) when is_map(error), do: body_status(error)
+  defp body_status(_body), do: nil
+
+  defp valid_status(status) when status >= 400 and status <= 599, do: status
+  defp valid_status(_status), do: nil
 
   defp safe_reason(reason) when is_binary(reason) do
     reason = String.trim(reason)
