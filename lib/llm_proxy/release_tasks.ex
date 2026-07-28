@@ -54,6 +54,20 @@ defmodule LLMProxy.ReleaseTasks do
     :ok
   end
 
+  @doc "Drain active work before deployment, restoring service on failure."
+  @spec drain_for_deploy(timeout()) :: :ok
+  def drain_for_deploy(timeout_ms \\ 1_800_000) do
+    drain_start()
+
+    try do
+      drain_await(timeout_ms)
+    catch
+      kind, reason ->
+        cancel_drain_after_failure()
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
+  end
+
   @doc "Wait for active work on the running LLMProxy service to reach zero."
   @spec drain_await(timeout()) :: :ok
   def drain_await(timeout_ms \\ 1_800_000) do
@@ -77,8 +91,20 @@ defmodule LLMProxy.ReleaseTasks do
   end
 
   defp ops_call(op, payload \\ %{}, opts \\ []) do
-    socket = LLMProxy.Config.rpc_socket() || raise "LLM_PROXY_RPC_SOCKET is not configured"
-    SafeRPC.call(socket, op, payload, opts)
+    socket =
+      LLMProxy.Config.rpc_socket() || System.get_env("LLM_PROXY_RPC_SOCKET") ||
+        raise "LLM_PROXY_RPC_SOCKET is not configured"
+
+    with :ok <- SafeRPC.Atoms.prepare(LLMProxy.Ops.client_atoms()),
+         :ok <- SafeRPC.prepare(socket) do
+      SafeRPC.call(socket, op, payload, opts)
+    end
+  end
+
+  defp cancel_drain_after_failure do
+    drain_cancel()
+  catch
+    _kind, _reason -> :ok
   end
 
   defp run_codex_login do

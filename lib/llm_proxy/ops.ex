@@ -6,7 +6,14 @@ defmodule LLMProxy.Ops do
   for local deploy tooling over SafeRPC, not for public HTTP traffic.
   """
 
-  use SafeRPC, service: :llm_proxy_ops, version: "1"
+  use SafeRPC,
+    service: :llm_proxy_ops,
+    version: "1",
+    atoms: [:active, :agents, :draining, :ready, :requests, :serving, :streams, :total]
+
+  @doc false
+  @spec client_atoms() :: [String.t()]
+  def client_atoms, do: ~w(active agents draining ready requests serving streams total)
 
   @rpc true
   @doc "Start draining: reject new work while existing work finishes."

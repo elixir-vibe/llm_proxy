@@ -9,6 +9,7 @@
 - Token counters now use 64-bit database columns, and accounting exceptions are reported internally without turning a completed model stream into a client failure.
 - OpenAI-compatible provider failures now return one normalized error object, forwarding structured upstream fields without duplicate `details.error` wrappers or inspected Elixir terms.
 - Public HTTP and SSE errors now use protocol-native OpenAI or Anthropic envelopes across authentication, quotas, JSON parsing, draining, guardrails, moderation, routing, and provider failures; only bounded safe fields reach clients.
+- Release deployment drains now work from clean release-eval VMs, advertise their bounded SafeRPC atom vocabulary, and restore request acceptance when a drain deadline expires.
 
 ### Security
 

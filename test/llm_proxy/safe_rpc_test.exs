@@ -77,6 +77,13 @@ if Code.ensure_loaded?(Incant) do
       assert Map.has_key?(modules, LLMProxy.Admin)
       assert Map.has_key?(modules, LLMProxy.Ops)
 
+      assert {:ok, atoms} = SafeRPC.atoms(socket)
+
+      for atom <- ~w(active agents draining ready requests serving streams total) do
+        assert atom in atoms
+      end
+
+      assert :ok = SafeRPC.prepare(socket)
       assert {:ok, %{draining: false}} = SafeRPC.call(socket, {LLMProxy.Ops, :drain_status})
       assert {:ok, %{draining: true}} = SafeRPC.call(socket, {LLMProxy.Ops, :drain_start})
       assert {:ok, %{draining: false}} = SafeRPC.call(socket, {LLMProxy.Ops, :drain_cancel})
