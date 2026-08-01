@@ -371,6 +371,14 @@ LLM_PROXY_BODY_LIMIT_BYTES=32000000
 
 Positive integer byte limit. Default: 32 MB.
 
+### Provider Connection Timeout
+
+```text
+LLM_PROXY_PROVIDER_CONNECT_TIMEOUT_MS=10000
+```
+
+Positive finite WebSocket connection/upgrade deadline in milliseconds. Established OpenAI Codex streams use no default transport receive deadline.
+
 ### Fallbacks
 
 ```text

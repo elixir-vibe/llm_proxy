@@ -54,6 +54,15 @@ if config_env() in [:dev, :prod] do
         raise "LLM_PROXY_BODY_LIMIT_BYTES must be a positive integer"
     end
 
+  provider_connect_timeout_ms =
+    case Integer.parse(System.get_env("LLM_PROXY_PROVIDER_CONNECT_TIMEOUT_MS", "10000")) do
+      {timeout, ""} when timeout > 0 ->
+        timeout
+
+      _other ->
+        raise "LLM_PROXY_PROVIDER_CONNECT_TIMEOUT_MS must be a positive integer"
+    end
+
   provider_key_seeds =
     case System.get_env("LLM_PROXY_PROVIDER_KEYS") do
       nil -> %{}
@@ -76,5 +85,6 @@ if config_env() in [:dev, :prod] do
     },
     fallbacks: fallbacks,
     max_retries: String.to_integer(System.get_env("LLM_MAX_RETRIES", "1")),
+    provider_connect_timeout_ms: provider_connect_timeout_ms,
     body_limit_bytes: body_limit_bytes
 end

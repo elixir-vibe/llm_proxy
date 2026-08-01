@@ -26,16 +26,20 @@ defmodule LLMProxy.Protocol.OpenAI do
     |> Map.put("model", model)
   end
 
-  def request_body(%Request{
-        protocol: :openai_responses,
-        body: %{"input" => input} = body,
-        model: model
-      })
+  def request_body(
+        %Request{
+          protocol: :openai_responses,
+          body: %{"input" => input} = body,
+          model: model
+        } = request
+      )
       when is_list(input) do
     body
     |> Map.take(["parallel_tool_calls", "response_format"])
     |> Map.put("messages", responses_input_to_openai_messages(input))
     |> Map.put("model", model)
+    |> maybe_put("tools", openai_tools(request.tools))
+    |> maybe_put("tool_choice", openai_tool_choice(request.tool_choice))
   end
 
   def request_body(%Request{} = request) do
@@ -45,8 +49,8 @@ defmodule LLMProxy.Protocol.OpenAI do
     |> Map.merge(Map.take(request.body, ["parallel_tool_calls", "response_format"]))
     |> Map.put("model", request.model)
     |> maybe_put("stream", request.stream)
-    |> maybe_put("tools", request.tools)
-    |> maybe_put("tool_choice", request.tool_choice)
+    |> maybe_put("tools", openai_tools(request.tools))
+    |> maybe_put("tool_choice", openai_tool_choice(request.tool_choice))
     |> maybe_put("max_tokens", request.max_tokens)
     |> maybe_put("temperature", request.temperature)
     |> maybe_put("top_p", request.top_p)
@@ -74,6 +78,43 @@ defmodule LLMProxy.Protocol.OpenAI do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp openai_tool_choice(%{type: "tool", name: name}) when is_binary(name) do
+    %{"type" => "function", "function" => %{"name" => name}}
+  end
+
+  defp openai_tool_choice("any"), do: "required"
+  defp openai_tool_choice(tool_choice), do: tool_choice
+
+  defp openai_tools(nil), do: nil
+  defp openai_tools(tools) when is_list(tools), do: Enum.map(tools, &openai_tool/1)
+
+  defp openai_tool(%{"type" => "function", "function" => %{} = _function} = tool),
+    do: tool
+
+  defp openai_tool(%{"type" => "function", "name" => name} = tool)
+       when is_binary(name) do
+    function =
+      tool
+      |> Map.take(["name", "description", "parameters"])
+      |> Map.put_new("parameters", %{"type" => "object", "properties" => %{}})
+
+    %{"type" => "function", "function" => function}
+  end
+
+  defp openai_tool(%{"name" => name, "input_schema" => schema} = tool)
+       when is_binary(name) and is_map(schema) do
+    function = %{"name" => name, "parameters" => schema}
+
+    function =
+      if is_binary(tool["description"]),
+        do: Map.put(function, "description", tool["description"]),
+        else: function
+
+    %{"type" => "function", "function" => function}
+  end
+
+  defp openai_tool(tool), do: tool
 
   defp normalize_openai_wire_response_format(
          %{

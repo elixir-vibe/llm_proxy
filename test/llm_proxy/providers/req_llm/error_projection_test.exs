@@ -6,6 +6,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
   alias LLMProxy.Stream.Event
   alias ReqLLM.Error.API.Request, as: APIRequestError
   alias ReqLLM.Error.API.Stream, as: APIStreamError
+  alias ReqLLM.Error.API.Timeout, as: APITimeout
   alias ReqLLM.StreamEvent
 
   test "projects nested stream errors without exposing Elixir terms or upstream headers" do
@@ -160,6 +161,40 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
              "code" => "upstream_error",
              "status" => 502
            }
+  end
+
+  test "projects typed timeout phases without collapsing diagnostics" do
+    for {kind, timeout, message} <- [
+          {:connect, 10_000, "Provider connection exceeded the timeout of 10000ms"},
+          {:receive, 30_000, "Provider transport received no data for 30000ms"},
+          {:total, 60_000, "Model call exceeded the total timeout of 60000ms"},
+          {:stream_idle, 45_000, "Model stream made no semantic progress for 45000ms"}
+        ] do
+      error = APITimeout.exception(kind: kind, timeout: timeout)
+
+      assert ErrorProjection.client_error(error) == %{
+               "message" => message,
+               "type" => "upstream_#{kind}_timeout",
+               "code" => "upstream_#{kind}_timeout",
+               "status" => 504
+             }
+    end
+  end
+
+  test "projects bounded WebSocket handshake failures" do
+    error = WebSockex.RequestError.exception(code: 503, message: "Service Unavailable")
+
+    assert ErrorProjection.client_error(error) == %{
+             "message" => "WebSocket handshake failed: Service Unavailable",
+             "type" => "upstream_error",
+             "code" => "upstream_error",
+             "status" => 503
+           }
+
+    unsafe =
+      WebSockex.RequestError.exception(code: 401, message: "authorization=Bearer secret")
+
+    refute Jason.encode!(ErrorProjection.client_error(unsafe)) =~ "secret"
   end
 
   test "surfaces the transport reason for connection-level failures" do

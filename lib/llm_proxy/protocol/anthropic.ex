@@ -46,7 +46,7 @@ defmodule LLMProxy.Protocol.Anthropic do
     |> maybe_put("stream", request.stream)
     |> maybe_put("metadata", request.metadata)
     |> maybe_put("stop_sequences", request.stop)
-    |> maybe_put("tool_choice", request.tool_choice)
+    |> maybe_put("tool_choice", anthropic_tool_choice(request.tool_choice))
   end
 
   def request_body(%Request{} = request, opts) do
@@ -60,7 +60,7 @@ defmodule LLMProxy.Protocol.Anthropic do
     |> maybe_put("stream", request.stream)
     |> maybe_put("metadata", request.metadata)
     |> maybe_put("stop_sequences", request.stop)
-    |> maybe_put("tool_choice", request.tool_choice)
+    |> maybe_put("tool_choice", anthropic_tool_choice(request.tool_choice))
   end
 
   defp conversion_max_tokens(opts) do
@@ -102,7 +102,26 @@ defmodule LLMProxy.Protocol.Anthropic do
     }
   end
 
+  defp convert_tool_to_anthropic(%{"type" => "function", "name" => name} = tool) do
+    %{
+      "name" => name,
+      "description" => tool["description"] || "",
+      "input_schema" => tool["parameters"] || %{}
+    }
+  end
+
   defp convert_tool_to_anthropic(tool), do: tool
+
+  defp anthropic_tool_choice(%{type: "tool", name: name}) when is_binary(name),
+    do: %{"type" => "tool", "name" => name}
+
+  defp anthropic_tool_choice(tool_choice) when tool_choice in ["required", "any"],
+    do: %{"type" => "any"}
+
+  defp anthropic_tool_choice(tool_choice) when tool_choice in ["auto", "none"],
+    do: %{"type" => tool_choice}
+
+  defp anthropic_tool_choice(tool_choice), do: tool_choice
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)

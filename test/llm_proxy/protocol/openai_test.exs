@@ -3,7 +3,64 @@ defmodule LLMProxy.Protocol.OpenAITest do
 
   alias LLMProxy.Usage
 
-  alias LLMProxy.Protocol.OpenAI
+  alias LLMProxy.Protocol.{OpenAI, Request}
+
+  describe "request_body/1" do
+    test "converts Responses tools and named choice to Chat wire format" do
+      assert {:ok, request} =
+               Request.parse(:openai_responses, %{
+                 "model" => "gpt-4o",
+                 "input" => [%{"role" => "user", "content" => "use lookup"}],
+                 "tools" => [
+                   %{
+                     "type" => "function",
+                     "name" => "lookup",
+                     "description" => "Look up a value",
+                     "parameters" => %{"type" => "object", "properties" => %{}}
+                   }
+                 ],
+                 "tool_choice" => %{"type" => "function", "name" => "lookup"}
+               })
+
+      body = OpenAI.request_body(request)
+
+      assert body["tool_choice"] == %{
+               "type" => "function",
+               "function" => %{"name" => "lookup"}
+             }
+
+      assert [%{"type" => "function", "function" => function}] = body["tools"]
+      assert function["name"] == "lookup"
+      assert function["description"] == "Look up a value"
+    end
+
+    test "converts Anthropic tools and named choice to Chat wire format" do
+      assert {:ok, request} =
+               Request.parse(:anthropic_messages, %{
+                 "model" => "gpt-4o",
+                 "messages" => [%{"role" => "user", "content" => "use lookup"}],
+                 "tools" => [
+                   %{
+                     "name" => "lookup",
+                     "description" => "Look up a value",
+                     "input_schema" => %{"type" => "object", "properties" => %{}}
+                   }
+                 ],
+                 "tool_choice" => %{"type" => "tool", "name" => "lookup"}
+               })
+
+      body = OpenAI.request_body(request)
+
+      assert body["tool_choice"] == %{
+               "type" => "function",
+               "function" => %{"name" => "lookup"}
+             }
+
+      assert [%{"type" => "function", "function" => function}] = body["tools"]
+      assert function["name"] == "lookup"
+      assert function["parameters"] == %{"type" => "object", "properties" => %{}}
+    end
+  end
 
   describe "convert_response/3 from :anthropic" do
     test "converts text-only response" do

@@ -10,6 +10,9 @@
 - OpenAI-compatible provider failures now return one normalized error object, forwarding structured upstream fields without duplicate `details.error` wrappers or inspected Elixir terms.
 - Public HTTP and SSE errors now use protocol-native OpenAI or Anthropic envelopes across authentication, quotas, JSON parsing, draining, guardrails, moderation, routing, and provider failures; only bounded safe fields reach clients.
 - Release deployment drains now work from clean release-eval VMs, advertise their bounded SafeRPC atom vocabulary, and restore request acceptance when a drain deadline expires.
+- OpenAI Codex WebSockets now use a finite connection deadline with no default established-stream receive deadline, and timeout or handshake failures retain safe phase/status diagnostics.
+- Named tool choices and function tool definitions now normalize across OpenAI Chat, OpenAI Responses, and Anthropic Messages routing boundaries.
+- ReqLLM now uses the released Hex package at v1.18, replacing the temporary Git pin; Cowboy/Cowlib were updated to versions that resolve the newly published memory-exhaustion advisories.
 
 ### Security
 

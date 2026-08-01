@@ -10,12 +10,14 @@ defmodule LLMProxy.ConfigTest do
     original_catalog = Application.get_env(:llm_proxy, :catalog)
     original_models = Application.get_env(:llm_proxy, :models)
     original_body_limit = Application.get_env(:llm_proxy, :body_limit_bytes)
+    original_connect_timeout = Application.get_env(:llm_proxy, :provider_connect_timeout_ms)
 
     on_exit(fn ->
       restore_env(:providers, original_providers)
       restore_env(:catalog, original_catalog)
       restore_env(:models, original_models)
       restore_env(:body_limit_bytes, original_body_limit)
+      restore_env(:provider_connect_timeout_ms, original_connect_timeout)
     end)
 
     :ok
@@ -29,6 +31,17 @@ defmodule LLMProxy.ConfigTest do
 
     assert_raise ArgumentError, ~r/:body_limit_bytes must be a positive integer/, fn ->
       Config.body_limit_bytes()
+    end
+  end
+
+  test "configures a finite provider connection timeout" do
+    Application.put_env(:llm_proxy, :provider_connect_timeout_ms, 12_000)
+    assert Config.provider_connect_timeout_ms() == 12_000
+
+    Application.put_env(:llm_proxy, :provider_connect_timeout_ms, :infinity)
+
+    assert_raise ArgumentError, ~r/:provider_connect_timeout_ms must be a positive integer/, fn ->
+      Config.provider_connect_timeout_ms()
     end
   end
 

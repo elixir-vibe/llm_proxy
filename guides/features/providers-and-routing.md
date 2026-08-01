@@ -212,6 +212,10 @@ Configuration-driven providers use LLMProxy's normalized chat path, including co
 
 The ReqLLM Finch transport uses eight HTTP/1 pool shards with four connections each by default, allowing bounded concurrency for long-lived streams. Cowboy uses the provider receive timeout as its idle ceiling and resets the timer when data is sent. LLMProxy adds SSE comment heartbeats during upstream silence.
 
+OpenAI Codex WebSocket setup has a finite configurable connection deadline (10 seconds by default). After the socket is established, LLMProxy does not impose a default transport receive deadline on model silence; pool checkout remains independently bounded. ReqLLM timeout errors retain `connect`, `receive`, `total`, or `stream_idle` phases in safe 504 error codes and messages. ReqLLM v1.18 does not automatically retry WebSocket connection failures, and LLMProxy does not retry a lazy stream after provider output becomes observable.
+
+Named tool selection is canonicalized internally and rendered for the destination protocol: OpenAI Chat uses a nested function choice, OpenAI Responses uses a flat function choice through ReqLLM, and Anthropic Messages uses a tool choice. Unknown future choice variants remain unchanged for passthrough compatibility. Function tool definitions are likewise translated when fallback crosses these protocol boundaries.
+
 Provider errors are projected onto canonical status, code, and message fields. Exception terms, stacktraces, request bodies, and upstream headers are not rendered to clients.
 
 ## Related guides

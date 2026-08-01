@@ -73,6 +73,12 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   defp message(%RequestError{message: message}), do: safe_reason(message)
 
+  defp message(%ReqLLM.Error.API.Timeout{} = error),
+    do: error |> Exception.message() |> safe_reason()
+
+  defp message(%WebSockex.RequestError{message: message}) when is_binary(message),
+    do: safe_reason("WebSocket handshake failed: #{message}")
+
   defp message({:websocket_error_event, event}) when is_map(event) do
     event
     |> provider_event_body()
@@ -145,6 +151,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   defp transport_reason?(_reason), do: false
 
   defp code(%RequestError{code: code}), do: code
+  defp code(%ReqLLM.Error.API.Timeout{kind: kind}), do: "upstream_#{kind}_timeout"
 
   defp code({:websocket_error_event, event}) when is_map(event),
     do: event |> provider_event_body() |> body_code()
@@ -155,6 +162,11 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   end
 
   defp status(%RequestError{}), do: 400
+  defp status(%ReqLLM.Error.API.Timeout{}), do: 504
+
+  defp status(%WebSockex.RequestError{code: status})
+       when is_integer(status) and status >= 400 and status <= 599,
+       do: status
 
   defp status({:websocket_error_event, event}) when is_map(event),
     do: event |> provider_event_body() |> body_status()

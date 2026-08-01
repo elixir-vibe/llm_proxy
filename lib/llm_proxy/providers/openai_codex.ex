@@ -147,7 +147,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
     [
       provider_options: provider_options,
-      receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
+      connect_timeout: LLMProxy.Config.provider_connect_timeout_ms(),
+      receive_timeout: :infinity
     ]
   end
 

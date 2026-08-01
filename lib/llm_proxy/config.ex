@@ -19,6 +19,7 @@ defmodule LLMProxy.Config do
   @default_token_cooldown_ms :timer.hours(4)
   @default_deployment_failure_threshold 3
   @default_deployment_cooldown_ms :timer.seconds(30)
+  @default_provider_connect_timeout_ms :timer.seconds(10)
   @default_provider_receive_timeout_ms :timer.minutes(10)
   @default_remote_timeout_ms :timer.seconds(30)
   @default_providers %{
@@ -125,6 +126,21 @@ defmodule LLMProxy.Config do
 
   def deployment_cooldown_ms,
     do: Application.get_env(:llm_proxy, :deployment_cooldown_ms, @default_deployment_cooldown_ms)
+
+  def provider_connect_timeout_ms do
+    case Application.get_env(
+           :llm_proxy,
+           :provider_connect_timeout_ms,
+           @default_provider_connect_timeout_ms
+         ) do
+      timeout when is_integer(timeout) and timeout > 0 ->
+        timeout
+
+      value ->
+        raise ArgumentError,
+              ":provider_connect_timeout_ms must be a positive integer, got: #{inspect(value)}"
+    end
+  end
 
   def provider_receive_timeout_ms,
     do:

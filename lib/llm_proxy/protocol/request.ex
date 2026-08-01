@@ -79,7 +79,7 @@ defmodule LLMProxy.Protocol.Request do
          metadata: metadata(body),
          tags: tags(body),
          tools: body["tools"],
-         tool_choice: body["tool_choice"],
+         tool_choice: normalize_tool_choice(protocol, body["tool_choice"]),
          max_tokens: body["max_tokens"],
          reasoning_effort: reasoning_effort,
          temperature: body["temperature"],
@@ -89,6 +89,29 @@ defmodule LLMProxy.Protocol.Request do
        }}
     end
   end
+
+  defp normalize_tool_choice(
+         :openai_chat,
+         %{"type" => "function", "function" => %{"name" => name}}
+       )
+       when is_binary(name),
+       do: %{type: "tool", name: name}
+
+  defp normalize_tool_choice(
+         :openai_responses,
+         %{"type" => "function", "name" => name}
+       )
+       when is_binary(name),
+       do: %{type: "tool", name: name}
+
+  defp normalize_tool_choice(
+         :anthropic_messages,
+         %{"type" => "tool", "name" => name}
+       )
+       when is_binary(name),
+       do: %{type: "tool", name: name}
+
+  defp normalize_tool_choice(_protocol, tool_choice), do: tool_choice
 
   @reasoning_efforts ~w(none minimal low medium high xhigh max)
 

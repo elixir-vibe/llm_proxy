@@ -34,6 +34,43 @@ defmodule LLMProxy.Protocol.RequestTest do
              request.messages
   end
 
+  test "normalizes protocol-native named tool choices to one canonical form" do
+    requests = [
+      {:openai_chat,
+       %{
+         "messages" => [%{"role" => "user", "content" => "hello"}],
+         "tool_choice" => %{"type" => "function", "function" => %{"name" => "lookup"}}
+       }},
+      {:openai_responses,
+       %{
+         "input" => [%{"role" => "user", "content" => "hello"}],
+         "tool_choice" => %{"type" => "function", "name" => "lookup"}
+       }},
+      {:anthropic_messages,
+       %{
+         "messages" => [%{"role" => "user", "content" => "hello"}],
+         "tool_choice" => %{"type" => "tool", "name" => "lookup"}
+       }}
+    ]
+
+    for {protocol, body} <- requests do
+      assert {:ok, request} = Request.parse(protocol, body)
+      assert request.tool_choice == %{type: "tool", name: "lookup"}
+    end
+  end
+
+  test "preserves unknown tool choice variants for forward compatibility" do
+    choice = %{"type" => "future_tool_policy", "mode" => "strict"}
+
+    assert {:ok, request} =
+             Request.parse(:openai_chat, %{
+               "messages" => [%{"role" => "user", "content" => "hello"}],
+               "tool_choice" => choice
+             })
+
+    assert request.tool_choice == choice
+  end
+
   test "rejects unsupported reasoning effort" do
     assert {:error, error} =
              Request.parse(:openai_chat, %{

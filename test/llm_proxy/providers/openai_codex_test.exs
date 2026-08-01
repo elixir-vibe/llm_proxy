@@ -46,6 +46,8 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
     assert provider_options[:chatgpt_account_id] == "acct_123"
     assert provider_options[:codex_originator] == "pi"
     assert provider_options[:openai_stream_transport] == :websocket
+    assert opts[:connect_timeout] == LLMProxy.Config.provider_connect_timeout_ms()
+    assert opts[:receive_timeout] == :infinity
   end
 
   test "Chat input preserves tools for ReqLLM generation" do
@@ -73,6 +75,17 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
     assert request.tools == [tool]
     assert request.tool_choice == "auto"
     assert [%{role: :user}] = request.messages
+  end
+
+  test "Responses named tool choice uses ReqLLM canonical form" do
+    assert {:ok, request} =
+             OpenAICodex.request_from_responses_body(%{
+               "model" => "gpt-5.6-sol",
+               "input" => [%{"role" => "user", "content" => "use lookup"}],
+               "tool_choice" => %{"type" => "function", "name" => "lookup"}
+             })
+
+    assert request.tool_choice == %{type: "tool", name: "lookup"}
   end
 
   test "Responses input is converted into ReqLLM context messages" do

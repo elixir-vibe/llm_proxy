@@ -157,6 +157,51 @@ defmodule LLMProxy.Protocol.AnthropicTest do
       assert tool["input_schema"] == %{"type" => "object", "properties" => %{}}
     end
 
+    test "converts OpenAI named tool choice to Anthropic wire format" do
+      body = %{
+        "model" => "m",
+        "messages" => [%{"role" => "user", "content" => "Hi"}],
+        "tools" => [
+          %{
+            "type" => "function",
+            "function" => %{
+              "name" => "get_weather",
+              "parameters" => %{"type" => "object", "properties" => %{}}
+            }
+          }
+        ],
+        "tool_choice" => %{
+          "type" => "function",
+          "function" => %{"name" => "get_weather"}
+        }
+      }
+
+      result = body |> request() |> Anthropic.request_body()
+
+      assert result["tool_choice"] == %{"type" => "tool", "name" => "get_weather"}
+    end
+
+    test "converts Responses tools and required choice to Anthropic wire format" do
+      body = %{
+        "model" => "m",
+        "input" => [%{"role" => "user", "content" => "Hi"}],
+        "tools" => [
+          %{
+            "type" => "function",
+            "name" => "lookup",
+            "parameters" => %{"type" => "object", "properties" => %{}}
+          }
+        ],
+        "tool_choice" => "required"
+      }
+
+      result = body |> request(:openai_responses) |> Anthropic.request_body()
+
+      assert result["tool_choice"] == %{"type" => "any"}
+      assert [%{"name" => "lookup", "input_schema" => schema}] = result["tools"]
+      assert schema == %{"type" => "object", "properties" => %{}}
+    end
+
     test "preserves temperature" do
       body = %{
         "model" => "m",
