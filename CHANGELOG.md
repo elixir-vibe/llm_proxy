@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1 - 2026-08-01
+
 ### Fixed
 
 - Streaming endpoints now wait for the first upstream event before committing HTTP 200, return immediate lazy-stream failures as HTTP errors, and render sanitized protocol error events when providers fail after streaming begins.
