@@ -148,7 +148,7 @@ defmodule LLMProxy.MixProject do
       {:jason, "~> 1.4"},
       {:json_codec, "~> 0.2.3"},
       {:incant, "~> 0.1", optional: true},
-      {:safe_rpc, "~> 0.1.15"},
+      {:safe_rpc, "~> 0.1.17"},
 
       # OpenTelemetry
       {:opentelemetry_api, "~> 1.5"},
