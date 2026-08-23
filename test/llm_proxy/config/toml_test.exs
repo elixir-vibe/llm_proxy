@@ -25,6 +25,12 @@ defmodule LLMProxy.Config.TOMLTest do
     [provider_tokens]
     allow_plaintext = false
 
+    [provider_usage]
+    auto_refresh = false
+    refresh_interval_ms = 120000
+    request_timeout_ms = 5000
+    stale_after_ms = 600000
+
     [telemetry]
     otlp_endpoint = "http://127.0.0.1:4318"
 
@@ -58,6 +64,10 @@ defmodule LLMProxy.Config.TOMLTest do
     assert llm_proxy[:replay_policy] == :allow_uncertain
     assert llm_proxy[:provider_connect_timeout_ms] == 15_000
     refute llm_proxy[:provider_token_allow_plaintext]
+    refute llm_proxy[:provider_usage_auto_refresh]
+    assert llm_proxy[:provider_usage_refresh_interval_ms] == 120_000
+    assert llm_proxy[:provider_usage_request_timeout_ms] == 5_000
+    assert llm_proxy[:provider_usage_stale_after_ms] == 600_000
 
     assert llm_proxy[:quackdb_server][:database] == "/var/lib/llm-proxy/main.duckdb"
     assert llm_proxy[:quackdb_server][:endpoint] == "quack:localhost:9494"
@@ -139,6 +149,39 @@ defmodule LLMProxy.Config.TOMLTest do
     assert_raise ArgumentError, ~r/otlp_endpoint must be an absolute HTTP/, fn ->
       TOML.decode(~s([telemetry]\notlp_endpoint = "localhost:4318"))
     end
+
+    assert_raise ArgumentError, ~r/refresh_interval_ms must be from 60000 through 3600000/, fn ->
+      TOML.decode("[provider_usage]\nrefresh_interval_ms = 59999")
+    end
+
+    assert_raise ArgumentError, ~r/stale_after_ms must be from 300000 through 86400000/, fn ->
+      TOML.decode("[provider_usage]\nstale_after_ms = 120000")
+    end
+  end
+
+  test "decodes explicit GLM usage source settings" do
+    input = """
+    [providers.glm]
+    adapter = "zai_coding_plan"
+    base_url = "https://api.z.ai/api/coding/paas/v4"
+    token_pool = "glm-production"
+    usage_adapter = "glm"
+    usage_auth_scheme = "bearer"
+    usage_paths = ["/api/monitor/usage"]
+    """
+
+    assert {:ok, [llm_proxy: config]} = TOML.decode(input)
+
+    assert config[:providers] == %{
+             "glm" => %{
+               adapter: "zai_coding_plan",
+               base_url: "https://api.z.ai/api/coding/paas/v4",
+               token_pool: "glm-production",
+               usage_adapter: "glm",
+               usage_auth_scheme: "bearer",
+               usage_paths: ["/api/monitor/usage"]
+             }
+           }
   end
 
   test "returns TOML parser errors" do

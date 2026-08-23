@@ -262,6 +262,21 @@ Default endpoint for a named or built-in provider.
 
 Default credential pool for provider routes.
 
+### GLM Usage Source
+
+```elixir
+%{
+  adapter: "zai_coding_plan",
+  base_url: "https://api.z.ai/api/coding/paas/v4",
+  token_pool: "glm-production",
+  usage_adapter: "glm",
+  usage_auth_scheme: "raw",
+  usage_paths: ["/api/monitor/usage/quota/limit", "/api/monitor/usage"]
+}
+```
+
+`usage_adapter` is optional for `zai`, `zai_coder`, and `zai_coding_plan`. Usage paths must be HTTPS-origin paths. At most three paths are accepted.
+
 ### Anthropic Defaults
 
 ```elixir
@@ -427,6 +442,20 @@ provider_connect_timeout_ms = 10000
 
 Fallback deployments belong in model routes, not a separate fallback map.
 
+### Provider Usage
+
+```toml
+[provider_usage]
+auto_refresh = true
+refresh_interval_ms = 300000
+request_timeout_ms = 10000
+stale_after_ms = 600000
+```
+
+The refresh interval must be from `60000` through `3600000`. The request timeout
+must be from `1000` through `30000`. The stale time must be at least the refresh
+interval and no more than `86400000`. Omitted values use the built-in defaults.
+
 ### Telemetry
 
 ```toml
@@ -455,6 +484,8 @@ adapter = "openai"
 base_url = "https://api.example.com/v1"
 token_pool = "example-production"
 ```
+
+Optional provider usage keys are `usage_adapter`, `usage_auth_scheme`, and `usage_paths`.
 
 ### Model
 

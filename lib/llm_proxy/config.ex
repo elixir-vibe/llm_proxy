@@ -22,6 +22,12 @@ defmodule LLMProxy.Config do
   @default_provider_connect_timeout_ms :timer.seconds(10)
   @default_provider_receive_timeout_ms :timer.minutes(10)
   @default_remote_timeout_ms :timer.seconds(30)
+  @default_provider_usage_refresh_interval_ms :timer.minutes(5)
+  @minimum_provider_usage_refresh_interval_ms :timer.minutes(1)
+  @maximum_provider_usage_refresh_interval_ms :timer.hours(1)
+  @default_provider_usage_request_timeout_ms :timer.seconds(10)
+  @minimum_provider_usage_request_timeout_ms :timer.seconds(1)
+  @maximum_provider_usage_request_timeout_ms :timer.seconds(30)
   @default_providers %{
     "anthropic" => %{
       base_url: "https://api.anthropic.com/v1",
@@ -155,7 +161,7 @@ defmodule LLMProxy.Config do
     do: provider |> provider_name() |> provider_config()
 
   def provider_config(provider) when is_binary(provider) do
-    configured = Application.get_env(:llm_proxy, :providers, %{}) |> normalize_providers()
+    configured = configured_providers()
     name = provider_name(provider)
     provider_config = Map.get(configured, name, %{})
 
@@ -163,6 +169,11 @@ defmodule LLMProxy.Config do
     |> Map.get(name, %{})
     |> deep_merge(provider_config)
     |> default_openrouter_referer(name, provider_config)
+  end
+
+  @doc false
+  def configured_providers do
+    Application.get_env(:llm_proxy, :providers, %{}) |> normalize_providers()
   end
 
   def provider_value(provider, key), do: provider_value(provider, key, nil)
@@ -222,6 +233,54 @@ defmodule LLMProxy.Config do
 
   def remote_timeout_ms,
     do: Application.get_env(:llm_proxy, :remote_timeout_ms, @default_remote_timeout_ms)
+
+  def provider_usage_auto_refresh? do
+    case Application.get_env(:llm_proxy, :provider_usage_auto_refresh, true) do
+      value when is_boolean(value) ->
+        value
+
+      value ->
+        raise ArgumentError,
+              ":provider_usage_auto_refresh must be a boolean, got: #{inspect(value)}"
+    end
+  end
+
+  def provider_usage_refresh_interval_ms do
+    bounded_integer!(
+      :provider_usage_refresh_interval_ms,
+      Application.get_env(
+        :llm_proxy,
+        :provider_usage_refresh_interval_ms,
+        @default_provider_usage_refresh_interval_ms
+      ),
+      @minimum_provider_usage_refresh_interval_ms,
+      @maximum_provider_usage_refresh_interval_ms
+    )
+  end
+
+  def provider_usage_request_timeout_ms do
+    bounded_integer!(
+      :provider_usage_request_timeout_ms,
+      Application.get_env(
+        :llm_proxy,
+        :provider_usage_request_timeout_ms,
+        @default_provider_usage_request_timeout_ms
+      ),
+      @minimum_provider_usage_request_timeout_ms,
+      @maximum_provider_usage_request_timeout_ms
+    )
+  end
+
+  def provider_usage_stale_after_ms do
+    default = max(provider_usage_refresh_interval_ms() * 2, :timer.minutes(10))
+
+    bounded_integer!(
+      :provider_usage_stale_after_ms,
+      Application.get_env(:llm_proxy, :provider_usage_stale_after_ms, default),
+      provider_usage_refresh_interval_ms(),
+      :timer.hours(24)
+    )
+  end
 
   def usage_window_4h_ms, do: @usage_window_4h_ms
   def usage_window_week_ms, do: @usage_window_week_ms
@@ -293,6 +352,9 @@ defmodule LLMProxy.Config do
     "title" => :title,
     "to" => :to,
     "token_pool" => :token_pool,
+    "usage_adapter" => :usage_adapter,
+    "usage_auth_scheme" => :usage_auth_scheme,
+    "usage_paths" => :usage_paths,
     "upstream_model" => :upstream_model,
     "weight" => :weight
   }
@@ -331,5 +393,14 @@ defmodule LLMProxy.Config do
         right_value
       end
     end)
+  end
+
+  defp bounded_integer!(_name, value, minimum, maximum)
+       when is_integer(value) and value >= minimum and value <= maximum,
+       do: value
+
+  defp bounded_integer!(name, value, minimum, maximum) do
+    raise ArgumentError,
+          ":#{name} must be an integer from #{minimum} through #{maximum}, got: #{inspect(value)}"
   end
 end

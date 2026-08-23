@@ -225,7 +225,7 @@ Every authenticated request runs through the same controls:
 6. Record usage, estimated cost, latency, and trace IDs without retaining prompts or model output unless content capture is explicitly enabled.
 7. Emit OpenTelemetry spans and return the trace ID to the caller.
 
-Incant support is optional. When installed, `LLMProxy.Admin` describes resources for API keys, provider tokens, traces, and messages plus an operations dashboard. A separate Incant host can consume those surfaces over SafeRPC; the public gateway does not expose an admin UI.
+Incant support is optional. When installed, `LLMProxy.Admin` describes resources for API keys, provider tokens, traces, and messages plus operations and live provider-usage dashboards. The usage dashboard reads authoritative upstream windows for configured OpenAI Codex and GLM Coding Plan accounts. A separate Incant host can consume those surfaces over SafeRPC; the public gateway does not expose an admin UI.
 
 See [Governance and Observability](https://hexdocs.pm/llm_proxy/governance-and-observability.html), [Cache and Guardrails](https://hexdocs.pm/llm_proxy/cache-and-guardrails.html), and [Admin Integration](https://hexdocs.pm/llm_proxy/admin-integration.html).
 

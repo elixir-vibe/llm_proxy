@@ -13,11 +13,12 @@ defmodule LLMProxy.Config.TOML do
   @type decoded :: keyword()
   @type reason :: Toml.reason()
 
-  @top_level_keys ~w(catalog models provider_tokens providers routing server storage telemetry)
+  @top_level_keys ~w(catalog models provider_tokens provider_usage providers routing server storage telemetry)
   @server_keys ~w(body_limit_bytes port public_url rpc_socket)
   @storage_keys ~w(database quackdb_endpoint quackdb_uri)
   @routing_keys ~w(max_retries provider_connect_timeout_ms replay_policy)
   @provider_token_keys ~w(allow_plaintext)
+  @provider_usage_keys ~w(auto_refresh refresh_interval_ms request_timeout_ms stale_after_ms)
   @telemetry_keys ~w(otlp_endpoint)
   @catalog_keys ~w(models public_models)
 
@@ -28,6 +29,9 @@ defmodule LLMProxy.Config.TOML do
     "beta" => :beta,
     "conversion_defaults" => :conversion_defaults,
     "http_referer" => :http_referer,
+    "usage_adapter" => :usage_adapter,
+    "usage_auth_scheme" => :usage_auth_scheme,
+    "usage_paths" => :usage_paths,
     "title" => :title,
     "token_pool" => :token_pool
   }
@@ -76,6 +80,7 @@ defmodule LLMProxy.Config.TOML do
       |> Keyword.merge(storage(data["storage"]))
       |> Keyword.merge(routing(data["routing"]))
       |> Keyword.merge(provider_tokens(data["provider_tokens"]))
+      |> Keyword.merge(provider_usage(data["provider_usage"]))
       |> put_if_present(:providers, providers(data["providers"]))
       |> put_if_present(:models, models(data["models"] || catalog[:models]))
       |> put_if_not_nil(:public_models, catalog[:public_models])
@@ -162,6 +167,34 @@ defmodule LLMProxy.Config.TOML do
 
   defp provider_tokens(_provider_tokens) do
     raise ArgumentError, "provider_tokens must be a TOML table"
+  end
+
+  defp provider_usage(nil), do: []
+
+  defp provider_usage(%{} = provider_usage) do
+    validate_keys!(provider_usage, @provider_usage_keys, "provider_usage")
+
+    refresh_interval =
+      bounded_integer(provider_usage, "refresh_interval_ms", 60_000, 3_600_000)
+
+    []
+    |> put_if_present(
+      :provider_usage_auto_refresh,
+      optional_boolean(provider_usage, "auto_refresh")
+    )
+    |> put_if_present(:provider_usage_refresh_interval_ms, refresh_interval)
+    |> put_if_present(
+      :provider_usage_request_timeout_ms,
+      bounded_integer(provider_usage, "request_timeout_ms", 1_000, 30_000)
+    )
+    |> put_if_present(
+      :provider_usage_stale_after_ms,
+      bounded_integer(provider_usage, "stale_after_ms", refresh_interval || 300_000, 86_400_000)
+    )
+  end
+
+  defp provider_usage(_provider_usage) do
+    raise ArgumentError, "provider_usage must be a TOML table"
   end
 
   defp telemetry(nil), do: []
@@ -308,6 +341,14 @@ defmodule LLMProxy.Config.TOML do
       :error -> nil
       {:ok, value} when is_integer(value) and value >= 0 -> value
       {:ok, _value} -> raise ArgumentError, "#{key} must be a non-negative integer"
+    end
+  end
+
+  defp bounded_integer(map, key, minimum, maximum) do
+    case Map.fetch(map, key) do
+      :error -> nil
+      {:ok, value} when is_integer(value) and value >= minimum and value <= maximum -> value
+      {:ok, _value} -> raise ArgumentError, "#{key} must be from #{minimum} through #{maximum}"
     end
   end
 

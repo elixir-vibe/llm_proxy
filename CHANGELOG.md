@@ -21,6 +21,10 @@
 
 ### Added
 
+- A supervised provider-usage tracker now reports each configured OpenAI Codex
+  or GLM Coding Plan account separately. The optional Incant admin surface shows
+  live upstream windows, availability, reset times, freshness, and safe errors,
+  with bounded automatic refresh and manual refresh actions.
 - An optional public-model allowlist keeps HTTP discovery, setup helpers,
   SafeRPC status, and request admission aligned. Standalone deployments
   configure visible aliases through `catalog.public_models` in strict TOML;

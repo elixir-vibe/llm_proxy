@@ -38,6 +38,11 @@ if Code.ensure_loaded?(Incant) do
         callback: :enable
       )
 
+      action(:refresh_usage,
+        available_if: [enabled: true],
+        callback: :refresh_usage
+      )
+
       action(:remove, confirm: true, destructive: true, callback: :remove)
 
       actions do
@@ -50,6 +55,11 @@ if Code.ensure_loaded?(Incant) do
           label: "Complete Codex OAuth",
           callback: {LLMProxy.Admin.CodexOAuth, :complete}
         )
+
+        page(:refresh_all_usage,
+          label: "Refresh provider usage",
+          callback: :refresh_all_usage
+        )
       end
 
       search([:provider, :label])
@@ -57,6 +67,21 @@ if Code.ensure_loaded?(Incant) do
 
     def disable(%{id: id}, _assigns), do: set_enabled(id, false)
     def enable(%{id: id}, _assigns), do: set_enabled(id, true)
+
+    def refresh_usage(%{id: id}, _assigns) do
+      case LLMProxy.ProviderUsage.refresh_account(id) do
+        {:ok, _status} -> {:ok, Incant.ActionResult.refresh()}
+        {:error, :unsupported} -> {:error, "Usage tracking is not supported for this token"}
+        {:error, :unavailable} -> {:error, "Provider usage tracker is unavailable"}
+      end
+    end
+
+    def refresh_all_usage(_params, _assigns) do
+      case LLMProxy.ProviderUsage.refresh_all() do
+        {:ok, _status} -> {:ok, Incant.ActionResult.refresh()}
+        {:error, :unavailable} -> {:error, "Provider usage tracker is unavailable"}
+      end
+    end
 
     def remove(%{id: id}, _assigns) do
       case LLMProxy.Storage.remove_token(id) do

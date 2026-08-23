@@ -22,6 +22,9 @@ if Code.ensure_loaded?(Incant) do
       assert {:ok, %ActionResult.Refresh{}} = ProviderToken.enable(%{id: id}, %{})
       assert [%{enabled: true}] = Storage.list_tokens(%{provider: "openai"})
 
+      assert {:error, "Usage tracking is not supported for this token"} =
+               ProviderToken.refresh_usage(%{id: id}, %{})
+
       assert {:ok, %ActionResult.Refresh{}} = ProviderToken.remove(%{id: id}, %{})
       assert Storage.list_tokens(%{provider: "openai"}) == []
     end
