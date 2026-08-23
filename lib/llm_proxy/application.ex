@@ -125,7 +125,10 @@ defmodule LLMProxy.Application do
       |> Enum.reject(fn e -> e.tokens == [] end)
 
     if entries != [] do
-      LLMProxy.Storage.seed_tokens_from_env(entries)
+      case LLMProxy.Storage.seed_tokens_from_env(entries) do
+        :ok -> :ok
+        {:error, reason} -> raise "provider token seeding failed: #{inspect(reason)}"
+      end
     end
   end
 

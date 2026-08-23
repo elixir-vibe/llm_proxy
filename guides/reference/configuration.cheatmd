@@ -93,6 +93,26 @@ config :llm_proxy, token_cooldown_ms: :timer.hours(4)
 
 Default credential cooldown after rate limiting. Default: 4 hours.
 
+### Provider Token Codec
+
+```elixir
+config :llm_proxy,
+  provider_token_codec: {
+    LLMProxy.ProviderTokenCodec.AESGCM,
+    active_key_id: "2026-08",
+    keys: %{
+      "2026-08" => System.fetch_env!("PROVIDER_TOKEN_KEY_2026_08"),
+      "2026-02" => System.fetch_env!("PROVIDER_TOKEN_KEY_2026_02")
+    },
+    allow_plaintext: true
+  }
+```
+
+Codec for provider API keys and OAuth tokens. AES-GCM keys must decode to 32
+bytes. This keyring is separate from `:master_key`. Writes use only the active
+key ID. Reads accept all key IDs in the keyring. The default plaintext codec is
+for compatibility and does not protect stored credentials.
+
 ### Deployment Failure Threshold
 
 ```elixir

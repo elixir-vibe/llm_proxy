@@ -10,6 +10,8 @@ defmodule LLMProxy.TokenPool.Server do
 
   require Logger
 
+  alias LLMProxy.ProviderCredential
+  alias LLMProxy.ProviderTokenCodec
   alias LLMProxy.Schemas.ProviderToken
   alias LLMProxy.Storage.Repo
 
@@ -38,6 +40,11 @@ defmodule LLMProxy.TokenPool.Server do
   def mark_rate_limited(token, cooldown_ms \\ LLMProxy.Config.token_cooldown_ms())
 
   def mark_rate_limited(%ProviderToken{id: id}, cooldown_ms) do
+    Logger.warning("Token #{id} marked as rate-limited")
+    GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
+  end
+
+  def mark_rate_limited(%ProviderCredential{id: id}, cooldown_ms) do
     Logger.warning("Token #{id} marked as rate-limited")
     GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
   end
@@ -130,7 +137,7 @@ defmodule LLMProxy.TokenPool.Server do
     end)
     |> case do
       nil -> :all_rate_limited
-      token -> {:ok, token}
+      token -> ProviderTokenCodec.for_provider(token)
     end
   end
 

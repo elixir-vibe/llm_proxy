@@ -127,6 +127,11 @@ host repo / bundled SQLite / bundled QuackDB
 
 Library hosts usually provide their existing repo. The standalone production release uses the bundled QuackDB repo and supervises a managed local QuackDB process.
 
+Provider-token schemas contain stored values only. A configured token codec
+encodes writes before Ecto receives them. The token pool selects a stored row and
+decodes it into a redacted `LLMProxy.ProviderCredential` only at the provider
+boundary. Admin lists and schema inspection do not receive plaintext values.
+
 Database-specific queries and migrations branch on the configured repo adapter. Provider execution depends on the storage facade, not a concrete database.
 
 ## Optional integrations

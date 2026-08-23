@@ -5,6 +5,8 @@ defmodule LLMProxy.Schemas.ProviderToken do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @derive {Inspect, except: [:token, :refresh_token]}
+
   @type t :: %__MODULE__{
           id: integer() | nil,
           provider: String.t() | nil,

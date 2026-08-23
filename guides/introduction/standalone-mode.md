@@ -26,12 +26,20 @@ MASTER_KEY="replace-with-a-long-random-key"
 OPENAI_API_KEYS="sk-primary,sk-secondary"
 ANTHROPIC_API_KEYS="sk-ant-..."
 OPENROUTER_API_KEYS="sk-or-..."
+LLM_PROXY_PROVIDER_TOKEN_ACTIVE_KEY_ID="2026-08"
+LLM_PROXY_PROVIDER_TOKEN_KEYS='{"2026-08":"base64-encoded-32-byte-key"}'
+LLM_PROXY_PROVIDER_TOKEN_ALLOW_PLAINTEXT="true"
 DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
 PORT="4000"
 PUBLIC_URL="https://llm.example.com"
 ```
 
 `MASTER_KEY` is the bootstrap and operator credential. Provider-key variables seed persisted token records at startup. Existing records remain the runtime source after seeding.
+
+The provider-token keyring is separate from `MASTER_KEY`. Store it in the
+service secret manager and back it up separately from the database. Loss of all
+keyring copies makes encrypted provider tokens unrecoverable. Keep prior key IDs
+in the JSON map until all rows are rotated and verified.
 
 For named configuration-driven providers, seed isolated token pools with JSON:
 

@@ -46,6 +46,14 @@ defmodule LLMProxy.Config do
   def repo, do: Application.get_env(:llm_proxy, :repo, LLMProxy.Storage.Repo.SQLite)
   def storage, do: Application.get_env(:llm_proxy, :storage, LLMProxy.Storage.Ecto)
 
+  def provider_token_codec do
+    Application.get_env(
+      :llm_proxy,
+      :provider_token_codec,
+      LLMProxy.ProviderTokenCodec.Plaintext
+    )
+  end
+
   def quackdb_server_options do
     Application.get_env(:llm_proxy, :quackdb_server, [])
   end
