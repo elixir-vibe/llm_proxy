@@ -129,6 +129,16 @@ Library hosts usually provide their existing repo. The standalone production rel
 
 Database-specific queries and migrations branch on the configured repo adapter. Provider execution depends on the storage facade, not a concrete database.
 
+## Resource cleanup test budget
+
+The loopback resource stress test repeats normal, complete streaming, and
+client-canceled streaming requests in one BEAM. Its listener uses two acceptors
+and sixteen maximum connections. Its client pool uses one connection. The test
+requires an inherited BEAM file-descriptor limit of 128 and reports the measured
+limit when it is lower. After warm-up, the allowed growth is two BEAM ports and
+eight processes. All provider work, drain leases, optional concurrency leases,
+and the test listener must return to zero or stop before the test completes.
+
 ## Optional integrations
 
 Optional modules use compile-time availability checks:

@@ -4,7 +4,8 @@ defmodule LLMProxy.Drain do
 
   Drain mode is an operational state: new user work is rejected while existing
   work is allowed to finish. Control is exposed through local RPC/release tasks,
-  not through public HTTP routes.
+  not through public HTTP routes. Each active-work lease monitors its owner and
+  is released if that process exits before it can call `leave/1`.
   """
 
   alias LLMProxy.Drain.Server
