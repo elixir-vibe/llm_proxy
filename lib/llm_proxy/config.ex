@@ -65,6 +65,27 @@ defmodule LLMProxy.Config do
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
   def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)
 
+  def max_attempts do
+    case Application.get_env(:llm_proxy, :max_attempts, max_retries() + 1) do
+      attempts when is_integer(attempts) and attempts > 0 ->
+        attempts
+
+      value ->
+        raise ArgumentError, ":max_attempts must be a positive integer, got: #{inspect(value)}"
+    end
+  end
+
+  def replay_policy do
+    case Application.get_env(:llm_proxy, :replay_policy, :safe_only) do
+      policy when policy in [:safe_only, :allow_uncertain] ->
+        policy
+
+      value ->
+        raise ArgumentError,
+              ":replay_policy must be :safe_only or :allow_uncertain, got: #{inspect(value)}"
+    end
+  end
+
   def body_limit_bytes do
     case Application.get_env(:llm_proxy, :body_limit_bytes, 32_000_000) do
       bytes when is_integer(bytes) and bytes > 0 ->

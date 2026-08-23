@@ -117,6 +117,28 @@ config :llm_proxy, max_retries: 1
 
 Compatibility retry/fallback limit for configured fallback chains. Default: 1.
 
+### Max Attempts
+
+```elixir
+config :llm_proxy, max_attempts: 2
+```
+
+Strict maximum provider dispatches for one request. Open-circuit and unsupported-protocol route skips do not consume the budget. When unset, the compatibility value is `max_retries + 1`.
+
+Standalone environment: `LLM_MAX_ATTEMPTS`.
+
+### Replay Policy
+
+```elixir
+config :llm_proxy, replay_policy: :safe_only
+```
+
+`:safe_only` permits fallback only when LLMProxy has evidence that the upstream did not accept work, such as unavailable credentials, a clear connection failure, or a 429 refusal. This is the default.
+
+`:allow_uncertain` also permits replay after timeouts and 5xx responses. Use it only when duplicate cost and side effects are acceptable. It restores the earlier fallback behavior.
+
+Standalone environment: `LLM_PROXY_REPLAY_POLICY=safe_only|allow_uncertain`.
+
 ### Fallbacks
 
 ```elixir
@@ -394,6 +416,22 @@ LLM_MAX_RETRIES=1
 ```
 
 Compatibility fallback count. Default: `1`.
+
+### Max Attempts
+
+```text
+LLM_MAX_ATTEMPTS=2
+```
+
+Strict provider-dispatch budget. Default: `LLM_MAX_RETRIES + 1`.
+
+### Replay Policy
+
+```text
+LLM_PROXY_REPLAY_POLICY=safe_only
+```
+
+Use `safe_only` or `allow_uncertain`. Default: `safe_only`.
 
 ### QuackDB URI
 

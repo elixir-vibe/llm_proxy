@@ -148,6 +148,8 @@ Circuit event prefixes include:
 
 Metadata identifies provider, upstream model, and timeout. Stop and exception events add result-specific measurements or metadata.
 
+Attempt events also include `attempt_number`, `max_attempts`, and `replay_policy`. Failure events add `replay_safety`, `replay_decision`, and `replay_reason`. These values are bounded routing labels and do not include request or response content.
+
 ## OpenTelemetry
 
 Provider execution creates spans named by operation, such as:

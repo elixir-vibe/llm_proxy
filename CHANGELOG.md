@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Provider fallback now has a strict attempt budget and replays only proven-safe failures by default. Timeouts and 5xx responses require the explicit `:allow_uncertain` compatibility policy, and visible streams are never replayed.
+
 ## 0.1.1 - 2026-08-01
 
 ### Fixed

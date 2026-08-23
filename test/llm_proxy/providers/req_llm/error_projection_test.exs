@@ -181,6 +181,21 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
     end
   end
 
+  test "classifies replay safety from dispatch evidence" do
+    assert ErrorProjection.replay_safety(APITimeout.exception(kind: :connect, timeout: 10_000)) ==
+             :safe
+
+    assert ErrorProjection.replay_safety(APITimeout.exception(kind: :receive, timeout: 30_000)) ==
+             :uncertain
+
+    assert ErrorProjection.replay_safety(%Req.TransportError{reason: :econnrefused}) == :safe
+    assert ErrorProjection.replay_safety(%Req.TransportError{reason: :econnreset}) == :uncertain
+
+    assert ErrorProjection.replay_safety(
+             APIRequestError.exception(reason: "denied", status: 401, retryable: false)
+           ) == :forbidden
+  end
+
   test "projects bounded WebSocket handshake failures" do
     error = WebSockex.RequestError.exception(code: 503, message: "Service Unavailable")
 

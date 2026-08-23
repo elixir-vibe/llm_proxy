@@ -18,6 +18,15 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
     :certificate_expired
   ]
 
+  @safe_transport_reasons [
+    :econnrefused,
+    :nxdomain,
+    :ENOTFOUND,
+    :unreachable,
+    :tls_alert,
+    :certificate_expired
+  ]
+
   @type t :: %{
           message: String.t(),
           code: String.t(),
@@ -38,6 +47,27 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
       Enum.find_value(chain, &code/1) || status_code(status),
       status
     )
+  end
+
+  @spec replay_safety(term()) :: LLMProxy.Providers.Result.replay_safety()
+  def replay_safety(%ReqLLM.Error.API.Timeout{kind: :connect}), do: :safe
+  def replay_safety(%ReqLLM.Error.API.Timeout{}), do: :uncertain
+  def replay_safety(%WebSockex.RequestError{}), do: :safe
+
+  def replay_safety(reason) do
+    chain = error_chain(reason)
+
+    {result_status, safe_transport?} =
+      Enum.reduce(chain, {nil, false}, fn item, {result_status, safe_transport?} ->
+        {result_status || status(item), safe_transport? || safe_transport_reason?(item)}
+      end)
+
+    cond do
+      result_status == 429 -> :safe
+      safe_transport? -> :safe
+      is_integer(result_status) and result_status < 500 -> :forbidden
+      true -> :uncertain
+    end
   end
 
   @spec accounting_error() :: t()
@@ -149,6 +179,21 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   end
 
   defp transport_reason?(_reason), do: false
+
+  defp safe_transport_reason?(reason) do
+    reason = field(reason, :reason) || field(reason, :original) || reason
+
+    reason in @safe_transport_reasons or
+      (is_binary(reason) and
+         String.contains?(String.downcase(reason), [
+           "connection refused",
+           "econnrefused",
+           "nxdomain",
+           "enotfound",
+           "unreachable",
+           "certificate"
+         ]))
+  end
 
   defp code(%RequestError{code: code}), do: code
   defp code(%ReqLLM.Error.API.Timeout{kind: kind}), do: "upstream_#{kind}_timeout"
