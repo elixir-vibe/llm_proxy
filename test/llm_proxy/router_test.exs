@@ -38,6 +38,15 @@ defmodule LLMProxy.RouterDynamicTest do
     assert body["ready"] == true
     assert body["draining"] == false
     assert body["active"] == %{"agents" => 0, "requests" => 0, "streams" => 0, "total" => 0}
+
+    assert %{
+             "active" => active,
+             "admitted" => admitted,
+             "rejected" => rejected,
+             "released" => released
+           } = body["concurrency"]
+
+    assert Enum.all?([active, admitted, rejected, released], &is_integer/1)
   end
 
   test "health remains available while user routes reject during drain" do

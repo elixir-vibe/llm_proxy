@@ -89,7 +89,9 @@ Pass either:
 - `:api_key` with a raw LLMProxy key or an existing API-key schema/map; or
 - `:actor` with `%LLMProxy.Actor{}`.
 
-The key determines model access, quotas, budget limits, attribution, and stored usage. The master key is accepted for bootstrap and operator calls but should not be distributed to ordinary clients.
+The key determines model access, quotas, budget and concurrent-request limits,
+attribution, and stored usage. The master key is accepted for bootstrap and
+operator calls but should not be distributed to ordinary clients.
 
 ## ReqLLM provider
 

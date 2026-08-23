@@ -1,6 +1,7 @@
 defmodule LLMProxy.ProviderTest do
   use ExUnit.Case
 
+  alias LLMProxy.{ConcurrencyLimiter, Limit}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
@@ -111,5 +112,37 @@ defmodule LLMProxy.ProviderTest do
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 4
     assert updated_key.output_tokens == 3
+  end
+
+  test "local and ReqLLM calls share the concurrent-request limit" do
+    {:ok, key, raw_key} =
+      Storage.create_key("concurrent-provider-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    assert {:ok, lease} = ConcurrencyLimiter.acquire(key)
+    on_exit(fn -> ConcurrencyLimiter.release(lease) end)
+
+    assert {:error, {:concurrency_limit, 1}} =
+             LLMProxy.chat("hello", model: "req-llm-provider-model", api_key: key)
+
+    model = %{
+      id: "req-llm-provider-model",
+      provider: :llm_proxy,
+      model: "req-llm-provider-model"
+    }
+
+    assert {:error,
+            %ReqLLM.Error.API.Request{
+              status: 429,
+              response_body: %{
+                "error" => %{
+                  "code" => "rate_limit_error",
+                  "message" => message
+                }
+              }
+            }} = ReqLLM.Generation.generate_text(model, "hello", api_key: raw_key)
+
+    assert message == ConcurrencyLimiter.error_message()
   end
 end

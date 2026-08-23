@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- API keys can now set an in-memory concurrent-request limit with stream-safe,
+  process-monitored leases across in-process, ReqLLM, SafeRPC, and HTTP
+  generation or moderation calls.
+
 ## 0.1.1 - 2026-08-01
 
 ### Fixed

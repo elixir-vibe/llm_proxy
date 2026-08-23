@@ -17,6 +17,8 @@ LLMProxy.chat/2    ReqLLM provider    HTTP routes    SafeRPC
                                   │
                        before-request guardrails
                                   │
+                  per-key concurrent admission
+                                  │
                       cache key and catalog plan
                                   │
                   timeout / retry / fallback / circuit
@@ -50,6 +52,7 @@ LLMProxy
 ├── TokenPool                credential selection and cooldown state
 ├── Cache                    adapter, deterministic key, and policy
 ├── GuardrailPipeline        request, response, and stream policy hooks
+├── ConcurrencyLimiter       monitored per-key request and stream leases
 ├── Accounting               usage, spend, traces, and message recording
 ├── Telemetry                telemetry events and OpenTelemetry spans
 ├── Stream                   normalized events, SSE writing, and heartbeats
