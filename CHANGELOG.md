@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- API keys now have explicit content capture, disabled by default. Usage accounting stays active without prompt extraction, traces can remain body-free, and the Incant message surface marks captured text as sensitive.
+
+### Migration
+
+- Existing trace-enabled keys retain full content capture. Other existing keys stop automatic user-message capture after migration. Operators must define retention and remove content that was stored before this change.
+
 ## 0.1.1 - 2026-08-01
 
 ### Fixed

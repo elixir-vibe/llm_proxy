@@ -193,7 +193,7 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
   end
 
   test "returns chat completions and tracks usage" do
-    {:ok, _key, raw_key} = Storage.create_key("chat-user")
+    {:ok, _key, raw_key} = Storage.create_key("chat-user", %{capture_content: true})
 
     conn =
       TestSupport.json_conn(:post, "/completions", %{
@@ -216,6 +216,27 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     [message] = Storage.get_messages(%{per_page: 10})
     assert message.route == "chat"
     assert message.user_message == "hello"
+
+    [updated_key] = Storage.list_keys()
+    assert updated_key.input_tokens == 12
+    assert updated_key.output_tokens == 7
+  end
+
+  test "does not capture prompt content for a default key" do
+    secret = "seeded-http-prompt-19be"
+    {:ok, _key, raw_key} = Storage.create_key("private-chat-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/completions", %{
+        "model" => "fake-chat-model",
+        "messages" => [%{"role" => "user", "content" => secret}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> Chat.call(Chat.init([]))
+
+    assert conn.status == 200
+    refute conn.resp_body =~ secret
+    assert Storage.get_messages() == []
 
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 12
