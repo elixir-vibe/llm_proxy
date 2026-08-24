@@ -21,7 +21,6 @@ defmodule LLMProxy.Config.TOMLTest do
     max_retries = 2
     replay_policy = "allow_uncertain"
     provider_connect_timeout_ms = 15000
-    token_selection_strategy = "fill_first"
 
     [provider_tokens]
     allow_plaintext = false
@@ -59,7 +58,6 @@ defmodule LLMProxy.Config.TOMLTest do
     assert llm_proxy[:max_retries] == 2
     assert llm_proxy[:replay_policy] == :allow_uncertain
     assert llm_proxy[:provider_connect_timeout_ms] == 15_000
-    assert llm_proxy[:token_selection_strategy] == :fill_first
     refute llm_proxy[:provider_token_allow_plaintext]
     assert llm_proxy[:token_selection_strategy] == :fill_first
 
@@ -142,10 +140,6 @@ defmodule LLMProxy.Config.TOMLTest do
 
     assert_raise ArgumentError, ~r/replay_policy must be safe_only or allow_uncertain/, fn ->
       TOML.decode(~s([routing]\nreplay_policy = "always"))
-    end
-
-    assert_raise ArgumentError, ~r/token_selection_strategy must be affinity or fill_first/, fn ->
-      TOML.decode(~s([routing]\ntoken_selection_strategy = "random"))
     end
 
     assert_raise ArgumentError, ~r/otlp_endpoint must be an absolute HTTP/, fn ->

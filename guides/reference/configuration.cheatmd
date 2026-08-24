@@ -111,7 +111,11 @@ selection_strategy = "fill_first"
 
 This non-secret setting is not read from the environment. Provider-token
 priorities are non-negative integers and can be edited through Incant's
-priority-only form.
+priority-only form. Set an initial priority when adding a token:
+
+```elixir
+LLMProxy.Storage.add_token("openai-codex", "oauth", access_token, %{priority: 100})
+```
 
 ### Provider Token Codec
 
@@ -132,23 +136,6 @@ Codec for provider API keys and OAuth tokens. AES-GCM keys must decode to 32
 bytes. This keyring is separate from `:master_key`. Writes use only the active
 key ID. Reads accept all key IDs in the keyring. The default plaintext codec is
 for compatibility and does not protect stored credentials.
-
-### Token Selection Strategy
-
-```elixir
-config :llm_proxy, token_selection_strategy: :fill_first
-```
-
-Credential selection within each kind. `:affinity` uses a stable user hash and is the default.
-`:fill_first` uses the highest enabled token `priority`, then the lowest token ID to break ties.
-Cooling-down tokens are skipped without changing this order. Standalone releases use
-`routing.token_selection_strategy` in TOML.
-
-Set priority when adding a provider token. Higher values are selected first:
-
-```elixir
-LLMProxy.Storage.add_token("openai-codex", "oauth", access_token, %{priority: 100})
-```
 
 ### Deployment Failure Threshold
 

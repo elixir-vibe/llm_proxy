@@ -24,8 +24,6 @@ defmodule LLMProxy.ConfigTest do
     original_provider_token_allow_plaintext =
       Application.fetch_env(:llm_proxy, :provider_token_allow_plaintext)
 
-    original_token_selection = Application.get_env(:llm_proxy, :token_selection_strategy)
-
     on_exit(fn ->
       restore_env(:providers, original_providers)
       restore_env(:catalog, original_catalog)
@@ -44,8 +42,6 @@ defmodule LLMProxy.ConfigTest do
         :provider_token_allow_plaintext,
         original_provider_token_allow_plaintext
       )
-
-      restore_env(:token_selection_strategy, original_token_selection)
     end)
 
     :ok
@@ -164,19 +160,6 @@ defmodule LLMProxy.ConfigTest do
     })
 
     assert Config.provider_value("openrouter", :http_referer) == "https://override.example"
-  end
-
-  test "configures provider token selection" do
-    assert Config.token_selection_strategy() == :affinity
-
-    Application.put_env(:llm_proxy, :token_selection_strategy, :fill_first)
-    assert Config.token_selection_strategy() == :fill_first
-
-    Application.put_env(:llm_proxy, :token_selection_strategy, :random)
-
-    assert_raise ArgumentError, ~r/must be :affinity or :fill_first/, fn ->
-      Config.token_selection_strategy()
-    end
   end
 
   test "normalizes readable provider config" do
