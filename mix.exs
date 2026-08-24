@@ -43,7 +43,7 @@ defmodule LLMProxy.MixProject do
   end
 
   def cli do
-    [preferred_envs: [ci: :test]]
+    [preferred_envs: [ci: :test, integration: :test, e2e: :test]]
   end
 
   def application do
@@ -186,6 +186,8 @@ defmodule LLMProxy.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      integration: ["test --only integration"],
+      e2e: ["test --only e2e"],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",
