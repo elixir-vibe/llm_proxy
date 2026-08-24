@@ -223,8 +223,13 @@ See [Governance and Observability](https://hexdocs.pm/llm_proxy/governance-and-o
 
 ```bash
 mix deps.get
+mix test         # deterministic unit and component tests
+mix integration  # real provider integration; may use credentials and billable APIs
+mix e2e          # real HTTP boundary through upstream response; may be billable
 mix ci
 ```
+
+Integration tests call real dependencies while bypassing the public HTTP gateway. End-to-end tests enter through the real HTTP listener and cover authentication, routing, storage-backed token selection, provider execution, and response serialization. Both layers are opt-in and skipped by the default test suite.
 
 ## License
 

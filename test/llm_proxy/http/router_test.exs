@@ -1,9 +1,9 @@
-defmodule LLMProxy.RouterDynamicTest do
+defmodule LLMProxy.HTTP.RouterTest do
   use ExUnit.Case
 
+  alias LLMProxy.HTTP.Router
   alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.Providers.Registry
-  alias LLMProxy.Router
 
   defmodule RouterProvider do
     def name, do: "router-provider"
