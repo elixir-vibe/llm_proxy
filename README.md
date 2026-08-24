@@ -197,7 +197,7 @@ Every authenticated request runs through the same controls:
 3. Apply request guardrails and deterministic cache policy.
 4. Select a healthy deployment and credential.
 5. Execute with timeout, retry, fallback, and circuit-breaker handling.
-6. Record usage, estimated cost, latency, trace IDs, messages, and optional bodies.
+6. Record usage, estimated cost, latency, and trace IDs without retaining prompts or model output unless content capture is explicitly enabled.
 7. Emit OpenTelemetry spans and return the trace ID to the caller.
 
 Incant support is optional. When installed, `LLMProxy.Admin` describes resources for API keys, provider tokens, traces, and messages plus an operations dashboard. A separate Incant host can consume those surfaces over SafeRPC; the public gateway does not expose an admin UI.

@@ -10,6 +10,7 @@ defmodule LLMProxy.Storage.Adapter do
   @callback update_key_usage(term(), map()) :: term()
   @callback update_key_quota(term(), map()) :: {:ok, term()} | {:error, term()}
   @callback update_key_models(term(), list() | nil) :: {:ok, term()} | {:error, term()}
+  @callback set_content_capture(term(), boolean()) :: {:ok, term()} | {:error, term()}
   @callback check_model_access(term(), String.t()) :: :ok | {:error, String.t()}
   @callback record_usage(map()) :: {:ok, term()} | {:error, term()}
   @callback get_usage_in_window(String.t(), integer()) :: map()

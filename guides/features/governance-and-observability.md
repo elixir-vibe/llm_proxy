@@ -9,8 +9,7 @@ Create an application key through the storage facade:
 ```elixir
 {:ok, api_key, raw_key} =
   LLMProxy.Storage.create_key("production-worker", %{
-    allowed_models: ["fast", "coding"],
-    trace_requests: true
+    allowed_models: ["fast", "coding"]
   })
 ```
 
@@ -118,7 +117,31 @@ HTTP wire responses retain their protocol shape. The trace ID is returned throug
 
 ## Traces and messages
 
-Set `trace_requests: true` on an API key to persist request and response bodies for that key. This is useful for debugging and feedback workflows, but it may capture sensitive prompts and model output.
+Content capture is disabled for new API keys. Usage, cost, model, provider, latency, tags, metadata, and trace identifiers remain available when content capture is off.
+
+Set `capture_content: true` only on keys allowed to retain prompts and model output. This enables user-message records and deterministic response caching. Set `trace_requests: true` as well when you need trace records. A trace remains content-free unless both settings are true.
+
+```elixir
+{:ok, key, _raw_key} =
+  LLMProxy.Storage.create_key("debug-worker", %{
+    capture_content: true,
+    trace_requests: true
+  })
+
+{:ok, key} = LLMProxy.Storage.set_content_capture(key.id, false)
+```
+
+The setting controls new message and trace-body writes as well as cache reads and writes. Disabling it does not remove content already stored by a message, trace, or external cache adapter; apply each storage owner's retention policy separately.
+
+Existing installations get the following migration behavior:
+
+- Existing keys with `trace_requests: true` keep content capture enabled. This preserves their explicit full-trace behavior.
+- All other existing keys get `capture_content: false`. Their automatic user-message capture stops after migration.
+- New keys get `capture_content: false` unless an operator enables it.
+
+LLMProxy does not apply an automatic content-retention period. Define a retention period for your deployment. Delete expired message rows and trace bodies through the storage owner. Deleting an API key through `LLMProxy.Storage.delete_key/1` deletes its messages, traces, feedback, and usage rows in one transaction.
+
+The optional Incant message table marks captured text as sensitive. Local table/detail models and remote SafeRPC results contain only a redacted value. Direct storage access to messages and trace details is an approved-content path and must use operator authorization.
 
 Before enabling body tracing:
 
@@ -127,7 +150,7 @@ Before enabling body tracing:
 - avoid tracing keys that carry secrets or regulated data unless storage controls permit it;
 - understand that metadata and tags may also contain user-defined values.
 
-Message logs and traces share request identifiers so operators can move from aggregate usage to an individual call.
+Message logs and traces share request identifiers so authorized operators can move from aggregate usage to an individual call.
 
 ## Feedback
 

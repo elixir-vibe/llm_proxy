@@ -24,8 +24,17 @@ if Code.ensure_loaded?(Incant) do
         priority: :secondary
       )
 
+      column(:capture_content,
+        label: "Content capture",
+        as: :boolean,
+        true_label: "Enabled",
+        false_label: "Disabled",
+        priority: :secondary
+      )
+
       filter(:name, :text)
       filter(:trace_requests, :boolean)
+      filter(:capture_content, :boolean)
 
       actions do
         page(:create,
@@ -43,7 +52,10 @@ if Code.ensure_loaded?(Incant) do
     def create(_params, assigns) do
       with {:ok, command} <- CreateInput.from_assigns(assigns),
            {:ok, key, raw_key} <-
-             LLMProxy.Storage.create_key(command.name, %{trace_requests: command.trace_requests}) do
+             LLMProxy.Storage.create_key(command.name, %{
+               trace_requests: command.trace_requests,
+               capture_content: command.capture_content
+             }) do
         {:ok,
          Incant.ActionResult.job("api_key:#{key.id}",
            label: "Created #{command.name}",

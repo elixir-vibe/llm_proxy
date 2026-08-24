@@ -1,6 +1,6 @@
 defmodule LLMProxy.Accounting.UsageTracking do
   @moduledoc """
-  Usage accounting workflow for key counters, usage rows, optional traces, and user-message logging.
+  Usage accounting workflow for key counters, usage rows, optional traces, and optional content capture.
   """
 
   require Logger
@@ -77,12 +77,10 @@ defmodule LLMProxy.Accounting.UsageTracking do
     if Map.get(api_key, :trace_requests, false) do
       cost_usd = Pricing.calculate_cost(model, usage, opts[:provider])
 
-      Storage.record_trace(%{
+      attrs = %{
         key_id: api_key.id,
         model: model,
         provider: opts[:provider],
-        request_body: Jason.encode!(request_body),
-        response_body: Jason.encode!(response_body),
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
         cost_usd: cost_usd,
@@ -92,7 +90,19 @@ defmodule LLMProxy.Accounting.UsageTracking do
         metadata: opts[:metadata],
         session_id: get_in(opts, [:metadata, "session_id"]),
         timestamp: DateTime.utc_now()
-      })
+      }
+
+      attrs =
+        if capture_content?(api_key) do
+          Map.merge(attrs, %{
+            request_body: Jason.encode!(request_body),
+            response_body: Jason.encode!(response_body)
+          })
+        else
+          attrs
+        end
+
+      Storage.record_trace(attrs)
     else
       :ok
     end
@@ -102,17 +112,23 @@ defmodule LLMProxy.Accounting.UsageTracking do
   defp trace_id(_opts), do: "unknown"
 
   def log_user_message(api_key, model, route, extractor) when is_function(extractor, 0) do
-    case extractor.() do
-      "" ->
-        :ok
+    if capture_content?(api_key) do
+      case extractor.() do
+        "" ->
+          :ok
 
-      message ->
-        Storage.log_message(%{
-          key_id: api_key.id,
-          model: model,
-          route: route,
-          user_message: message
-        })
+        message ->
+          Storage.log_message(%{
+            key_id: api_key.id,
+            model: model,
+            route: route,
+            user_message: message
+          })
+      end
+    else
+      :ok
     end
   end
+
+  defp capture_content?(api_key), do: Map.get(api_key, :capture_content, false) == true
 end

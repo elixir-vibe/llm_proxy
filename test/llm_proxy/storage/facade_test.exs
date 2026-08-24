@@ -11,6 +11,7 @@ defmodule LLMProxy.Storage.FacadeTest do
     def update_key_usage(key, usage), do: {key, usage}
     def update_key_quota(id, quota_attrs), do: {:ok, {id, quota_attrs}}
     def update_key_models(id, allowed_models), do: {:ok, {id, allowed_models}}
+    def set_content_capture(id, enabled), do: {:ok, {id, enabled}}
     def check_model_access(_key, _model), do: :ok
     def record_usage(attrs), do: {:ok, attrs}
     def get_usage_in_window(_key_id, _window_ms), do: %{input: 0, output: 0}
@@ -63,6 +64,8 @@ defmodule LLMProxy.Storage.FacadeTest do
 
     assert LLMProxy.Storage.update_message_usage(1, %{input_tokens: 10}) ==
              {:ok, {1, %{input_tokens: 10}}}
+
+    assert LLMProxy.Storage.set_content_capture("key-1", true) == {:ok, {"key-1", true}}
 
     assert LLMProxy.Storage.get_stats(%{from: "now"}) == %{opts: %{from: "now"}}
   end
