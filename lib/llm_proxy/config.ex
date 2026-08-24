@@ -227,7 +227,7 @@ defmodule LLMProxy.Config do
   def usage_window_week_ms, do: @usage_window_week_ms
 
   defp validate_public_models!(models) do
-    if Enum.all?(models, &(is_binary(&1) and &1 != "")) do
+    if Enum.all?(models, &(is_binary(&1) and String.trim(&1) != "")) do
       Enum.uniq(models)
     else
       raise ArgumentError, ":public_models must contain only non-empty model IDs"

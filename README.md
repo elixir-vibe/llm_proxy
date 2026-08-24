@@ -156,6 +156,9 @@ max_retries = 1
 replay_policy = "safe_only"
 provider_connect_timeout_ms = 10000
 
+[catalog]
+public_models = ["fast"]
+
 [providers.openai-primary]
 adapter = "openai"
 base_url = "https://api.openai.com/v1"
@@ -170,6 +173,12 @@ to = "openai-primary"
 model = "gpt-4.1-mini"
 timeout = 30000
 ```
+
+`catalog.public_models` is optional. When configured, it exposes only the
+listed visible catalog aliases for model discovery and request admission; an
+explicit empty list exposes no models. Direct provider model IDs are not made
+public by the allowlist. When unset, all registered models remain available for
+compatibility.
 
 Credentials do not belong in TOML. Bootstrap named pools with `LLM_PROXY_PROVIDER_KEYS` or manage persisted tokens through the optional admin integration.
 

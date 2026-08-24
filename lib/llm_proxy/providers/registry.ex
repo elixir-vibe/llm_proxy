@@ -111,18 +111,20 @@ defmodule LLMProxy.Providers.Registry do
     LLMProxy.Catalog.all_models() ++ provider_models
   end
 
-  def public_models do
-    case LLMProxy.Config.public_models() do
-      nil -> all_models()
-      allowed -> Enum.filter(all_models(), &(&1.id in allowed))
-    end
-  end
+  def public_models, do: public_models(LLMProxy.Config.public_models())
 
   def public_model?(model_id) when is_binary(model_id) do
     case LLMProxy.Config.public_models() do
       nil -> true
-      allowed -> model_id in allowed
+      allowed -> Enum.any?(public_models(allowed), &(&1.id == model_id))
     end
+  end
+
+  defp public_models(nil), do: all_models()
+
+  defp public_models(allowed) do
+    catalog = Map.new(LLMProxy.Catalog.all_models(), &{&1.id, &1})
+    Enum.flat_map(allowed, fn id -> catalog |> Map.get(id) |> List.wrap() end)
   end
 
   def list_providers do

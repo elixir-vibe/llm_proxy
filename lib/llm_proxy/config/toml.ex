@@ -19,7 +19,7 @@ defmodule LLMProxy.Config.TOML do
   @routing_keys ~w(max_retries provider_connect_timeout_ms replay_policy)
   @provider_token_keys ~w(allow_plaintext)
   @telemetry_keys ~w(otlp_endpoint)
-  @catalog_keys ~w(models)
+  @catalog_keys ~w(models public_models)
 
   @provider_keys %{
     "adapter" => :adapter,
@@ -78,6 +78,7 @@ defmodule LLMProxy.Config.TOML do
       |> Keyword.merge(provider_tokens(data["provider_tokens"]))
       |> put_if_present(:providers, providers(data["providers"]))
       |> put_if_present(:models, models(data["models"] || catalog[:models]))
+      |> put_if_not_nil(:public_models, catalog[:public_models])
 
     [llm_proxy: llm_proxy] ++ telemetry(data["telemetry"])
   end
@@ -186,10 +187,27 @@ defmodule LLMProxy.Config.TOML do
 
   defp catalog(%{} = catalog) do
     validate_keys!(catalog, @catalog_keys, "catalog")
-    put_if_present([], :models, catalog["models"])
+
+    []
+    |> put_if_present(:models, catalog["models"])
+    |> put_if_not_nil(:public_models, public_models(catalog["public_models"]))
   end
 
   defp catalog(_catalog), do: raise(ArgumentError, "catalog must be a TOML table")
+
+  defp public_models(nil), do: nil
+
+  defp public_models(models) when is_list(models) do
+    if Enum.all?(models, &(is_binary(&1) and String.trim(&1) != "")) do
+      Enum.uniq(models)
+    else
+      raise ArgumentError, "catalog.public_models must contain only non-empty model IDs"
+    end
+  end
+
+  defp public_models(_models) do
+    raise ArgumentError, "catalog.public_models must be an array of model IDs"
+  end
 
   defp providers(nil), do: nil
 
@@ -321,4 +339,7 @@ defmodule LLMProxy.Config.TOML do
   defp put_if_present(config, _key, nil), do: config
   defp put_if_present(config, _key, []), do: config
   defp put_if_present(config, key, value), do: Keyword.put(config, key, value)
+
+  defp put_if_not_nil(config, _key, nil), do: config
+  defp put_if_not_nil(config, key, value), do: Keyword.put(config, key, value)
 end

@@ -75,6 +75,9 @@ otlp_endpoint = "http://127.0.0.1:4318"
 [provider_tokens]
 allow_plaintext = true
 
+[catalog]
+public_models = ["coding"]
+
 [providers.example-service]
 adapter = "openai"
 base_url = "https://api.example.com/v1"
@@ -93,9 +96,11 @@ cooldown_ms = 30000
 ```
 
 The TOML loader accepts server, storage, routing, telemetry,
-provider-token rollout, provider, and model data. It rejects unknown keys rather
-than silently ignoring misspelled settings. Secrets remain in environment
-variables or persisted provider-token storage. If the file is absent, startup
+provider-token rollout, catalog, provider, and model data. The optional
+`catalog.public_models` list exposes only named visible catalog aliases for
+model discovery and request admission; an empty list exposes none. It rejects
+unknown keys rather than silently ignoring misspelled settings. Secrets remain
+in environment variables or persisted provider-token storage. If the file is absent, startup
 continues with compiled defaults and secret environment configuration. Set
 `provider_tokens.allow_plaintext = false` only after encrypting and verifying all
 stored credentials; with that policy, a missing keyring fails startup.

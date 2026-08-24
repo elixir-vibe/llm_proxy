@@ -1,6 +1,8 @@
 defmodule LLMProxy.HTTP.RouterTest do
   use ExUnit.Case
 
+  alias LLMProxy.Catalog
+  alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.HTTP.Router
   alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.Providers.Registry
@@ -69,15 +71,29 @@ defmodule LLMProxy.HTTP.RouterTest do
     assert Enum.any?(Jason.decode!(conn.resp_body)["data"], &(&1["id"] == "router-model"))
   end
 
-  test "lists only public models when an allowlist is configured" do
+  test "lists only allowlisted catalog aliases" do
     original = Application.get_env(:llm_proxy, :public_models)
-    Application.put_env(:llm_proxy, :public_models, ["router-model"])
-    on_exit(fn -> restore_public_models(original) end)
+
+    Catalog.put_model(
+      Model.new!(
+        name: "router-alias",
+        deployments: [
+          Deployment.new!(provider: RouterProvider, upstream_model: "router-model")
+        ]
+      )
+    )
+
+    Application.put_env(:llm_proxy, :public_models, ["router-alias", "router-model"])
+
+    on_exit(fn ->
+      restore_public_models(original)
+      Catalog.init()
+    end)
 
     conn = Plug.Test.conn(:get, "/v1/models") |> Router.call(Router.init([]))
     ids = conn.resp_body |> Jason.decode!() |> Map.fetch!("data") |> Enum.map(& &1["id"])
 
-    assert ids == ["router-model"]
+    assert ids == ["router-alias"]
   end
 
   test "dispatches dynamic routes and returns 404 otherwise" do
