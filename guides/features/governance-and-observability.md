@@ -119,7 +119,7 @@ HTTP wire responses retain their protocol shape. The trace ID is returned throug
 
 Content capture is disabled for new API keys. Usage, cost, model, provider, latency, tags, metadata, and trace identifiers remain available when content capture is off.
 
-Set `capture_content: true` only on keys that can store prompt content. This enables user-message records. Set `trace_requests: true` as well when you need trace records. A trace remains content-free unless both settings are true.
+Set `capture_content: true` only on keys allowed to retain prompts and model output. This enables user-message records and deterministic response caching. Set `trace_requests: true` as well when you need trace records. A trace remains content-free unless both settings are true.
 
 ```elixir
 {:ok, key, _raw_key} =
@@ -131,7 +131,7 @@ Set `capture_content: true` only on keys that can store prompt content. This ena
 {:ok, key} = LLMProxy.Storage.set_content_capture(key.id, false)
 ```
 
-The setting controls new writes. Disabling it does not remove content that is already stored.
+The setting controls new message and trace-body writes as well as cache reads and writes. Disabling it does not remove content already stored by a message, trace, or external cache adapter; apply each storage owner's retention policy separately.
 
 Existing installations get the following migration behavior:
 
@@ -141,7 +141,7 @@ Existing installations get the following migration behavior:
 
 LLMProxy does not apply an automatic content-retention period. Define a retention period for your deployment. Delete expired message rows and trace bodies through the storage owner. Deleting an API key through `LLMProxy.Storage.delete_key/1` deletes its messages, traces, feedback, and usage rows in one transaction.
 
-The optional Incant message table marks captured text as sensitive. Normal table and detail models show a redacted value. Direct storage access to messages and trace details is an approved-content path and must use operator authorization.
+The optional Incant message table marks captured text as sensitive. Local table/detail models and remote SafeRPC results contain only a redacted value. Direct storage access to messages and trace details is an approved-content path and must use operator authorization.
 
 Before enabling body tracing:
 

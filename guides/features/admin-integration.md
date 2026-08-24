@@ -38,7 +38,7 @@ LLMProxy compiles its admin modules only when Incant is available. Without Incan
 
 Policies remain inside the LLMProxy service VM. A remote Incant host receives data and dispatches actions; it does not receive repos, schemas, callback functions, or provider secrets as executable terms.
 
-Captured message text is marked as sensitive in the Incant resource contract. Normal table and detail models redact it. Treat direct database and storage-facade access as privileged content access.
+Captured message text is marked as sensitive in the Incant resource contract. LLMProxy redacts it before local table/detail rendering and before remote SafeRPC transport. Treat direct database and storage-facade access as privileged content access.
 
 ## Local admin in a host application
 

@@ -20,6 +20,14 @@ defmodule LLMProxy.CacheTest do
       Agent.get(__MODULE__, fn cache -> Map.get(cache, :ttl_ms) end)
     end
 
+    def responses do
+      Agent.get(__MODULE__, fn cache ->
+        cache
+        |> Map.drop([:ttl_ms])
+        |> Map.values()
+      end)
+    end
+
     @impl LLMProxy.Cache
     def put(key, response, context) do
       Agent.update(__MODULE__, fn cache ->
@@ -81,7 +89,8 @@ defmodule LLMProxy.CacheTest do
   end
 
   test "caches non-stream provider responses by normalized request" do
-    {:ok, key, _raw_key} = Storage.create_key("cache-user")
+    {:ok, key, _raw_key} =
+      Storage.create_key("cache-user", %{capture_content: true})
 
     assert {:ok, first} = LLMProxy.chat("hello", model: "cache-model", api_key: key)
     refute first.cache_hit
@@ -93,8 +102,22 @@ defmodule LLMProxy.CacheTest do
     assert Provider.calls() == 1
   end
 
+  test "does not send content to a cache for a key without content capture" do
+    secret = "seeded-cache-prompt-4bf2"
+    {:ok, key, _raw_key} = Storage.create_key("private-cache-user")
+
+    assert {:ok, first} = LLMProxy.chat(secret, model: "cache-model", api_key: key)
+    assert {:ok, second} = LLMProxy.chat(secret, model: "cache-model", api_key: key)
+
+    refute first.cache_hit
+    refute second.cache_hit
+    assert Provider.calls() == 2
+    assert Store.responses() == []
+  end
+
   test "per-request metadata can bypass cache without populating it" do
-    {:ok, key, _raw_key} = Storage.create_key("cache-bypass-user")
+    {:ok, key, _raw_key} =
+      Storage.create_key("cache-bypass-user", %{capture_content: true})
 
     bypass_opts = [model: "cache-model", metadata: %{"no_cache" => true}, api_key: key]
     cached_opts = [model: "cache-model", api_key: key]
@@ -113,7 +136,9 @@ defmodule LLMProxy.CacheTest do
 
   test "cache policy can set ttl context for adapters" do
     Application.put_env(:llm_proxy, :cache_policy, ttl_ms: 60_000)
-    {:ok, key, _raw_key} = Storage.create_key("cache-ttl-user")
+
+    {:ok, key, _raw_key} =
+      Storage.create_key("cache-ttl-user", %{capture_content: true})
 
     assert {:ok, response} = LLMProxy.chat("hello", model: "cache-model", api_key: key)
     assert response.cache_ttl_ms == 60_000
@@ -122,7 +147,9 @@ defmodule LLMProxy.CacheTest do
 
   test "cache policy rejects invalid configured values" do
     Application.put_env(:llm_proxy, :cache_policy, enabled: "yes")
-    {:ok, key, _raw_key} = Storage.create_key("cache-invalid-enabled-user")
+
+    {:ok, key, _raw_key} =
+      Storage.create_key("cache-invalid-enabled-user", %{capture_content: true})
 
     assert_raise ArgumentError, ~r/enabled must be a boolean/, fn ->
       LLMProxy.chat("hello", model: "cache-model", api_key: key)
@@ -137,7 +164,9 @@ defmodule LLMProxy.CacheTest do
 
   test "invalid per-request cache ttl metadata is ignored" do
     Application.put_env(:llm_proxy, :cache_policy, ttl_ms: 60_000)
-    {:ok, key, _raw_key} = Storage.create_key("cache-invalid-metadata-ttl-user")
+
+    {:ok, key, _raw_key} =
+      Storage.create_key("cache-invalid-metadata-ttl-user", %{capture_content: true})
 
     assert {:ok, response} =
              LLMProxy.chat("hello",
@@ -153,7 +182,8 @@ defmodule LLMProxy.CacheTest do
   test "cache policy can disable a model" do
     Application.put_env(:llm_proxy, :cache_policy, models: %{"cache-model" => [enabled: false]})
 
-    {:ok, key, _raw_key} = Storage.create_key("cache-disabled-user")
+    {:ok, key, _raw_key} =
+      Storage.create_key("cache-disabled-user", %{capture_content: true})
 
     assert {:ok, first} = LLMProxy.chat("hello", model: "cache-model", api_key: key)
     refute first.cache_hit
@@ -164,7 +194,8 @@ defmodule LLMProxy.CacheTest do
   end
 
   test "does not cache streamed requests" do
-    {:ok, key, _raw_key} = Storage.create_key("cache-stream-user")
+    {:ok, key, _raw_key} =
+      Storage.create_key("cache-stream-user", %{capture_content: true})
 
     assert {:ok, first} = LLMProxy.chat("hello", model: "cache-model", stream: true, api_key: key)
     refute first.cache_hit

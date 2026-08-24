@@ -42,7 +42,7 @@ defmodule MyApp.LLMCache do
 end
 ```
 
-Adapters receive and return `%LLMProxy.Response{}`. External caches can serialize that struct, but must restore it before returning a hit.
+Adapters receive and return `%LLMProxy.Response{}` values containing model output and request context. LLMProxy therefore reads or writes the cache only for API keys with `capture_content: true`. External caches can serialize the response struct, but must restore it before returning a hit and must apply the operator's content-retention policy.
 
 `put/3` is optional. Adapter errors and unexpected values degrade to cache misses or ignored writes rather than breaking provider execution.
 
@@ -84,7 +84,7 @@ metadata: %{"cache" => false}
 metadata: %{"cache_ttl_ms" => 15_000}
 ```
 
-Only positive integer TTLs are accepted. A response is written only when `response.cacheable` is true. Cache hits set `response.cache_hit` and receive the current request and trace ID.
+Only positive integer TTLs are accepted. Content capture is a mandatory outer gate: request metadata and model policy cannot enable caching for a key whose `capture_content` setting is false. A response is written only when `response.cacheable` is true. Cache hits set `response.cache_hit` and receive the current request and trace ID.
 
 ## Guardrails
 
