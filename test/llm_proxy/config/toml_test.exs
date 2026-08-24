@@ -24,6 +24,7 @@ defmodule LLMProxy.Config.TOMLTest do
 
     [provider_tokens]
     allow_plaintext = false
+    selection_strategy = "fill_first"
 
     [provider_usage]
     auto_refresh = false
@@ -64,6 +65,7 @@ defmodule LLMProxy.Config.TOMLTest do
     assert llm_proxy[:replay_policy] == :allow_uncertain
     assert llm_proxy[:provider_connect_timeout_ms] == 15_000
     refute llm_proxy[:provider_token_allow_plaintext]
+    assert llm_proxy[:token_selection_strategy] == :fill_first
     refute llm_proxy[:provider_usage_auto_refresh]
     assert llm_proxy[:provider_usage_refresh_interval_ms] == 120_000
     assert llm_proxy[:provider_usage_request_timeout_ms] == 5_000
@@ -126,6 +128,10 @@ defmodule LLMProxy.Config.TOMLTest do
 
     assert_raise ArgumentError, ~r/provider_tokens contains unsupported configuration keys/, fn ->
       TOML.decode(~s([provider_tokens]\nkeys = "must-not-live-in-toml"))
+    end
+
+    assert_raise ArgumentError, ~r/selection_strategy must be affinity or fill_first/, fn ->
+      TOML.decode(~s([provider_tokens]\nselection_strategy = "random"))
     end
   end
 

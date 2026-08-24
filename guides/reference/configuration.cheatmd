@@ -93,6 +93,30 @@ config :llm_proxy, token_cooldown_ms: :timer.hours(4)
 
 Default credential cooldown after rate limiting. Default: 4 hours.
 
+### Provider Token Selection
+
+```elixir
+config :llm_proxy, token_selection_strategy: :fill_first
+```
+
+`:affinity` is the default and preserves stable user-to-token affinity.
+`:fill_first` selects the highest-priority healthy token within the preferred
+credential kind, breaking ties by token ID. OAuth remains preferred over API
+keys. Standalone TOML:
+
+```toml
+[provider_tokens]
+selection_strategy = "fill_first"
+```
+
+This non-secret setting is not read from the environment. Provider-token
+priorities are non-negative integers and can be edited through Incant's
+priority-only form. Set an initial priority when adding a token:
+
+```elixir
+LLMProxy.Storage.add_token("openai-codex", "oauth", access_token, %{priority: 100})
+```
+
 ### Provider Token Codec
 
 ```elixir
@@ -438,6 +462,7 @@ quackdb_endpoint = "quack:localhost:9494"
 max_retries = 1
 replay_policy = "safe_only"
 provider_connect_timeout_ms = 10000
+token_selection_strategy = "affinity"
 ```
 
 Fallback deployments belong in model routes, not a separate fallback map.

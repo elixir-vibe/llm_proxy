@@ -6,10 +6,15 @@ defmodule LLMProxy.TokenPool.ServerTest do
   alias LLMProxy.TokenPool.Server
 
   setup do
+    original_strategy = Application.get_env(:llm_proxy, :token_selection_strategy)
+
     TestSupport.checkout_repo()
     :ok = TestSupport.allow_token_pool()
     TestSupport.clear_provider_tokens()
     Server.clear_rate_limits()
+
+    on_exit(fn -> restore_env(:token_selection_strategy, original_strategy) end)
+
     :ok
   end
 
@@ -63,4 +68,57 @@ defmodule LLMProxy.TokenPool.ServerTest do
     assert {:ok, picked_api_key} = Server.pick_token_by_kind("anthropic", "api-key", "user-1")
     assert picked_api_key.id == api_key.id
   end
+
+  test "affinity remains the default and preserves ID-based pool order" do
+    {:ok, first} = Storage.add_token("openai-codex", "oauth", "first", %{priority: 10})
+
+    {:ok, _higher_priority} =
+      Storage.add_token("openai-codex", "oauth", "second", %{priority: 20})
+
+    assert {:ok, picked} = Server.pick_token("openai-codex", "user-1")
+    assert picked.id == first.id
+  end
+
+  test "fill-first picks the highest-priority enabled token deterministically" do
+    Application.put_env(:llm_proxy, :token_selection_strategy, :fill_first)
+
+    {:ok, lower_priority} =
+      Storage.add_token("openai-codex", "oauth", "lower-priority", %{priority: 10})
+
+    {:ok, higher_priority} =
+      Storage.add_token("openai-codex", "oauth", "higher-priority", %{priority: 20})
+
+    {:ok, same_priority} =
+      Storage.add_token("openai-codex", "oauth", "same-priority", %{priority: 20})
+
+    {:ok, disabled} =
+      Storage.add_token("openai-codex", "oauth", "disabled", %{priority: 30, enabled: false})
+
+    assert {:ok, picked} = Server.pick_token("openai-codex", "user-1")
+    assert picked.id == higher_priority.id
+    refute picked.id in [lower_priority.id, same_priority.id, disabled.id]
+
+    assert {:ok, same_pick} = Server.pick_token("openai-codex", "another-user")
+    assert same_pick.id == higher_priority.id
+  end
+
+  test "fill-first fails over during cooldown and restores priority after recovery" do
+    Application.put_env(:llm_proxy, :token_selection_strategy, :fill_first)
+
+    {:ok, primary} = Storage.add_token("openai-codex", "oauth", "primary", %{priority: 20})
+    {:ok, fallback} = Storage.add_token("openai-codex", "oauth", "fallback", %{priority: 10})
+
+    Server.mark_rate_limited(primary, 25)
+
+    assert {:ok, picked} = Server.pick_token("openai-codex", "user-1")
+    assert picked.id == fallback.id
+
+    Process.sleep(30)
+
+    assert {:ok, recovered} = Server.pick_token("openai-codex", "user-1")
+    assert recovered.id == primary.id
+  end
+
+  defp restore_env(key, nil), do: Application.delete_env(:llm_proxy, key)
+  defp restore_env(key, value), do: Application.put_env(:llm_proxy, key, value)
 end

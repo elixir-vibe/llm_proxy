@@ -315,6 +315,7 @@ defmodule LLMProxy.StorageTest do
 
       assert token.provider == "anthropic"
       assert token.kind == "oauth"
+      assert token.priority == 0
       assert token.enabled == true
 
       tokens = Storage.get_tokens("anthropic", "oauth")
@@ -350,6 +351,16 @@ defmodule LLMProxy.StorageTest do
                Storage.add_token("openai", "api-key", "tok", %{proxy: "file:///etc/passwd"})
 
       assert changeset.errors[:proxy]
+
+      assert {:error, changeset} =
+               Storage.add_token("openai", "api-key", "tok", %{priority: -1})
+
+      assert changeset.errors[:priority]
+
+      assert {:error, changeset} =
+               Storage.add_token("openai", "api-key", "tok", %{priority: nil})
+
+      assert changeset.errors[:priority]
     end
   end
 
