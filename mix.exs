@@ -43,7 +43,7 @@ defmodule LLMProxy.MixProject do
   end
 
   def cli do
-    [preferred_envs: [ci: :test]]
+    [preferred_envs: [ci: :test, integration: :test, e2e: :test]]
   end
 
   def application do
@@ -103,6 +103,13 @@ defmodule LLMProxy.MixProject do
           LLMProxy.Response,
           LLMProxy.Usage
         ],
+        "Provider Credentials": [
+          LLMProxy.Provider.Credential,
+          LLMProxy.Provider.TokenCodec,
+          LLMProxy.Provider.TokenCodec.AESGCM,
+          LLMProxy.Provider.TokenCodec.Migration,
+          LLMProxy.Provider.TokenCodec.Plaintext
+        ],
         "Catalog and Routing": [
           LLMProxy.Catalog,
           LLMProxy.Catalog.Model,
@@ -122,6 +129,7 @@ defmodule LLMProxy.MixProject do
           LLMProxy.Phoenix.Router
         ],
         Operations: [
+          LLMProxy.ConcurrencyLimiter,
           LLMProxy.Drain,
           LLMProxy.Ops,
           LLMProxy.ReleaseTasks,
@@ -185,6 +193,8 @@ defmodule LLMProxy.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
+      integration: ["test --only integration"],
+      e2e: ["test --only e2e"],
       ci: [
         "compile --warnings-as-errors",
         "format --check-formatted",

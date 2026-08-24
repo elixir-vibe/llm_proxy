@@ -46,6 +46,39 @@ defmodule LLMProxy.Config do
   def repo, do: Application.get_env(:llm_proxy, :repo, LLMProxy.Storage.Repo.SQLite)
   def storage, do: Application.get_env(:llm_proxy, :storage, LLMProxy.Storage.Ecto)
 
+  def provider_token_codec do
+    case Application.fetch_env(:llm_proxy, :provider_token_codec) do
+      {:ok, codec} -> codec
+      :error -> built_in_provider_token_codec()
+    end
+  end
+
+  def provider_token_allow_plaintext? do
+    Application.get_env(:llm_proxy, :provider_token_allow_plaintext, true)
+  end
+
+  defp built_in_provider_token_codec do
+    keyring = Application.get_env(:llm_proxy, :provider_token_keyring)
+    allow_plaintext = provider_token_allow_plaintext?()
+
+    if is_nil(keyring) and allow_plaintext == true do
+      LLMProxy.Provider.TokenCodec.Plaintext
+    else
+      {LLMProxy.Provider.TokenCodec.AESGCM,
+       active_key_id: keyring_value(keyring, :active_key_id),
+       keys: keyring_value(keyring, :keys, %{}),
+       allow_plaintext: allow_plaintext}
+    end
+  end
+
+  defp keyring_value(keyring, key, default \\ nil)
+
+  defp keyring_value(keyring, key, default) when is_map(keyring) do
+    Map.get(keyring, key, Map.get(keyring, Atom.to_string(key), default))
+  end
+
+  defp keyring_value(_keyring, _key, default), do: default
+
   def quackdb_server_options do
     Application.get_env(:llm_proxy, :quackdb_server, [])
   end
@@ -63,7 +96,29 @@ defmodule LLMProxy.Config do
   def public_url, do: Application.get_env(:llm_proxy, :public_url, "")
   def provider_key_seeds, do: Application.get_env(:llm_proxy, :provider_key_seeds, %{})
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
-  def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)
+
+  def max_retries do
+    case Application.get_env(:llm_proxy, :max_retries, 1) do
+      retries when is_integer(retries) and retries >= 0 ->
+        retries
+
+      value ->
+        raise ArgumentError, ":max_retries must be a non-negative integer, got: #{inspect(value)}"
+    end
+  end
+
+  def max_attempts, do: max_retries() + 1
+
+  def replay_policy do
+    case Application.get_env(:llm_proxy, :replay_policy, :safe_only) do
+      policy when policy in [:safe_only, :allow_uncertain] ->
+        policy
+
+      value ->
+        raise ArgumentError,
+              ":replay_policy must be :safe_only or :allow_uncertain, got: #{inspect(value)}"
+    end
+  end
 
   def public_models do
     case Application.get_env(:llm_proxy, :public_models) do
@@ -102,10 +157,12 @@ defmodule LLMProxy.Config do
   def provider_config(provider) when is_binary(provider) do
     configured = Application.get_env(:llm_proxy, :providers, %{}) |> normalize_providers()
     name = provider_name(provider)
+    provider_config = Map.get(configured, name, %{})
 
     @default_providers
     |> Map.get(name, %{})
-    |> deep_merge(Map.get(configured, name, %{}))
+    |> deep_merge(provider_config)
+    |> default_openrouter_referer(name, provider_config)
   end
 
   def provider_value(provider, key), do: provider_value(provider, key, nil)
@@ -255,6 +312,16 @@ defmodule LLMProxy.Config do
   end
 
   defp provider_name(provider) when is_binary(provider), do: String.replace(provider, "_", "-")
+
+  defp default_openrouter_referer(config, "openrouter", configured) do
+    if Map.has_key?(configured, :http_referer) do
+      config
+    else
+      Map.put(config, :http_referer, public_url())
+    end
+  end
+
+  defp default_openrouter_referer(config, _name, _configured), do: config
 
   defp deep_merge(left, right) do
     Map.merge(left, right, fn _key, left_value, right_value ->

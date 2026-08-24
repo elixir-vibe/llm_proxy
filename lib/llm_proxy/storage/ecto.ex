@@ -3,6 +3,7 @@ defmodule LLMProxy.Storage.Ecto do
   Context functions for all database operations: keys, usage, quotas, tokens.
   """
 
+  alias LLMProxy.Provider.TokenCodec
   alias LLMProxy.Storage.{Repo, SQL}
 
   alias LLMProxy.Schemas.{
@@ -39,7 +40,7 @@ defmodule LLMProxy.Storage.Ecto do
 
   def find_key(raw_key) do
     hash = hash_key(raw_key)
-    Repo.get_by(ApiKey, hash: hash)
+    Repo.get_by(ApiKey, hash: hash, enabled: true)
   end
 
   def list_keys(opts \\ %{}) do
@@ -64,6 +65,13 @@ defmodule LLMProxy.Storage.Ecto do
 
       key ->
         delete_key_rows(key)
+    end
+  end
+
+  def set_key_enabled(id, enabled) do
+    case Repo.get(ApiKey, id) do
+      nil -> {:error, :not_found}
+      key -> key |> ApiKey.changeset(%{enabled: enabled}) |> Repo.update()
     end
   end
 
@@ -114,6 +122,13 @@ defmodule LLMProxy.Storage.Ecto do
     case Repo.get(ApiKey, id) do
       nil -> {:error, :not_found}
       key -> key |> ApiKey.changeset(%{allowed_models: allowed_models}) |> Repo.update()
+    end
+  end
+
+  def set_content_capture(id, enabled) when is_boolean(enabled) do
+    case Repo.get(ApiKey, id) do
+      nil -> {:error, :not_found}
+      key -> key |> ApiKey.changeset(%{capture_content: enabled}) |> Repo.update()
     end
   end
 
@@ -382,16 +397,19 @@ defmodule LLMProxy.Storage.Ecto do
   end
 
   def add_token(provider, kind, token, opts \\ %{}) do
-    %ProviderToken{}
-    |> ProviderToken.changeset(
+    attrs =
       Map.merge(opts, %{
         provider: provider,
         kind: kind,
         token: token,
         added_at: DateTime.utc_now()
       })
-    )
-    |> Repo.insert()
+
+    with {:ok, attrs} <- TokenCodec.encode_attrs(attrs) do
+      %ProviderToken{}
+      |> ProviderToken.changeset(attrs)
+      |> Repo.insert()
+    end
   end
 
   def remove_token(id) do
@@ -421,34 +439,63 @@ defmodule LLMProxy.Storage.Ecto do
         {:error, :not_found}
 
       token ->
-        token |> ProviderToken.changeset(Map.take(attrs, oauth_token_fields())) |> Repo.update()
+        attrs = Map.take(attrs, oauth_token_fields())
+
+        with {:ok, attrs} <- TokenCodec.encode_attrs(attrs) do
+          token |> ProviderToken.changeset(attrs) |> Repo.update()
+        end
     end
   end
 
   def seed_tokens_from_env(entries) do
-    Enum.each(entries, &seed_token_entry/1)
+    Enum.reduce_while(entries, :ok, fn entry, :ok ->
+      case seed_token_entry(entry) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
   end
 
   defp seed_token_entry(%{provider: provider, kind: kind, tokens: tokens}) do
-    existing =
+    stored =
       ProviderToken
       |> where([t], t.provider == ^provider and t.kind == ^kind)
-      |> select([t], t.token)
       |> Repo.all()
-      |> MapSet.new()
 
-    tokens
-    |> Enum.map(&normalize_seed_token/1)
-    |> Enum.reject(&MapSet.member?(existing, &1.token))
-    |> Enum.each(fn token ->
-      add_token(provider, kind, token.token, Map.put(token.opts, :label, "env"))
+    with {:ok, existing} <- decoded_token_set(stored) do
+      tokens
+      |> Enum.map(&normalize_seed_token/1)
+      |> Enum.reject(&MapSet.member?(existing, &1.token))
+      |> insert_seed_tokens(provider, kind)
+    end
+  end
+
+  defp insert_seed_tokens(tokens, provider, kind) do
+    Enum.reduce_while(tokens, :ok, fn token, :ok ->
+      insert_seed_token(token, provider, kind)
     end)
+  end
+
+  defp insert_seed_token(token, provider, kind) do
+    case add_token(provider, kind, token.token, Map.put(token.opts, :label, "env")) do
+      {:ok, _stored} -> {:cont, :ok}
+      {:error, reason} -> {:halt, {:error, reason}}
+    end
   end
 
   defp normalize_seed_token(token) when is_binary(token), do: %{token: token, opts: %{}}
 
   defp normalize_seed_token(%{token: token} = attrs) when is_binary(token) do
     %{token: token, opts: Map.take(attrs, oauth_token_fields())}
+  end
+
+  defp decoded_token_set(tokens) do
+    Enum.reduce_while(tokens, {:ok, MapSet.new()}, fn token, {:ok, decoded} ->
+      case TokenCodec.decode(token.token, :token) do
+        {:ok, plaintext} -> {:cont, {:ok, MapSet.put(decoded, plaintext)}}
+        {:error, reason} -> {:halt, {:error, {:provider_token_codec, reason}}}
+      end
+    end)
   end
 
   defp oauth_token_fields, do: [:token, :refresh_token, :expires_at, :account_id]

@@ -1,12 +1,8 @@
-defmodule LLMProxy.Integration.AnthropicTest do
+defmodule LLMProxy.Integration.Providers.AnthropicTest do
   use ExUnit.Case
-
-  import Plug.Conn
-  import Plug.Test
 
   alias Ecto.Adapters.SQL.Sandbox
   alias LLMProxy.Providers.{Anthropic, Result}
-  alias LLMProxy.Router
   alias LLMProxy.Storage
   alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.Stream.Event
@@ -93,60 +89,6 @@ defmodule LLMProxy.Integration.AnthropicTest do
 
       assert {:ok, %Result{response: response}} = Anthropic.call_native(body, "test-user")
       assert response["type"] == "message"
-      assert [block | _] = response["content"]
-      assert block["type"] == "text"
-      assert is_binary(block["text"])
-    end
-  end
-
-  describe "end-to-end via router /v1/chat/completions" do
-    test "OpenAI format request returns OpenAI format response" do
-      master_key = Application.get_env(:llm_proxy, :master_key)
-
-      body =
-        Jason.encode!(%{
-          "model" => @model,
-          "messages" => [%{"role" => "user", "content" => "Say hi"}],
-          "max_tokens" => 20
-        })
-
-      conn =
-        conn(:post, "/v1/chat/completions", body)
-        |> put_req_header("content-type", "application/json")
-        |> put_req_header("authorization", "Bearer #{master_key}")
-        |> Router.call(Router.init([]))
-
-      assert conn.status == 200
-      response = Jason.decode!(conn.resp_body)
-      assert response["object"] == "chat.completion"
-      assert [choice | _] = response["choices"]
-      assert choice["message"]["role"] == "assistant"
-      assert is_binary(choice["message"]["content"])
-      assert response["usage"]["prompt_tokens"] > 0
-    end
-  end
-
-  describe "end-to-end via router /v1/messages" do
-    test "native Anthropic format returns Anthropic format response" do
-      master_key = Application.get_env(:llm_proxy, :master_key)
-
-      body =
-        Jason.encode!(%{
-          "model" => @model,
-          "messages" => [%{"role" => "user", "content" => "Say hi"}],
-          "max_tokens" => 20
-        })
-
-      conn =
-        conn(:post, "/v1/messages", body)
-        |> put_req_header("content-type", "application/json")
-        |> put_req_header("authorization", "Bearer #{master_key}")
-        |> Router.call(Router.init([]))
-
-      assert conn.status == 200
-      response = Jason.decode!(conn.resp_body)
-      assert response["type"] == "message"
-      assert response["role"] == "assistant"
       assert [block | _] = response["content"]
       assert block["type"] == "text"
       assert is_binary(block["text"])

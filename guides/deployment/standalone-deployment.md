@@ -52,7 +52,7 @@ A typical host uses:
 ```text
 /opt/llm-proxy/releases/<release>/    immutable unpacked release
 /opt/llm-proxy/current/               symlink to active release
-/etc/llm-proxy/config.toml            non-secret provider and model data
+/etc/llm-proxy/config.toml            non-secret runtime, provider, and model data
 /var/lib/llm-proxy/llm_proxy.duckdb   persistent database
 /run/llm-proxy/rpc.sock               optional SafeRPC socket
 ```
@@ -61,33 +61,22 @@ Keep the database and runtime directory outside immutable release paths. Do not 
 
 ## Runtime environment
 
-Minimal production variables:
+The standalone environment contains only secrets and the optional TOML locator:
 
 ```bash
 MASTER_KEY="replace-with-a-long-random-key"
-DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
-PORT="4000"
-PUBLIC_URL="https://llm.example.com"
-```
-
-At least one provider pool also needs credentials:
-
-```bash
-OPENAI_API_KEYS="sk-..."
-ANTHROPIC_API_KEYS="sk-ant-..."
-OPENROUTER_API_KEYS="sk-or-..."
-LLM_PROXY_PROVIDER_KEYS='{"custom-production":["secret"]}'
-```
-
-Optional service integration:
-
-```bash
+LLM_PROXY_PROVIDER_KEYS='{"openai":["sk-..."],"custom-production":["secret"]}'
 LLM_PROXY_CONFIG_TOML="/etc/llm-proxy/config.toml"
-LLM_PROXY_RPC_SOCKET="/run/llm-proxy/rpc.sock"
-OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
 ```
 
-See the [Configuration Cheatsheet](../reference/configuration.cheatmd) for all supported variables.
+Add `LLM_PROXY_PROVIDER_TOKEN_KEYRING` when using encrypted provider-token
+storage. Configure the HTTP listener, public URL, database, RPC socket, routing,
+and OTLP endpoint in TOML. Provider-specific API-key and Codex-token environment
+variables are not supported; use named API-key pools and persisted Codex OAuth
+credentials.
+
+See the [Configuration Cheatsheet](../reference/configuration.cheatmd) for the
+complete environment and TOML schema.
 
 ## Migrate before startup
 
@@ -141,7 +130,7 @@ LLMProxy sends SSE comment heartbeats during upstream silence, but every interme
 
 ## Graceful replacement
 
-When `LLM_PROXY_RPC_SOCKET` is configured, release tasks can coordinate drain state through the running service:
+When `server.rpc_socket` is configured in TOML, release tasks can coordinate drain state through the running service:
 
 ```bash
 bin/llm_proxy eval 'LLMProxy.ReleaseTasks.drain_start()'
@@ -172,6 +161,42 @@ Application rollback and schema rollback are different decisions.
 4. Verify health, catalog, completion, and storage access.
 
 Bundled migrations are forward migrations. Do not reverse database changes automatically unless the release documents and tests a safe down migration. Take a database backup before any migration that could make rollback incompatible.
+
+## Provider-token encryption
+
+Use a provider-token keyring that is separate from `MASTER_KEY`. Before the first
+encryption, back up the database and all keyring values. Start with plaintext
+compatibility enabled, then run:
+
+```bash
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_status()'
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_encrypt()'
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_verify()'
+```
+
+Run these tasks only with a backup and a storage-concurrency plan appropriate
+for the deployment. For bundled QuackDB, drain and stop the long-lived service
+before an offline release task opens the same database. The tasks print counts
+only; they do not print credentials.
+
+Test provider calls before you set `provider_tokens.allow_plaintext = false` in
+standalone TOML. Before that verification point, you can restore plaintext and
+use the prior release:
+
+```bash
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_decrypt()'
+```
+
+For key rotation, add the new and prior keys, set the new active key ID, and run:
+
+```bash
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_rotate()'
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_verify()'
+```
+
+Remove a prior key only after rotation, verification, provider checks, and a new
+database backup. Keep an offline recovery copy of every key needed by retained
+backups.
 
 ## Backups
 

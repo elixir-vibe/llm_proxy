@@ -31,8 +31,8 @@ curl http://127.0.0.1:4000/v1/chat/completions \
 
 - **Connect your applications once.** Point any OpenAI-compatible client at LLMProxy, use the Anthropic Messages API, or call it directly from Elixir. Stop duplicating provider adapters, authentication, retries, and usage tracking in every product.
 - **Change providers without changing clients.** Applications request a public name such as `fast`; you can move it from OpenAI to Anthropic, OpenRouter, or a private endpoint by changing gateway configuration instead of application code.
-- **Keep working when a provider does not.** Route across multiple models, providers, regions, or credentials. Timeouts, retries, health-aware fallbacks, circuit breakers, and load-balancing strategies keep individual failures away from your users.
-- **Control spend before the invoice arrives.** Issue keys per application, customer, or team; restrict which models they can call; and enforce token, request, cache, and dollar budgets. See usage and estimated cost in one place.
+- **Keep working when a provider does not.** Route across multiple models, providers, regions, or credentials. Bounded, replay-safe fallbacks, circuit breakers, and load-balancing strategies keep individual failures away from your users without silently replaying uncertain billable work.
+- **Control spend before the invoice arrives.** Issue keys per application, customer, or team; restrict which models they can call; and enforce concurrent-request, token, request, cache, and dollar limits. See usage and estimated cost in one place.
 - **Stop spreading provider keys across services.** Store upstream credentials in the gateway, rotate or pool them centrally, and give applications LLMProxy keys with only the access they need.
 - **Self-host without adding a Python control plane.** Run the bundled OTP service as a LiteLLM-style gateway, or embed the same capabilities directly in an Elixir/Phoenix release. Your prompts, traces, credentials, and operational data remain under your control.
 
@@ -128,19 +128,33 @@ See [Library Mode](https://hexdocs.pm/llm_proxy/library-mode.html) for storage, 
 
 The standalone release runs a local HTTP gateway backed by DuckDB through QuackDB. It listens on `127.0.0.1` and is intended to sit behind your reverse proxy or service mesh.
 
-Configure secrets with environment variables:
+Configure only secrets and the optional TOML location through the environment:
 
 ```bash
 export MASTER_KEY="replace-with-a-long-random-key"
-export OPENAI_API_KEYS="sk-..."
-export DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
-export PORT="4000"
+export LLM_PROXY_PROVIDER_KEYS='{"openai":["sk-..."]}'
+export LLM_PROXY_CONFIG_TOML="/etc/llm-proxy/config.toml"
 ```
 
-Configure public providers and model aliases as data in `/etc/llm-proxy/config.toml`:
+Configure standalone runtime settings, public providers, and model aliases as
+data in that TOML file:
 
 ```toml
-public_models = ["fast"]
+[server]
+port = 4000
+public_url = "https://llm.example.com"
+body_limit_bytes = 32000000
+rpc_socket = "/run/llm-proxy/rpc.sock"
+
+[storage]
+database = "/var/lib/llm-proxy/llm_proxy.duckdb"
+quackdb_uri = "http://127.0.0.1:9494"
+quackdb_endpoint = "quack:localhost:9494"
+
+[routing]
+max_retries = 1
+replay_policy = "safe_only"
+provider_connect_timeout_ms = 10000
 
 [providers.openai-primary]
 adapter = "openai"
@@ -156,8 +170,6 @@ to = "openai-primary"
 model = "gpt-4.1-mini"
 timeout = 30000
 ```
-
-`public_models` is optional. When set, it is the allowlist for model discovery and requests. When unset, the proxy keeps the complete registered model catalog for compatibility.
 
 Credentials do not belong in TOML. Bootstrap named pools with `LLM_PROXY_PROVIDER_KEYS` or manage persisted tokens through the optional admin integration.
 
@@ -201,7 +213,7 @@ Every authenticated request runs through the same controls:
 3. Apply request guardrails and deterministic cache policy.
 4. Select a healthy deployment and credential.
 5. Execute with timeout, retry, fallback, and circuit-breaker handling.
-6. Record usage, estimated cost, latency, trace IDs, messages, and optional bodies.
+6. Record usage, estimated cost, latency, and trace IDs without retaining prompts or model output unless content capture is explicitly enabled.
 7. Emit OpenTelemetry spans and return the trace ID to the caller.
 
 Incant support is optional. When installed, `LLMProxy.Admin` describes resources for API keys, provider tokens, traces, and messages plus an operations dashboard. A separate Incant host can consume those surfaces over SafeRPC; the public gateway does not expose an admin UI.
@@ -227,8 +239,13 @@ See [Governance and Observability](https://hexdocs.pm/llm_proxy/governance-and-o
 
 ```bash
 mix deps.get
+mix test         # deterministic unit and component tests
+mix integration  # real provider integration; may use credentials and billable APIs
+mix e2e          # real HTTP boundary through upstream response; may be billable
 mix ci
 ```
+
+Integration tests call real dependencies while bypassing the public HTTP gateway. End-to-end tests enter through the real HTTP listener and cover authentication, routing, storage-backed token selection, provider execution, and response serialization. Both layers are opt-in and skipped by the default test suite.
 
 ## License
 

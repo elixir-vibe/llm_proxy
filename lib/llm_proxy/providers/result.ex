@@ -9,6 +9,7 @@ defmodule LLMProxy.Providers.Result do
 
   @type kind :: :response | :stream | :error
   @type token :: map() | nil
+  @type replay_safety :: :safe | :uncertain | :forbidden
 
   @enforce_keys [:kind]
   defstruct [
@@ -19,6 +20,7 @@ defmodule LLMProxy.Providers.Result do
     :status,
     :token,
     :retry_after_ms,
+    :replay_safety,
     :provider_body,
     :provider,
     :provider_name,
@@ -33,6 +35,7 @@ defmodule LLMProxy.Providers.Result do
           status: pos_integer() | nil,
           token: token(),
           retry_after_ms: non_neg_integer() | nil,
+          replay_safety: replay_safety() | nil,
           provider_body: term() | nil,
           provider: module() | nil,
           provider_name: String.t() | nil,
@@ -52,6 +55,7 @@ defmodule LLMProxy.Providers.Result do
 
     {:error,
      error(message, 503, nil,
+       replay_safety: :safe,
        provider_body: %{
          "error" => %{
            "message" => message,
@@ -72,6 +76,7 @@ defmodule LLMProxy.Providers.Result do
       status: status,
       token: token,
       retry_after_ms: opts[:retry_after_ms],
+      replay_safety: opts[:replay_safety] || default_replay_safety(status),
       provider_body: opts[:provider_body]
     }
   end
@@ -178,4 +183,8 @@ defmodule LLMProxy.Providers.Result do
   defp error_type(429), do: "rate_limit_error"
   defp error_type(status) when is_integer(status) and status >= 500, do: "upstream_error"
   defp error_type(_status), do: "api_error"
+
+  defp default_replay_safety(429), do: :safe
+  defp default_replay_safety(status) when status >= 500, do: :uncertain
+  defp default_replay_safety(_status), do: :forbidden
 end

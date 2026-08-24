@@ -7,9 +7,11 @@ defmodule LLMProxy.Storage do
   def find_key(raw_key), do: adapter().find_key(raw_key)
   def list_keys(opts \\ %{}), do: adapter().list_keys(opts)
   def delete_key(id), do: adapter().delete_key(id)
+  def set_key_enabled(id, enabled), do: adapter().set_key_enabled(id, enabled)
   def update_key_usage(key, usage), do: adapter().update_key_usage(key, usage)
   def update_key_quota(id, quota_attrs), do: adapter().update_key_quota(id, quota_attrs)
   def update_key_models(id, allowed_models), do: adapter().update_key_models(id, allowed_models)
+  def set_content_capture(id, enabled), do: adapter().set_content_capture(id, enabled)
   def check_model_access(key, model), do: adapter().check_model_access(key, model)
 
   def record_usage(attrs), do: adapter().record_usage(attrs)
