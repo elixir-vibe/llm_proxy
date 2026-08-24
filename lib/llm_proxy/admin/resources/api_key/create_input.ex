@@ -2,15 +2,25 @@ defmodule LLMProxy.Admin.Resources.APIKey.CreateInput do
   @moduledoc false
 
   @enforce_keys [:name]
-  defstruct [:name, trace_requests: false]
+  defstruct [:name, trace_requests: false, capture_content: false]
 
-  @type t :: %__MODULE__{name: String.t(), trace_requests: boolean()}
+  @type t :: %__MODULE__{
+          name: String.t(),
+          trace_requests: boolean(),
+          capture_content: boolean()
+        }
 
   @spec from_assigns(map()) :: {:ok, t()} | {:error, String.t()}
   def from_assigns(assigns) when is_map(assigns) do
     with {:ok, name} <- fetch_name(assigns),
-         {:ok, trace_requests} <- fetch_trace_requests(assigns) do
-      {:ok, %__MODULE__{name: name, trace_requests: trace_requests}}
+         {:ok, trace_requests} <- fetch_boolean(assigns, "trace_requests"),
+         {:ok, capture_content} <- fetch_boolean(assigns, "capture_content") do
+      {:ok,
+       %__MODULE__{
+         name: name,
+         trace_requests: trace_requests,
+         capture_content: capture_content
+       }}
     end
   end
 
@@ -30,11 +40,11 @@ defmodule LLMProxy.Admin.Resources.APIKey.CreateInput do
     {:ok, "api-key"}
   end
 
-  defp fetch_trace_requests(assigns) do
-    case Map.fetch(assigns, "trace_requests") do
+  defp fetch_boolean(assigns, field) do
+    case Map.fetch(assigns, field) do
       {:ok, value} when is_boolean(value) -> {:ok, value}
       {:ok, nil} -> {:ok, false}
-      {:ok, _value} -> {:error, "trace_requests must be boolean"}
+      {:ok, _value} -> {:error, "#{field} must be boolean"}
       :error -> {:ok, false}
     end
   end

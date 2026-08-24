@@ -8,7 +8,8 @@ defmodule LLMProxy.Cache do
 
   The adapter receives a deterministic cache key and context map. It stores and
   returns `%LLMProxy.Response{}` values; external adapters can serialize the
-  response if needed.
+  response if needed. Cache access requires an API key with explicit content
+  capture because responses include model output and request context.
   """
 
   alias LLMProxy.Response

@@ -1,8 +1,8 @@
-defmodule LLMProxy.RouterTest do
+defmodule LLMProxy.HTTP.RuntimeTest do
   use ExUnit.Case, async: true
   import Plug.Test
 
-  alias LLMProxy.Router
+  alias LLMProxy.HTTP.Router
 
   @opts Router.init([])
 

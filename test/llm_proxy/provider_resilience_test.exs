@@ -110,12 +110,15 @@ defmodule LLMProxy.ProviderResilienceTest do
     on_exit(fn ->
       Catalog.load([])
       CircuitBreaker.reset()
+      Application.delete_env(:llm_proxy, :replay_policy)
     end)
 
     :ok
   end
 
   test "deployment timeout falls back to next deployment" do
+    Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
+
     Catalog.put_model(
       model("timeout-model", [
         deployment(TimeoutProvider, "slow-model", timeout_ms: 1),
@@ -131,6 +134,8 @@ defmodule LLMProxy.ProviderResilienceTest do
   end
 
   test "circuit breaker opens and skips unhealthy deployments" do
+    Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
+
     Catalog.put_model(
       model("circuit-model", [
         deployment(CircuitProvider, "broken-model", failure_threshold: 1, cooldown_ms: 1_000),

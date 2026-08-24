@@ -30,13 +30,15 @@ LLMProxy compiles its admin modules only when Incant is available. Without Incan
 
 `LLMProxy.Admin` exposes:
 
-- **API keys** — create, inspect, edit, reveal once, and revoke client credentials; configure model access, limits, and tracing.
+- **API keys** — create, inspect, edit, reveal once, and revoke client credentials; configure model access, limits, tracing, and content capture.
 - **Provider tokens** — manage upstream API keys and OAuth credentials by isolated pool.
 - **Traces** — inspect recorded request/response traces and feedback.
-- **Messages** — inspect logged user messages and linked usage.
+- **Messages** — inspect redacted message records and linked usage. Raw captured text stays on an authorized storage path.
 - **Operations dashboard** — review request volume, token usage, spend, latency, and recent failures.
 
 Policies remain inside the LLMProxy service VM. A remote Incant host receives data and dispatches actions; it does not receive repos, schemas, callback functions, or provider secrets as executable terms.
+
+Captured message text is marked as sensitive in the Incant resource contract. LLMProxy redacts it before local table/detail rendering and before remote SafeRPC transport. Treat direct database and storage-facade access as privileged content access.
 
 ## Local admin in a host application
 
@@ -65,10 +67,11 @@ config :llm_proxy,
   rpc_socket: "/run/llm-proxy/rpc.sock"
 ```
 
-Or in the standalone release:
+Or in standalone TOML:
 
-```bash
-LLM_PROXY_RPC_SOCKET="/run/llm-proxy/rpc.sock"
+```toml
+[server]
+rpc_socket = "/run/llm-proxy/rpc.sock"
 ```
 
 When a socket is configured, `LLMProxy.RPC.AdminServer` serves two operation namespaces:
@@ -123,3 +126,5 @@ Admin state is operational state. Back up the configured LLMProxy database, incl
 - usage, messages, traces, and feedback required by retention policy.
 
 Do not back up transient SafeRPC socket files. Restore the database, recreate runtime directories and permissions, run migrations, then let services recreate sockets.
+
+Content capture has no automatic expiry. Set a retention period for captured messages and trace bodies, and apply it in the application that owns the database. `LLMProxy.Storage.delete_key/1` removes all content and accounting rows owned by that key. Disabling capture stops new content writes but does not delete old rows.

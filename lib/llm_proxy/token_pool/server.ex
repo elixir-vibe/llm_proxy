@@ -10,6 +10,8 @@ defmodule LLMProxy.TokenPool.Server do
 
   require Logger
 
+  alias LLMProxy.Provider.Credential
+  alias LLMProxy.Provider.TokenCodec
   alias LLMProxy.Schemas.ProviderToken
   alias LLMProxy.Storage.Repo
 
@@ -42,6 +44,11 @@ defmodule LLMProxy.TokenPool.Server do
     GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
   end
 
+  def mark_rate_limited(%Credential{id: id}, cooldown_ms) do
+    Logger.warning("Token #{id} marked as rate-limited")
+    GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
+  end
+
   def clear_rate_limits do
     GenServer.cast(__MODULE__, :clear_rate_limits)
   end
@@ -63,6 +70,7 @@ defmodule LLMProxy.TokenPool.Server do
   def handle_call({:pick_token_by_kind, provider, kind, user_id}, _from, state) do
     case do_pick_by_kind(provider, kind, user_id, state) do
       {:ok, token} -> {:reply, {:ok, token}, state}
+      {:error, reason} -> {:reply, {:error, reason}, state}
       :none -> {:reply, {:error, :no_tokens}, state}
       :all_rate_limited -> {:reply, {:error, :all_rate_limited}, state}
     end
@@ -86,6 +94,7 @@ defmodule LLMProxy.TokenPool.Server do
   defp do_pick_with_fallback(provider, user_id, state) do
     case do_pick_oauth(provider, user_id, state) do
       {:ok, token} -> {:ok, token}
+      {:error, _reason} = error -> error
       oauth_status -> pick_api_key_after_oauth(provider, user_id, state, oauth_status)
     end
   end
@@ -93,6 +102,7 @@ defmodule LLMProxy.TokenPool.Server do
   defp pick_api_key_after_oauth(provider, user_id, state, oauth_status) do
     case do_pick_by_kind(provider, "api-key", user_id, state) do
       {:ok, token} -> {:ok, token}
+      {:error, _reason} = error -> error
       api_key_status -> fallback_error(oauth_status, api_key_status)
     end
   end
@@ -130,7 +140,7 @@ defmodule LLMProxy.TokenPool.Server do
     end)
     |> case do
       nil -> :all_rate_limited
-      token -> {:ok, token}
+      token -> TokenCodec.for_provider(token)
     end
   end
 

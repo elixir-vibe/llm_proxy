@@ -54,12 +54,16 @@ defmodule LLMProxy.Providers.RoutingTest do
       )
     )
 
-    on_exit(fn -> Catalog.load([]) end)
+    on_exit(fn ->
+      Catalog.load([])
+      Application.delete_env(:llm_proxy, :replay_policy)
+    end)
 
     :ok
   end
 
   test "LLMProxy.Provider tries ordered catalog deployments" do
+    Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
     {:ok, key, _raw_key} = Storage.create_key("routing-user")
 
     assert {:ok, response} = LLMProxy.chat("hello", model: "routed-model", api_key: key)
