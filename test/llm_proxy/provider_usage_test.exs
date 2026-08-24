@@ -174,4 +174,37 @@ defmodule LLMProxy.ProviderUsageTest do
     assert [%{config_error: "Codex usage base URL is not a valid HTTPS URL"}] =
              Source.accounts()
   end
+
+  test "does not send credentials for per-token endpoint overrides" do
+    ReqTest.stub(UsageStub, fn _conn ->
+      flunk("usage request must not be sent")
+    end)
+
+    assert {:ok, token} =
+             Storage.add_token("glm-pool", "api-key", "glm-api-secret", %{
+               proxy: "https://gateway.example/v1"
+             })
+
+    assert {:error, :unsupported} =
+             LLMProxy.ProviderUsage.refresh_account(Integer.to_string(token.id))
+
+    assert [snapshot] = Loader.refresh({:account, token.id})
+    assert snapshot.state == :error
+
+    assert snapshot.error ==
+             "Provider usage is unavailable for tokens with endpoint overrides"
+  end
+
+  test "rejects oversized provider responses before JSON decoding" do
+    ReqTest.stub(UsageStub, fn conn ->
+      conn
+      |> put_resp_content_type("application/json")
+      |> send_resp(200, ~s({"padding":"#{String.duplicate("x", 256_001)}"}))
+    end)
+
+    assert {:ok, token} = Storage.add_token("glm-pool", "api-key", "glm-api-secret")
+    assert [snapshot] = Loader.refresh({:account, token.id})
+    assert snapshot.state == :error
+    assert snapshot.error == "Provider returned invalid usage data"
+  end
 end
