@@ -268,7 +268,7 @@ defmodule LLMProxy.ResourceCleanupStressTest do
       request:
         Req.new(
           base_url: "http://127.0.0.1:#{port}",
-          finch: @finch,
+          finch: [name: @finch],
           headers: [
             {"authorization", "Bearer #{raw_key}"},
             {"connection", "close"}
