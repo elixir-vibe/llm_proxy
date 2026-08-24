@@ -59,13 +59,16 @@ if Code.ensure_loaded?(Incant) do
     end
 
     test "runs LLMProxy model and status operations" do
-      assert {:ok, [%{id: "rpc-test-model", object: "model"}]} =
-               LLMProxy.call({LLMProxy, :models}, %{}, %{}, [])
+      assert {:ok, models} = LLMProxy.call({LLMProxy, :models}, %{}, %{}, [])
 
-      assert {:ok, %{service: :llm_proxy, version: version, models: 1}} =
+      assert %{id: "rpc-test-model", object: "model"} =
+               Enum.find(models, &(&1.id == "rpc-test-model"))
+
+      assert {:ok, %{service: :llm_proxy, version: version, models: model_count}} =
                LLMProxy.call({LLMProxy, :status}, %{}, %{}, [])
 
       assert is_binary(version)
+      assert model_count == length(models)
     end
 
     test "real RPC server exposes admin and operations on one socket" do

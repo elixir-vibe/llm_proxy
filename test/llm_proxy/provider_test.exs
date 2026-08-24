@@ -3,7 +3,8 @@ defmodule LLMProxy.ProviderTest do
 
   import ExUnit.CaptureLog
 
-  alias LLMProxy.{ConcurrencyLimiter, Limit}
+  alias LLMProxy.{Catalog, ConcurrencyLimiter, Limit}
+  alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
@@ -53,9 +54,18 @@ defmodule LLMProxy.ProviderTest do
   end
 
   setup do
+    original_public_models = Application.get_env(:llm_proxy, :public_models)
+
     TestSupport.checkout_repo()
+    Catalog.load([])
     Registry.register(Provider)
     ReqLLM.Providers.register(LLMProxy.Provider)
+
+    on_exit(fn ->
+      restore_public_models(original_public_models)
+      Catalog.load([])
+    end)
+
     :ok
   end
 
@@ -194,4 +204,37 @@ defmodule LLMProxy.ProviderTest do
 
     assert message == ConcurrencyLimiter.error_message()
   end
+
+  test "calls an explicitly cataloged model alias" do
+    Catalog.put_model(catalog_model("public-provider-alias"))
+    {:ok, key, _raw_key} = Storage.create_key("catalog-provider-user")
+
+    assert {:ok, response} =
+             LLMProxy.chat("hello", model: "public-provider-alias", api_key: key)
+
+    assert LLMProxy.Response.to_openai(response)["model"] == "req-llm-provider-model"
+  end
+
+  test "rejects a catalog model alias outside the public allowlist" do
+    Catalog.put_model(catalog_model("public-provider-alias"))
+    Application.put_env(:llm_proxy, :public_models, ["another-model"])
+    {:ok, key, _raw_key} = Storage.create_key("restricted-catalog-provider-user")
+
+    assert {:error, {:not_found, "Model 'public-provider-alias' not found"}} =
+             LLMProxy.chat("hello", model: "public-provider-alias", api_key: key)
+  end
+
+  defp catalog_model(name) do
+    Model.new!(
+      name: name,
+      deployments: [
+        Deployment.new!(provider: Provider, upstream_model: "req-llm-provider-model")
+      ]
+    )
+  end
+
+  defp restore_public_models(nil), do: Application.delete_env(:llm_proxy, :public_models)
+
+  defp restore_public_models(models),
+    do: Application.put_env(:llm_proxy, :public_models, models)
 end

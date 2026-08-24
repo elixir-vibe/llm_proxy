@@ -21,6 +21,10 @@
 
 ### Added
 
+- An optional public-model allowlist keeps HTTP discovery, setup helpers,
+  SafeRPC status, and request admission aligned. Standalone deployments
+  configure visible aliases through `catalog.public_models` in strict TOML;
+  library hosts use normal application configuration.
 - API keys can be disabled and re-enabled without deleting their limits, usage,
   or audit history. Disabled keys receive the normal invalid-key response.
 - Provider API keys and OAuth tokens can use a pluggable at-rest codec with a

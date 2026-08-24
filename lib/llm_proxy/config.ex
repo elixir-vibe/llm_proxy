@@ -120,6 +120,19 @@ defmodule LLMProxy.Config do
     end
   end
 
+  def public_models do
+    case Application.get_env(:llm_proxy, :public_models) do
+      nil ->
+        nil
+
+      models when is_list(models) ->
+        validate_public_models!(models)
+
+      value ->
+        raise ArgumentError, ":public_models must be a list of model IDs, got: #{inspect(value)}"
+    end
+  end
+
   def body_limit_bytes do
     case Application.get_env(:llm_proxy, :body_limit_bytes, 32_000_000) do
       bytes when is_integer(bytes) and bytes > 0 ->
@@ -212,6 +225,14 @@ defmodule LLMProxy.Config do
 
   def usage_window_4h_ms, do: @usage_window_4h_ms
   def usage_window_week_ms, do: @usage_window_week_ms
+
+  defp validate_public_models!(models) do
+    if Enum.all?(models, &(is_binary(&1) and String.trim(&1) != "")) do
+      Enum.uniq(models)
+    else
+      raise ArgumentError, ":public_models must contain only non-empty model IDs"
+    end
+  end
 
   defp normalize_providers(providers) when is_list(providers) do
     providers

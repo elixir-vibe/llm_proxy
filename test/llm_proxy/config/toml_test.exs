@@ -144,4 +144,30 @@ defmodule LLMProxy.Config.TOMLTest do
   test "returns TOML parser errors" do
     assert {:error, {:invalid_toml, _reason}} = TOML.decode("[invalid]\na = 1 b = 2")
   end
+
+  test "decodes a catalog public model allowlist, including an empty list" do
+    assert {:ok, [llm_proxy: config]} =
+             TOML.decode(~s([catalog]\npublic_models = ["codex", "glm", "codex"]))
+
+    assert config[:public_models] == ["codex", "glm"]
+
+    assert {:ok, [llm_proxy: empty_config]} =
+             TOML.decode("[catalog]\npublic_models = []")
+
+    assert empty_config[:public_models] == []
+  end
+
+  test "rejects invalid or top-level public model allowlists" do
+    assert_raise ArgumentError, ~r/catalog.public_models must be an array/, fn ->
+      TOML.decode(~s([catalog]\npublic_models = "codex"))
+    end
+
+    assert_raise ArgumentError, ~r/contain only non-empty model IDs/, fn ->
+      TOML.decode(~s([catalog]\npublic_models = [" "]))
+    end
+
+    assert_raise ArgumentError, ~r/top-level contains unsupported configuration keys/, fn ->
+      TOML.decode(~s(public_models = ["codex"]))
+    end
+  end
 end

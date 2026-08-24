@@ -243,8 +243,14 @@ defmodule LLMProxy.Provider do
   defp check_quota(%Actor{kind: :master}, _api_key), do: :ok
   defp check_quota(_actor, api_key), do: LLMProxy.Storage.check_quota(api_key)
 
-  defp check_model_access(%{id: "master"}, _model), do: :ok
-  defp check_model_access(api_key, model), do: LLMProxy.Storage.check_model_access(api_key, model)
+  defp check_model_access(api_key, model) do
+    if Registry.public_model?(model), do: check_key_model_access(api_key, model), else: :error
+  end
+
+  defp check_key_model_access(%{id: "master"}, _model), do: :ok
+
+  defp check_key_model_access(api_key, model),
+    do: LLMProxy.Storage.check_model_access(api_key, model)
 
   defp with_request_lease(api_key, fun) do
     case ConcurrencyLimiter.run(api_key, fun) do
