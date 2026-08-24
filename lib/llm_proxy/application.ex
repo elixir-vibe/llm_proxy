@@ -7,11 +7,13 @@ defmodule LLMProxy.Application do
 
   require Logger
 
+  alias LLMProxy.Provider.TokenCodec
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Storage.Repo
 
   @impl true
   def start(_type, _args) do
+    validate_provider_token_codec!()
     setup_opentelemetry()
 
     Registry.init()
@@ -128,8 +130,15 @@ defmodule LLMProxy.Application do
     if entries != [] do
       case LLMProxy.Storage.seed_tokens_from_env(entries) do
         :ok -> :ok
-        {:error, reason} -> raise "provider token seeding failed: #{inspect(reason)}"
+        {:error, _reason} -> raise "provider token seeding failed"
       end
+    end
+  end
+
+  defp validate_provider_token_codec! do
+    case TokenCodec.validate_configuration() do
+      :ok -> :ok
+      {:error, _reason} -> raise "invalid provider token codec configuration"
     end
   end
 

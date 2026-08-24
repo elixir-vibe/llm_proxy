@@ -47,12 +47,37 @@ defmodule LLMProxy.Config do
   def storage, do: Application.get_env(:llm_proxy, :storage, LLMProxy.Storage.Ecto)
 
   def provider_token_codec do
-    Application.get_env(
-      :llm_proxy,
-      :provider_token_codec,
-      LLMProxy.ProviderTokenCodec.Plaintext
-    )
+    case Application.fetch_env(:llm_proxy, :provider_token_codec) do
+      {:ok, codec} -> codec
+      :error -> built_in_provider_token_codec()
+    end
   end
+
+  def provider_token_allow_plaintext? do
+    Application.get_env(:llm_proxy, :provider_token_allow_plaintext, true)
+  end
+
+  defp built_in_provider_token_codec do
+    keyring = Application.get_env(:llm_proxy, :provider_token_keyring)
+    allow_plaintext = provider_token_allow_plaintext?()
+
+    if is_nil(keyring) and allow_plaintext == true do
+      LLMProxy.Provider.TokenCodec.Plaintext
+    else
+      {LLMProxy.Provider.TokenCodec.AESGCM,
+       active_key_id: keyring_value(keyring, :active_key_id),
+       keys: keyring_value(keyring, :keys, %{}),
+       allow_plaintext: allow_plaintext}
+    end
+  end
+
+  defp keyring_value(keyring, key, default \\ nil)
+
+  defp keyring_value(keyring, key, default) when is_map(keyring) do
+    Map.get(keyring, key, Map.get(keyring, Atom.to_string(key), default))
+  end
+
+  defp keyring_value(_keyring, _key, default), do: default
 
   def quackdb_server_options do
     Application.get_env(:llm_proxy, :quackdb_server, [])

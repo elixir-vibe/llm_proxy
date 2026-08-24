@@ -69,32 +69,21 @@ if config_env() in [:dev, :prod] do
       json -> Jason.decode!(json)
     end
 
-  provider_token_codec =
-    case System.get_env("LLM_PROXY_PROVIDER_TOKEN_KEYS") do
+  provider_token_keyring =
+    case System.get_env("LLM_PROXY_PROVIDER_TOKEN_KEYRING") do
       value when value in [nil, ""] ->
-        LLMProxy.ProviderTokenCodec.Plaintext
+        nil
 
       json ->
-        keys = Jason.decode!(json)
-
-        active_key_id =
-          System.get_env("LLM_PROXY_PROVIDER_TOKEN_ACTIVE_KEY_ID") ||
-            raise "LLM_PROXY_PROVIDER_TOKEN_ACTIVE_KEY_ID is required when token keys are set"
-
-        allow_plaintext =
-          case System.get_env("LLM_PROXY_PROVIDER_TOKEN_ALLOW_PLAINTEXT", "true") do
-            "true" -> true
-            "false" -> false
-            _other -> raise "LLM_PROXY_PROVIDER_TOKEN_ALLOW_PLAINTEXT must be true or false"
-          end
-
-        {LLMProxy.ProviderTokenCodec.AESGCM,
-         active_key_id: active_key_id, keys: keys, allow_plaintext: allow_plaintext}
+        case Jason.decode(json) do
+          {:ok, keyring} -> keyring
+          {:error, _reason} -> raise "invalid provider token keyring JSON"
+        end
     end
 
   config :llm_proxy,
     master_key: System.get_env("MASTER_KEY"),
-    provider_token_codec: provider_token_codec,
+    provider_token_keyring: provider_token_keyring,
     provider_key_seeds: provider_key_seeds,
     public_url: public_url,
     rpc_socket: System.get_env("LLM_PROXY_RPC_SOCKET"),

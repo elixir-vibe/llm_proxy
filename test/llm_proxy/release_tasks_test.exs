@@ -4,9 +4,26 @@ defmodule LLMProxy.ReleaseTasksTest do
   alias LLMProxy.ReleaseTasks
   alias LLMProxy.RPC.AdminServer
 
+  defmodule SecretErrorCodec do
+    @behaviour LLMProxy.Provider.TokenCodec
+
+    @impl true
+    def validate_options(_options), do: {:error, {:secret, "seeded-secret"}}
+
+    @impl true
+    def encode(value, _context, _options), do: {:ok, value}
+
+    @impl true
+    def decode(value, _context, _options), do: {:ok, value}
+
+    @impl true
+    def encoded?(_value, _options), do: false
+  end
+
   setup do
     previous = Application.get_env(:llm_proxy, :rpc_socket)
     previous_env = System.get_env("LLM_PROXY_RPC_SOCKET")
+    previous_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
 
     on_exit(fn ->
       if previous do
@@ -19,6 +36,11 @@ defmodule LLMProxy.ReleaseTasksTest do
         System.put_env("LLM_PROXY_RPC_SOCKET", previous_env)
       else
         System.delete_env("LLM_PROXY_RPC_SOCKET")
+      end
+
+      case previous_codec do
+        {:ok, codec} -> Application.put_env(:llm_proxy, :provider_token_codec, codec)
+        :error -> Application.delete_env(:llm_proxy, :provider_token_codec)
       end
 
       LLMProxy.Drain.cancel()
@@ -121,6 +143,17 @@ defmodule LLMProxy.ReleaseTasksTest do
     assert :ok = ReleaseTasks.drain_await(100)
 
     GenServer.stop(server)
+  end
+
+  test "provider-token operation failures do not print custom codec reasons" do
+    Application.put_env(:llm_proxy, :provider_token_codec, SecretErrorCodec)
+
+    error =
+      assert_raise RuntimeError, "provider token operation failed", fn ->
+        ReleaseTasks.provider_tokens_status()
+      end
+
+    refute Exception.message(error) =~ "seeded-secret"
   end
 
   test "Codex login release task starts Req Finch before token exchange" do

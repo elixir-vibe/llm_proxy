@@ -89,6 +89,23 @@ defmodule LLMProxy.Config.TOMLTest do
     assert {:ok, [max_retries: 2, replay_policy: :allow_uncertain]} = TOML.decode(input)
   end
 
+  test "decodes provider-token rollout policy" do
+    input = """
+    [provider_tokens]
+    allow_plaintext = false
+    """
+
+    assert {:ok, [provider_token_allow_plaintext: false]} = TOML.decode(input)
+
+    assert_raise ArgumentError, ~r/provider_tokens.allow_plaintext must be a boolean/, fn ->
+      TOML.decode(~s([provider_tokens]\nallow_plaintext = "false"))
+    end
+
+    assert_raise ArgumentError, ~r/provider_tokens only supports allow_plaintext/, fn ->
+      TOML.decode(~s([provider_tokens]\nkeys = "must-not-live-in-toml"))
+    end
+  end
+
   test "rejects invalid standalone routing policy" do
     assert_raise ArgumentError, ~r/routing.max_retries must be a non-negative integer/, fn ->
       TOML.decode("[routing]\nmax_retries = -1")

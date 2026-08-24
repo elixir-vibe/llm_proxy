@@ -1,4 +1,4 @@
-defmodule LLMProxy.ProviderCredential do
+defmodule LLMProxy.Provider.Credential do
   @moduledoc """
   Decrypted provider credentials for one provider request.
 

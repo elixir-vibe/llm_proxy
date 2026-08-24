@@ -185,9 +185,14 @@ bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_encrypt()'
 bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_verify()'
 ```
 
-The tasks print counts only. They do not print credentials. Test provider calls
-before you set `LLM_PROXY_PROVIDER_TOKEN_ALLOW_PLAINTEXT=false`. Before that
-verification point, you can restore plaintext and use the prior release:
+Run these tasks only with a backup and a storage-concurrency plan appropriate
+for the deployment. For bundled QuackDB, drain and stop the long-lived service
+before an offline release task opens the same database. The tasks print counts
+only; they do not print credentials.
+
+Test provider calls before you set `provider_tokens.allow_plaintext = false` in
+standalone TOML. Before that verification point, you can restore plaintext and
+use the prior release:
 
 ```bash
 bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_decrypt()'

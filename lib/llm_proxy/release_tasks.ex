@@ -179,7 +179,7 @@ defmodule LLMProxy.ReleaseTasks do
   defp run_provider_token_operation(operation) do
     result =
       with_repo(fn ->
-        apply(LLMProxy.ProviderTokenCodec.Migration, operation, [])
+        apply(LLMProxy.Provider.TokenCodec.Migration, operation, [])
       end)
 
     case result do
@@ -187,8 +187,8 @@ defmodule LLMProxy.ReleaseTasks do
         IO.puts("Provider token operation complete: #{inspect(counts)}")
         :ok
 
-      {:error, reason} ->
-        raise "provider token operation failed: #{inspect(reason)}"
+      {:error, _reason} ->
+        raise "provider token operation failed"
     end
   end
 

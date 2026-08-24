@@ -4,6 +4,9 @@
 
 ### Added
 
+- Provider API keys and OAuth tokens can use a pluggable at-rest codec with a
+  versioned AES-256-GCM keyring, explicit migration, verification, rotation,
+  and controlled plaintext rollback tasks.
 - API keys can now set an in-memory concurrent-request limit with stream-safe,
   process-monitored leases across in-process, ReqLLM, SafeRPC, and HTTP
   generation or moderation calls.
@@ -19,6 +22,9 @@
 
 ### Security
 
+- Provider-token encryption uses a keyring separate from the API master key,
+  creates redacted request-scoped credentials only after token selection, and
+  fails closed when an encrypted credential is selected without its keyring.
 - Sensitive Incant fields are redacted before local rendering or remote SafeRPC
   transport.
 

@@ -37,6 +37,8 @@ Core request contracts use `ReqLLM.Context`, `ReqLLM.Message`, and `LLMProxy.Pro
 ```text
 LLMProxy
 ├── Provider                 in-process execution boundary and ReqLLM provider
+│   ├── Credential           redacted request-scoped provider credential
+│   └── TokenCodec           at-rest credential codec and key migration tools
 ├── HTTP
 │   ├── Router               standalone Plug router
 │   ├── RouteSpec            route table shared with Phoenix
@@ -132,7 +134,7 @@ Library hosts usually provide their existing repo. The standalone production rel
 
 Provider-token schemas contain stored values only. A configured token codec
 encodes writes before Ecto receives them. The token pool selects a stored row and
-decodes it into a redacted `LLMProxy.ProviderCredential` only at the provider
+decodes it into a redacted `LLMProxy.Provider.Credential` only at the provider
 boundary. Admin lists and schema inspection do not receive plaintext values.
 
 Database-specific queries and migrations branch on the configured repo adapter. Provider execution depends on the storage facade, not a concrete database.

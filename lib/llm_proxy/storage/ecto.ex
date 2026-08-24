@@ -3,6 +3,7 @@ defmodule LLMProxy.Storage.Ecto do
   Context functions for all database operations: keys, usage, quotas, tokens.
   """
 
+  alias LLMProxy.Provider.TokenCodec
   alias LLMProxy.Storage.{Repo, SQL}
 
   alias LLMProxy.Schemas.{
@@ -397,7 +398,7 @@ defmodule LLMProxy.Storage.Ecto do
         added_at: DateTime.utc_now()
       })
 
-    with {:ok, attrs} <- LLMProxy.ProviderTokenCodec.encode_attrs(attrs) do
+    with {:ok, attrs} <- TokenCodec.encode_attrs(attrs) do
       %ProviderToken{}
       |> ProviderToken.changeset(attrs)
       |> Repo.insert()
@@ -433,7 +434,7 @@ defmodule LLMProxy.Storage.Ecto do
       token ->
         attrs = Map.take(attrs, oauth_token_fields())
 
-        with {:ok, attrs} <- LLMProxy.ProviderTokenCodec.encode_attrs(attrs) do
+        with {:ok, attrs} <- TokenCodec.encode_attrs(attrs) do
           token |> ProviderToken.changeset(attrs) |> Repo.update()
         end
     end
@@ -483,7 +484,7 @@ defmodule LLMProxy.Storage.Ecto do
 
   defp decoded_token_set(tokens) do
     Enum.reduce_while(tokens, {:ok, MapSet.new()}, fn token, {:ok, decoded} ->
-      case LLMProxy.ProviderTokenCodec.decode(token.token, :token) do
+      case TokenCodec.decode(token.token, :token) do
         {:ok, plaintext} -> {:cont, {:ok, MapSet.put(decoded, plaintext)}}
         {:error, reason} -> {:halt, {:error, {:provider_token_codec, reason}}}
       end

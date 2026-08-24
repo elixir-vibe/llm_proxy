@@ -98,7 +98,7 @@ Default credential cooldown after rate limiting. Default: 4 hours.
 ```elixir
 config :llm_proxy,
   provider_token_codec: {
-    LLMProxy.ProviderTokenCodec.AESGCM,
+    LLMProxy.Provider.TokenCodec.AESGCM,
     active_key_id: "2026-08",
     keys: %{
       "2026-08" => System.fetch_env!("PROVIDER_TOKEN_KEY_2026_08"),
@@ -391,6 +391,16 @@ LLM_PROXY_PROVIDER_KEYS={"example-production":["secret"]}
 
 JSON object mapping token-pool names to credential arrays.
 
+### Provider Token Keyring
+
+```text
+LLM_PROXY_PROVIDER_TOKEN_KEYRING={"active_key_id":"2026-08","keys":{"2026-08":"base64-encoded-32-byte-key"}}
+```
+
+Secret JSON keyring for standalone provider-token encryption. Keys must decode
+to 32 bytes. Keep this keyring separate from `MASTER_KEY`; writes use the active
+key ID and reads accept every retained key.
+
 ### TOML Path
 
 ```text
@@ -465,6 +475,17 @@ Enables OpenTelemetry OTLP export when set.
 
 ## Standalone TOML
 {: .col-2}
+
+### Provider Token Rollout
+
+```toml
+[provider_tokens]
+allow_plaintext = true
+```
+
+Keep plaintext compatibility enabled only during an explicit encryption rollout.
+After migration and verification, set it to `false`; a missing keyring then fails
+startup.
 
 ### Provider
 

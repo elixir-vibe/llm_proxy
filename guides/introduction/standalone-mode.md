@@ -26,9 +26,7 @@ MASTER_KEY="replace-with-a-long-random-key"
 OPENAI_API_KEYS="sk-primary,sk-secondary"
 ANTHROPIC_API_KEYS="sk-ant-..."
 OPENROUTER_API_KEYS="sk-or-..."
-LLM_PROXY_PROVIDER_TOKEN_ACTIVE_KEY_ID="2026-08"
-LLM_PROXY_PROVIDER_TOKEN_KEYS='{"2026-08":"base64-encoded-32-byte-key"}'
-LLM_PROXY_PROVIDER_TOKEN_ALLOW_PLAINTEXT="true"
+LLM_PROXY_PROVIDER_TOKEN_KEYRING='{"active_key_id":"2026-08","keys":{"2026-08":"base64-encoded-32-byte-key"}}'
 DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
 PORT="4000"
 PUBLIC_URL="https://llm.example.com"
@@ -58,6 +56,9 @@ The release optionally reads `/etc/llm-proxy/config.toml`. Override that path wi
 max_retries = 1
 replay_policy = "safe_only"
 
+[provider_tokens]
+allow_plaintext = true
+
 [providers.example-service]
 adapter = "openai"
 base_url = "https://api.example.com/v1"
@@ -75,7 +76,12 @@ failure_threshold = 3
 cooldown_ms = 30000
 ```
 
-The TOML loader accepts routing policy plus provider and model data. Secrets remain in environment variables or persisted provider-token storage. If the file is absent, startup continues with environment and compiled configuration.
+The TOML loader accepts routing policy, provider-token rollout policy, and
+provider and model data. Secrets remain in environment variables or persisted
+provider-token storage. If the file is absent, startup continues with environment
+and compiled configuration. Set `provider_tokens.allow_plaintext = false` only
+after encrypting and verifying all stored credentials; with that policy, a
+missing keyring fails startup.
 
 See [Providers and Routing](../features/providers-and-routing.md) for the complete model shape.
 

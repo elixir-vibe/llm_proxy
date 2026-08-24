@@ -1,4 +1,4 @@
-defmodule LLMProxy.ProviderTokenCodec.Migration do
+defmodule LLMProxy.Provider.TokenCodec.Migration do
   @moduledoc """
   Explicit migration tools for stored provider credentials.
 
@@ -8,7 +8,7 @@ defmodule LLMProxy.ProviderTokenCodec.Migration do
 
   import Ecto.Query
 
-  alias LLMProxy.ProviderTokenCodec
+  alias LLMProxy.Provider.TokenCodec
   alias LLMProxy.Schemas.ProviderToken
   alias LLMProxy.Storage.Repo
 
@@ -22,8 +22,10 @@ defmodule LLMProxy.ProviderTokenCodec.Migration do
 
   @spec status() :: {:ok, counts()} | {:error, term()}
   def status do
-    rows = Repo.all(from(t in ProviderToken, order_by: [asc: t.id]))
-    {:ok, count(rows)}
+    with {:ok, _module, _options} <- TokenCodec.configured() do
+      rows = Repo.all(from(t in ProviderToken, order_by: [asc: t.id]))
+      {:ok, count(rows)}
+    end
   end
 
   @spec verify() :: {:ok, counts()} | {:error, term()}
@@ -94,24 +96,24 @@ defmodule LLMProxy.ProviderTokenCodec.Migration do
   defp migrate_value("", _field, _direction), do: {:ok, ""}
 
   defp migrate_value(value, field, :encrypt) do
-    if ProviderTokenCodec.encoded?(value) do
+    if TokenCodec.encoded?(value) do
       {:ok, value}
     else
-      ProviderTokenCodec.encode(value, field)
+      TokenCodec.encode(value, field)
     end
   end
 
   defp migrate_value(value, field, :decrypt) do
-    if ProviderTokenCodec.encoded?(value) do
-      ProviderTokenCodec.decode(value, field)
+    if TokenCodec.encoded?(value) do
+      TokenCodec.decode(value, field)
     else
       {:ok, value}
     end
   end
 
   defp migrate_value(value, field, :rotate) do
-    with {:ok, plaintext} <- ProviderTokenCodec.decode(value, field) do
-      ProviderTokenCodec.encode(plaintext, field)
+    with {:ok, plaintext} <- TokenCodec.decode(value, field) do
+      TokenCodec.encode(plaintext, field)
     end
   end
 
@@ -129,7 +131,7 @@ defmodule LLMProxy.ProviderTokenCodec.Migration do
 
   defp verify_row(row) do
     Enum.reduce_while(@fields, :ok, fn field, :ok ->
-      case ProviderTokenCodec.decode(Map.get(row, field), field) do
+      case TokenCodec.decode(Map.get(row, field), field) do
         {:ok, _value} -> {:cont, :ok}
         {:error, reason} -> {:halt, {:error, {:provider_token_codec, reason}}}
       end
@@ -147,7 +149,7 @@ defmodule LLMProxy.ProviderTokenCodec.Migration do
   defp count_field("", counts), do: counts
 
   defp count_field(value, counts) do
-    key = if ProviderTokenCodec.encoded?(value), do: :encrypted_fields, else: :plaintext_fields
+    key = if TokenCodec.encoded?(value), do: :encrypted_fields, else: :plaintext_fields
     Map.update!(counts, key, &(&1 + 1))
   end
 end

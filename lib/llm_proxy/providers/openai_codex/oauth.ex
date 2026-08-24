@@ -7,8 +7,8 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
   converts it into typed data and atom-keyed storage updates.
   """
 
-  alias LLMProxy.ProviderCredential
-  alias LLMProxy.ProviderTokenCodec
+  alias LLMProxy.Provider.Credential
+  alias LLMProxy.Provider.TokenCodec
   alias LLMProxy.Schemas.ProviderToken
 
   defmodule RefreshResponse do
@@ -50,9 +50,9 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
 
   @type refresh_fun :: (map(), keyword() -> {:ok, map()} | {:error, term()})
 
-  @spec refresh_if_needed(ProviderCredential.t() | ProviderToken.t(), refresh_fun()) ::
-          {:ok, ProviderCredential.t() | ProviderToken.t()} | {:error, term()}
-  def refresh_if_needed(%ProviderCredential{} = token, refresh_fun)
+  @spec refresh_if_needed(Credential.t() | ProviderToken.t(), refresh_fun()) ::
+          {:ok, Credential.t() | ProviderToken.t()} | {:error, term()}
+  def refresh_if_needed(%Credential{} = token, refresh_fun)
       when is_function(refresh_fun, 2) do
     if refreshable_expired?(token) do
       refresh(token, refresh_fun)
@@ -63,7 +63,7 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
 
   def refresh_if_needed(%ProviderToken{} = stored, refresh_fun)
       when is_function(refresh_fun, 2) do
-    with {:ok, credential} <- ProviderTokenCodec.credential(stored),
+    with {:ok, credential} <- TokenCodec.credential(stored),
          result <- refresh_if_needed(credential, refresh_fun) do
       case result do
         {:ok, ^credential} -> {:ok, stored}
@@ -72,7 +72,7 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
     end
   end
 
-  defp refreshable_expired?(%ProviderCredential{
+  defp refreshable_expired?(%Credential{
          refresh_token: refresh_token,
          expires_at: %DateTime{} = expires_at
        })
@@ -82,16 +82,16 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuth do
 
   defp refreshable_expired?(_token), do: false
 
-  defp refresh(%ProviderCredential{} = token, refresh_fun) do
+  defp refresh(%Credential{} = token, refresh_fun) do
     with {:ok, refreshed} <- refresh_fun.(refresh_request(token), []),
          {:ok, credentials} <- from_refresh_response(refreshed),
          {:ok, stored} <-
            LLMProxy.Storage.update_token_oauth(token.id, storage_attrs(credentials)) do
-      ProviderTokenCodec.for_provider(stored)
+      TokenCodec.for_provider(stored)
     end
   end
 
-  defp refresh_request(%ProviderCredential{} = token) do
+  defp refresh_request(%Credential{} = token) do
     %{access: token.token, refresh: token.refresh_token, expires: expires_ms(token.expires_at)}
   end
 
