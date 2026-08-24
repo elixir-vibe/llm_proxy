@@ -87,6 +87,7 @@ if Code.ensure_loaded?(Incant) do
       assert disable.opts[:callback] == {LLMProxy.Admin.Resources.ProviderToken, :disable}
       assert disable.opts[:available_if] == [enabled: true]
       assert disable.opts[:confirm] == "Disable this provider token?"
+      assert Enum.find(provider_metadata.table.columns, &(&1.name == :proxy)).opts[:sensitive]
 
       assert [%{id: "operations", title: "Operations"} = dashboard] = contract.dashboards
 
