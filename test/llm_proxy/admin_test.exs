@@ -23,6 +23,7 @@ if Code.ensure_loaded?(Incant) do
 
       assert Enum.map(api_key.table.columns, & &1.id) == [
                "name",
+               "enabled",
                "total_spend_usd",
                "input_tokens",
                "output_tokens",
@@ -33,13 +34,14 @@ if Code.ensure_loaded?(Incant) do
       assert Enum.map(api_key.table.columns, & &1.opts[:priority]) == [
                :primary,
                :primary,
+               :primary,
                :secondary,
                :secondary,
                :tertiary,
                :secondary
              ]
 
-      assert Enum.map(api_key.table.actions, & &1.id) == ["delete"]
+      assert Enum.map(api_key.table.actions, & &1.id) == ["delete", "disable", "enable"]
       assert Enum.map(api_key.table.page_actions, & &1.id) == ["create"]
       refute Map.has_key?(api_key.opts, :schema)
 

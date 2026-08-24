@@ -10,6 +10,7 @@ defmodule LLMProxy.Schemas.ApiKey do
   schema "api_keys" do
     field(:hash, :string)
     field(:name, :string)
+    field(:enabled, :boolean, default: true)
     field(:quota_4h_input, :integer)
     field(:quota_4h_output, :integer)
     field(:quota_week_input, :integer)
@@ -38,6 +39,7 @@ defmodule LLMProxy.Schemas.ApiKey do
       :id,
       :hash,
       :name,
+      :enabled,
       :quota_4h_input,
       :quota_4h_output,
       :quota_week_input,

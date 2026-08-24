@@ -114,6 +114,20 @@ defmodule LLMProxy.Plugs.AuthTest do
       assert conn.halted
       assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "Invalid API key"
     end
+
+    test "returns 401 for a disabled API key" do
+      {:ok, key, raw_key} = Storage.create_key("disabled-user")
+      assert {:ok, _key} = Storage.set_key_enabled(key.id, false)
+
+      conn =
+        conn(:get, "/")
+        |> put_req_header("authorization", "Bearer #{raw_key}")
+        |> call_auth()
+
+      assert conn.status == 401
+      assert conn.halted
+      assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "Invalid API key"
+    end
   end
 
   describe "header precedence" do

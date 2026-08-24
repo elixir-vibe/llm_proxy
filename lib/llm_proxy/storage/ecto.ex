@@ -39,7 +39,7 @@ defmodule LLMProxy.Storage.Ecto do
 
   def find_key(raw_key) do
     hash = hash_key(raw_key)
-    Repo.get_by(ApiKey, hash: hash)
+    Repo.get_by(ApiKey, hash: hash, enabled: true)
   end
 
   def list_keys(opts \\ %{}) do
@@ -64,6 +64,13 @@ defmodule LLMProxy.Storage.Ecto do
 
       key ->
         delete_key_rows(key)
+    end
+  end
+
+  def set_key_enabled(id, enabled) do
+    case Repo.get(ApiKey, id) do
+      nil -> {:error, :not_found}
+      key -> key |> ApiKey.changeset(%{enabled: enabled}) |> Repo.update()
     end
   end
 

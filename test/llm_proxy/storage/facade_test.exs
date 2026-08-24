@@ -8,6 +8,7 @@ defmodule LLMProxy.Storage.FacadeTest do
     def find_key(raw_key), do: %{raw_key: raw_key}
     def list_keys(opts), do: [opts]
     def delete_key(id), do: {:ok, id}
+    def set_key_enabled(id, enabled), do: {:ok, {id, enabled}}
     def update_key_usage(key, usage), do: {key, usage}
     def update_key_quota(id, quota_attrs), do: {:ok, {id, quota_attrs}}
     def update_key_models(id, allowed_models), do: {:ok, {id, allowed_models}}
