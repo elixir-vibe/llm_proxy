@@ -2,6 +2,7 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
   use ExUnit.Case
 
   alias Ecto.Adapters.SQL.Sandbox
+  alias LLMProxy.{ConcurrencyLimiter, Limit}
   alias LLMProxy.HTTP.Routes.Chat
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
@@ -310,7 +311,11 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
   test "stream remains active until the response stream finishes" do
     Application.put_env(:llm_proxy, :blocking_stream_parent, self())
-    {:ok, _key, raw_key} = Storage.create_key("blocking-stream-user")
+
+    {:ok, key, raw_key} =
+      Storage.create_key("blocking-stream-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
 
     task =
       Task.async(fn ->
@@ -332,7 +337,21 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     send(task_pid, :start_blocking_stream)
 
     assert_receive {:blocking_stream_waiting, stream_pid}
+    assert %{active: 1, limit: 1} = ConcurrencyLimiter.status(key)
     assert %{active: %{streams: 1, total: 1}, serving: true} = LLMProxy.Drain.status()
+
+    rejected_conn =
+      TestSupport.json_conn(:post, "/completions", %{
+        "model" => "fake-chat-model",
+        "messages" => [%{"role" => "user", "content" => "second"}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> Chat.call(Chat.init([]))
+
+    assert rejected_conn.status == 429
+    assert Plug.Conn.get_resp_header(rejected_conn, "retry-after") == ["1"]
+    assert get_in(Jason.decode!(rejected_conn.resp_body), ["error", "code"]) == "rate_limit_error"
+
     assert %{draining: true, ready: false} = LLMProxy.Drain.start()
     assert {:error, :timeout} = LLMProxy.Drain.await_empty(10)
 
@@ -342,6 +361,7 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     assert conn.status == 200
     assert conn.state == :chunked
     assert :ok = LLMProxy.Drain.await_empty(100)
+    assert %{active: 0, limit: 1} = ConcurrencyLimiter.status(key)
     assert %{active: %{streams: 0, total: 0}, serving: false} = LLMProxy.Drain.status()
   end
 

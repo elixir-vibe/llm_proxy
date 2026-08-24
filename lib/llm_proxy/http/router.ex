@@ -26,7 +26,8 @@ defmodule LLMProxy.HTTP.Router do
       ready: drain.ready,
       draining: drain.draining,
       serving: drain.serving,
-      active: drain.active
+      active: drain.active,
+      concurrency: LLMProxy.ConcurrencyLimiter.status()
     })
   end
 

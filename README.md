@@ -32,7 +32,7 @@ curl http://127.0.0.1:4000/v1/chat/completions \
 - **Connect your applications once.** Point any OpenAI-compatible client at LLMProxy, use the Anthropic Messages API, or call it directly from Elixir. Stop duplicating provider adapters, authentication, retries, and usage tracking in every product.
 - **Change providers without changing clients.** Applications request a public name such as `fast`; you can move it from OpenAI to Anthropic, OpenRouter, or a private endpoint by changing gateway configuration instead of application code.
 - **Keep working when a provider does not.** Route across multiple models, providers, regions, or credentials. Timeouts, retries, health-aware fallbacks, circuit breakers, and load-balancing strategies keep individual failures away from your users.
-- **Control spend before the invoice arrives.** Issue keys per application, customer, or team; restrict which models they can call; and enforce token, request, cache, and dollar budgets. See usage and estimated cost in one place.
+- **Control spend before the invoice arrives.** Issue keys per application, customer, or team; restrict which models they can call; and enforce concurrent-request, token, request, cache, and dollar limits. See usage and estimated cost in one place.
 - **Stop spreading provider keys across services.** Store upstream credentials in the gateway, rotate or pool them centrally, and give applications LLMProxy keys with only the access they need.
 - **Self-host without adding a Python control plane.** Run the bundled OTP service as a LiteLLM-style gateway, or embed the same capabilities directly in an Elixir/Phoenix release. Your prompts, traces, credentials, and operational data remain under your control.
 

@@ -5,6 +5,9 @@
 ### Added
 
 - API keys now have explicit content capture, disabled by default. Usage accounting stays active without prompt extraction, traces can remain body-free, and the Incant message surface marks captured text as sensitive.
+- API keys can now set an in-memory concurrent-request limit with stream-safe,
+  process-monitored leases across in-process, ReqLLM, SafeRPC, and HTTP
+  generation or moderation calls.
 
 ### Migration
 

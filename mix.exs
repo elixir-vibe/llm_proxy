@@ -122,6 +122,7 @@ defmodule LLMProxy.MixProject do
           LLMProxy.Phoenix.Router
         ],
         Operations: [
+          LLMProxy.ConcurrencyLimiter,
           LLMProxy.Drain,
           LLMProxy.Ops,
           LLMProxy.ReleaseTasks,
@@ -140,9 +141,9 @@ defmodule LLMProxy.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:quackdb, "~> 0.5.15"},
-      {:req_llm, "~> 1.18"},
-      {:req, "~> 0.6"},
-      {:llm_db, "~> 2026.3", runtime: false},
+      {:req_llm, "~> 1.21"},
+      {:req, "~> 0.7"},
+      {:llm_db, "~> 2026.8", runtime: false},
       {:dotenvy, "~> 1.1"},
       {:toml, "~> 0.7"},
       {:jason, "~> 1.4"},
