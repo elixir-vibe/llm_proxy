@@ -67,10 +67,11 @@ config :llm_proxy,
   rpc_socket: "/run/llm-proxy/rpc.sock"
 ```
 
-Or in the standalone release:
+Or in standalone TOML:
 
-```bash
-LLM_PROXY_RPC_SOCKET="/run/llm-proxy/rpc.sock"
+```toml
+[server]
+rpc_socket = "/run/llm-proxy/rpc.sock"
 ```
 
 When a socket is configured, `LLMProxy.RPC.AdminServer` serves two operation namespaces:

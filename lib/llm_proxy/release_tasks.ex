@@ -121,9 +121,7 @@ defmodule LLMProxy.ReleaseTasks do
   end
 
   defp ops_call(op, payload \\ %{}, opts \\ []) do
-    socket =
-      LLMProxy.Config.rpc_socket() || System.get_env("LLM_PROXY_RPC_SOCKET") ||
-        raise "LLM_PROXY_RPC_SOCKET is not configured"
+    socket = LLMProxy.Config.rpc_socket() || raise "LLMProxy RPC socket is not configured"
 
     with :ok <- SafeRPC.Atoms.prepare(LLMProxy.Ops.client_atoms()),
          :ok <- SafeRPC.prepare(socket) do

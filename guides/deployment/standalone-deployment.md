@@ -52,7 +52,7 @@ A typical host uses:
 ```text
 /opt/llm-proxy/releases/<release>/    immutable unpacked release
 /opt/llm-proxy/current/               symlink to active release
-/etc/llm-proxy/config.toml            non-secret provider and model data
+/etc/llm-proxy/config.toml            non-secret runtime, provider, and model data
 /var/lib/llm-proxy/llm_proxy.duckdb   persistent database
 /run/llm-proxy/rpc.sock               optional SafeRPC socket
 ```
@@ -61,33 +61,22 @@ Keep the database and runtime directory outside immutable release paths. Do not 
 
 ## Runtime environment
 
-Minimal production variables:
+The standalone environment contains only secrets and the optional TOML locator:
 
 ```bash
 MASTER_KEY="replace-with-a-long-random-key"
-DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
-PORT="4000"
-PUBLIC_URL="https://llm.example.com"
-```
-
-At least one provider pool also needs credentials:
-
-```bash
-OPENAI_API_KEYS="sk-..."
-ANTHROPIC_API_KEYS="sk-ant-..."
-OPENROUTER_API_KEYS="sk-or-..."
-LLM_PROXY_PROVIDER_KEYS='{"custom-production":["secret"]}'
-```
-
-Optional service integration:
-
-```bash
+LLM_PROXY_PROVIDER_KEYS='{"openai":["sk-..."],"custom-production":["secret"]}'
 LLM_PROXY_CONFIG_TOML="/etc/llm-proxy/config.toml"
-LLM_PROXY_RPC_SOCKET="/run/llm-proxy/rpc.sock"
-OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
 ```
 
-See the [Configuration Cheatsheet](../reference/configuration.cheatmd) for all supported variables.
+Add `LLM_PROXY_PROVIDER_TOKEN_KEYRING` when using encrypted provider-token
+storage. Configure the HTTP listener, public URL, database, RPC socket, routing,
+and OTLP endpoint in TOML. Provider-specific API-key and Codex-token environment
+variables are not supported; use named API-key pools and persisted Codex OAuth
+credentials.
+
+See the [Configuration Cheatsheet](../reference/configuration.cheatmd) for the
+complete environment and TOML schema.
 
 ## Migrate before startup
 
@@ -141,7 +130,7 @@ LLMProxy sends SSE comment heartbeats during upstream silence, but every interme
 
 ## Graceful replacement
 
-When `LLM_PROXY_RPC_SOCKET` is configured, release tasks can coordinate drain state through the running service:
+When `server.rpc_socket` is configured in TOML, release tasks can coordinate drain state through the running service:
 
 ```bash
 bin/llm_proxy eval 'LLMProxy.ReleaseTasks.drain_start()'

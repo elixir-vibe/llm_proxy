@@ -2,14 +2,26 @@ defmodule LLMProxy.Config.ProviderTest do
   use ExUnit.Case, async: true
 
   alias LLMProxy.Config.Provider
+  alias LLMProxy.Storage.Repo.QuackDB
 
   test "load/2 merges TOML config when file exists" do
     path = tmp_path("llm-proxy-config.toml")
 
     File.write!(path, """
+    [server]
+    port = 4101
+    public_url = "https://llm.example.com"
+
+    [storage]
+    database = "/var/lib/llm-proxy/main.duckdb"
+    quackdb_uri = "http://127.0.0.1:9494"
+
     [routing]
     max_retries = 2
     replay_policy = "safe_only"
+
+    [telemetry]
+    otlp_endpoint = "http://127.0.0.1:4318"
 
     [provider_tokens]
     allow_plaintext = false
@@ -25,7 +37,15 @@ defmodule LLMProxy.Config.ProviderTest do
     model = "gpt-5.3-codex-spark"
     """)
 
-    config = Provider.load([], path: path)
+    initial = [
+      llm_proxy: [
+        http: [ip: {127, 0, 0, 1}, port: 4000],
+        quackdb_server: [name: LLMProxy.QuackDBServer, duckdb: :managed]
+      ],
+      opentelemetry: [span_processor: :batch, traces_exporter: :none]
+    ]
+
+    config = Provider.load(initial, path: path)
 
     assert Keyword.get(config, :llm_proxy)[:providers]["openai-codex"].base_url ==
              "https://chatgpt.com/backend-api"
@@ -33,9 +53,33 @@ defmodule LLMProxy.Config.ProviderTest do
     llm_proxy = Keyword.fetch!(config, :llm_proxy)
 
     assert [%{name: "codex", routes: [%{to: "openai-codex"}]}] = llm_proxy[:models]
+    assert llm_proxy[:http] == [ip: {127, 0, 0, 1}, port: 4101]
+    assert llm_proxy[:public_url] == "https://llm.example.com"
+
+    assert llm_proxy[:quackdb_server] == [
+             name: LLMProxy.QuackDBServer,
+             duckdb: :managed,
+             database: "/var/lib/llm-proxy/main.duckdb"
+           ]
+
+    assert llm_proxy[QuackDB] == [uri: "http://127.0.0.1:9494"]
     assert llm_proxy[:max_retries] == 2
     assert llm_proxy[:replay_policy] == :safe_only
     refute llm_proxy[:provider_token_allow_plaintext]
+    assert config[:opentelemetry] == [span_processor: :batch, traces_exporter: :otlp]
+    assert config[:opentelemetry_exporter] == [otlp_endpoint: "http://127.0.0.1:4318"]
+  end
+
+  test "load/2 reports invalid TOML without echoing file contents" do
+    path = tmp_path("invalid.toml")
+    File.write!(path, ~s([server]\nport = "seeded-secret"))
+
+    error =
+      assert_raise ArgumentError, "server.port must be an integer from 1 to 65535", fn ->
+        Provider.load([], path: path)
+      end
+
+    refute Exception.message(error) =~ "seeded-secret"
   end
 
   test "load/2 is a no-op when file is absent" do

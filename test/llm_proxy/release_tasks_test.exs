@@ -22,7 +22,6 @@ defmodule LLMProxy.ReleaseTasksTest do
 
   setup do
     previous = Application.get_env(:llm_proxy, :rpc_socket)
-    previous_env = System.get_env("LLM_PROXY_RPC_SOCKET")
     previous_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
 
     on_exit(fn ->
@@ -30,12 +29,6 @@ defmodule LLMProxy.ReleaseTasksTest do
         Application.put_env(:llm_proxy, :rpc_socket, previous)
       else
         Application.delete_env(:llm_proxy, :rpc_socket)
-      end
-
-      if previous_env do
-        System.put_env("LLM_PROXY_RPC_SOCKET", previous_env)
-      else
-        System.delete_env("LLM_PROXY_RPC_SOCKET")
       end
 
       case previous_codec do
@@ -65,22 +58,6 @@ defmodule LLMProxy.ReleaseTasksTest do
     assert :ok = ReleaseTasks.drain_await(100)
     assert :ok = ReleaseTasks.drain_cancel()
     assert %{draining: false} = LLMProxy.Drain.status()
-
-    GenServer.stop(server)
-  end
-
-  test "release tasks use the RPC socket environment in a clean eval-style VM" do
-    socket =
-      Path.join(
-        System.tmp_dir!(),
-        "llm-proxy-release-drain-env-#{System.unique_integer([:positive])}.sock"
-      )
-
-    Application.delete_env(:llm_proxy, :rpc_socket)
-    System.put_env("LLM_PROXY_RPC_SOCKET", socket)
-    {:ok, server} = AdminServer.start_link(socket: socket)
-
-    assert :ok = ReleaseTasks.drain_status()
 
     GenServer.stop(server)
   end
