@@ -138,13 +138,18 @@ LLMProxy resolves an ordered list of deployment attempts, then:
 
 1. skips deployments with open circuit breakers;
 2. picks an available credential from the route's token pool;
-3. executes with the route timeout;
-4. applies `Retry-After` cooldowns to rate-limited credentials;
-5. records retryable deployment failures;
-6. falls through to the next eligible route;
-7. records the provider and model that ultimately handled the request.
+3. checks the finite provider-dispatch budget;
+4. executes with the route timeout;
+5. classifies failure replay as safe, uncertain, or forbidden;
+6. applies `Retry-After` cooldowns to rate-limited credentials;
+7. falls through only when the replay policy permits it;
+8. records the provider and model that ultimately handled the request.
 
-Authentication failures and other non-retryable errors are returned directly. Public HTTP and SSE failures use the endpoint's native protocol envelope: OpenAI-compatible APIs contain one `error` object, while Anthropic Messages uses its `type: "error"` envelope. Structured provider message, type, code, status, and parameter fields are normalized and bounded without duplicate wrapper layers; headers, credentials, request bodies, tool arguments, internal Elixir terms, and synthetic inspected stream reasons are never forwarded. Timeouts and retryable upstream failures participate in fallback. Circuit breakers move through closed, open, and half-open states per deployment.
+Authentication failures and other forbidden replays are returned directly. Unavailable credentials, circuit skips, clear connection failures (including stream setup failures), and 429 refusals can safely move to another route. A timeout or 5xx response is uncertain because the upstream can have accepted billable work. The default `:safe_only` policy does not replay uncertain failures. Set `replay_policy: :allow_uncertain` only when duplicate cost and side effects are acceptable. Once stream setup succeeds and an enumerable is returned, a later lazy failure never starts another provider, so visible output is never duplicated.
+
+`max_retries + 1` is the strict dispatch limit for every request. Open-circuit and unsupported-protocol skips do not consume a dispatch. Routing telemetry includes the attempt number, limit, replay safety, decision, and reason. It never includes request content. Standalone routing policy belongs in the TOML configuration file rather than environment variables.
+
+Public HTTP and SSE failures use the endpoint's native protocol envelope: OpenAI-compatible APIs contain one `error` object, while Anthropic Messages uses its `type: "error"` envelope. Structured provider message, type, code, status, and parameter fields are normalized and bounded without duplicate wrapper layers; headers, credentials, request bodies, tool arguments, internal Elixir terms, and synthetic inspected stream reasons are never forwarded. Circuit breakers move through closed, open, and half-open states per deployment.
 
 ## Built-in providers
 

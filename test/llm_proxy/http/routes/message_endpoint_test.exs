@@ -1,6 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.MessageEndpointTest do
   use ExUnit.Case
 
+  alias LLMProxy.{ConcurrencyLimiter, Limit}
   alias LLMProxy.HTTP.Routes.MessageEndpoint
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
@@ -248,6 +249,35 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpointTest do
 
     assert conn.status == 429
     assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "provider failed"
+  end
+
+  test "returns an Anthropic rate-limit error when concurrent capacity is full" do
+    {:ok, key, raw_key} =
+      Storage.create_key("messages-concurrent-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    assert {:ok, lease} = ConcurrencyLimiter.acquire(key)
+    on_exit(fn -> ConcurrencyLimiter.release(lease) end)
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{
+        "model" => "fake-messages-model",
+        "messages" => [%{"role" => "user", "content" => "hello"}]
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> MessageEndpoint.call(MessageEndpoint.init([]))
+
+    assert conn.status == 429
+    assert Plug.Conn.get_resp_header(conn, "retry-after") == ["1"]
+
+    assert Jason.decode!(conn.resp_body) == %{
+             "type" => "error",
+             "error" => %{
+               "type" => "rate_limit_error",
+               "message" => ConcurrencyLimiter.error_message()
+             }
+           }
   end
 
   test "returns 404 for unknown routes" do

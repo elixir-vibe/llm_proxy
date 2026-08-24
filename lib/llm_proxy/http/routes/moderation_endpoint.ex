@@ -7,6 +7,7 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
 
   require Logger
 
+  alias LLMProxy.ConcurrencyLimiter
   alias LLMProxy.HTTP
   alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
@@ -64,6 +65,15 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpoint do
   end
 
   defp moderate(conn, api_key, %CreateRequest{} = attrs, trace_id) do
+    case ConcurrencyLimiter.run(api_key, fn ->
+           run_moderation(conn, api_key, attrs, trace_id)
+         end) do
+      {:error, {:limit_exceeded, _limit}} -> ErrorResponse.send_concurrency_limit_openai(conn)
+      result -> result
+    end
+  end
+
+  defp run_moderation(conn, api_key, %CreateRequest{} = attrs, trace_id) do
     Logger.info("Moderation from #{api_key.name} model=#{attrs.model}")
 
     case TokenPool.pick_token_by_kind("openai", "api-key", api_key.id) do

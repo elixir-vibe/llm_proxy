@@ -1,6 +1,6 @@
 # Configuration
 
-Library mode uses ordinary Elixir application configuration. Standalone mode additionally reads environment variables and optional TOML provider/model data.
+Library mode uses ordinary Elixir application configuration. Standalone mode reads non-secret runtime and routing data from strict TOML, while environment variables are reserved for secrets and the TOML file location.
 
 ## Application Options
 {: .col-2}
@@ -93,6 +93,26 @@ config :llm_proxy, token_cooldown_ms: :timer.hours(4)
 
 Default credential cooldown after rate limiting. Default: 4 hours.
 
+### Provider Token Codec
+
+```elixir
+config :llm_proxy,
+  provider_token_codec: {
+    LLMProxy.Provider.TokenCodec.AESGCM,
+    active_key_id: "2026-08",
+    keys: %{
+      "2026-08" => System.fetch_env!("PROVIDER_TOKEN_KEY_2026_08"),
+      "2026-02" => System.fetch_env!("PROVIDER_TOKEN_KEY_2026_02")
+    },
+    allow_plaintext: true
+  }
+```
+
+Codec for provider API keys and OAuth tokens. AES-GCM keys must decode to 32
+bytes. This keyring is separate from `:master_key`. Writes use only the active
+key ID. Reads accept all key IDs in the keyring. The default plaintext codec is
+for compatibility and does not protect stored credentials.
+
 ### Deployment Failure Threshold
 
 ```elixir
@@ -115,7 +135,31 @@ Default open-circuit cooldown. Default: 30 seconds.
 config :llm_proxy, max_retries: 1
 ```
 
-Compatibility retry/fallback limit for configured fallback chains. Default: 1.
+Compatibility retry/fallback limit for configured fallback chains. Default: 1. The strict provider-dispatch budget is `max_retries + 1`; open-circuit and unsupported-protocol route skips do not consume it.
+
+Standalone TOML:
+
+```toml
+[routing]
+max_retries = 1
+```
+
+### Replay Policy
+
+```elixir
+config :llm_proxy, replay_policy: :safe_only
+```
+
+`:safe_only` permits fallback only when LLMProxy has evidence that the upstream did not accept work, such as unavailable credentials, a clear connection failure, or a 429 refusal. This is the default.
+
+`:allow_uncertain` also permits replay after timeouts and 5xx responses. Use it only when duplicate cost and side effects are acceptable. It restores the earlier fallback behavior.
+
+Standalone TOML:
+
+```toml
+[routing]
+replay_policy = "safe_only"
+```
 
 ### Fallbacks
 
@@ -304,48 +348,26 @@ MASTER_KEY=...
 
 Bootstrap/operator credential.
 
-### Port
-
-```text
-PORT=4000
-```
-
-Standalone loopback HTTP port. Default: `4000`.
-
-### Database Path
-
-```text
-DATABASE_PATH=/var/lib/llm-proxy/llm_proxy.duckdb
-```
-
-DuckDB database file. Default: `./llm_proxy.duckdb`.
-
-### Public URL
-
-```text
-PUBLIC_URL=https://llm.example.com
-```
-
-Public URL for setup helpers and provider headers.
-
-### Provider Keys
-
-```text
-OPENAI_API_KEYS=sk-a,sk-b
-ANTHROPIC_API_KEYS=sk-ant-...
-OPENROUTER_API_KEYS=sk-or-...
-OPENAI_CODEX_TOKENS=access|refresh|expires_ms|account
-```
-
-Comma-separated bootstrap credentials.
-
-### Named Provider Keys
+### Provider API-Key Pools
 
 ```text
 LLM_PROXY_PROVIDER_KEYS={"example-production":["secret"]}
 ```
 
-JSON object mapping token-pool names to credential arrays.
+Secret JSON object mapping token-pool names to API-key arrays. Use pool names
+such as `openai`, `anthropic`, or `openrouter` for built-in providers. Codex OAuth
+credentials are provisioned through the admin login flow and persisted in
+provider-token storage.
+
+### Provider Token Keyring
+
+```text
+LLM_PROXY_PROVIDER_TOKEN_KEYRING={"active_key_id":"2026-08","keys":{"2026-08":"base64-encoded-32-byte-key"}}
+```
+
+Secret JSON keyring for standalone provider-token encryption. Keys must decode
+to 32 bytes. Keep this keyring separate from `MASTER_KEY`; writes use the active
+key ID and reads accept every retained key.
 
 ### TOML Path
 
@@ -353,74 +375,62 @@ JSON object mapping token-pool names to credential arrays.
 LLM_PROXY_CONFIG_TOML=/etc/llm-proxy/config.toml
 ```
 
-Provider/model data file. Default: `/etc/llm-proxy/config.toml`.
-
-### RPC Socket
-
-```text
-LLM_PROXY_RPC_SOCKET=/run/llm-proxy/rpc.sock
-```
-
-SafeRPC Unix socket path.
-
-### Body Limit
-
-```text
-LLM_PROXY_BODY_LIMIT_BYTES=32000000
-```
-
-Positive integer byte limit. Default: 32 MB.
-
-### Provider Connection Timeout
-
-```text
-LLM_PROXY_PROVIDER_CONNECT_TIMEOUT_MS=10000
-```
-
-Positive finite WebSocket connection/upgrade deadline in milliseconds. Established OpenAI Codex streams use no default transport receive deadline.
-
-### Fallbacks
-
-```text
-LLM_FALLBACKS={"primary":["secondary"]}
-```
-
-JSON compatibility fallback map.
-
-### Max Retries
-
-```text
-LLM_MAX_RETRIES=1
-```
-
-Compatibility fallback count. Default: `1`.
-
-### QuackDB URI
-
-```text
-QUACKDB_URI=http://127.0.0.1:9494
-```
-
-HTTP URI used by the QuackDB Ecto adapter.
-
-### QuackDB Endpoint
-
-```text
-QUACKDB_ENDPOINT=quack:localhost:9494
-```
-
-Managed QuackDB listener endpoint.
-
-### OTLP Endpoint
-
-```text
-OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
-```
-
-Enables OpenTelemetry OTLP export when set.
+Standalone TOML data file. Default: `/etc/llm-proxy/config.toml`.
 
 ## Standalone TOML
 {: .col-2}
+
+### Server
+
+```toml
+[server]
+port = 4000
+public_url = "https://llm.example.com"
+body_limit_bytes = 32000000
+rpc_socket = "/run/llm-proxy/rpc.sock"
+```
+
+The listener remains bound to loopback. Omit `rpc_socket` to disable SafeRPC.
+
+### Storage
+
+```toml
+[storage]
+database = "/var/lib/llm-proxy/llm_proxy.duckdb"
+quackdb_uri = "http://127.0.0.1:9494"
+quackdb_endpoint = "quack:localhost:9494"
+```
+
+### Routing Runtime
+
+```toml
+[routing]
+max_retries = 1
+replay_policy = "safe_only"
+provider_connect_timeout_ms = 10000
+```
+
+Fallback deployments belong in model routes, not a separate fallback map.
+
+### Telemetry
+
+```toml
+[telemetry]
+otlp_endpoint = "http://127.0.0.1:4318"
+```
+
+Omit the endpoint to keep trace export disabled.
+
+### Provider Token Rollout
+
+```toml
+[provider_tokens]
+allow_plaintext = true
+```
+
+Keep plaintext compatibility enabled only during an explicit encryption rollout.
+After migration and verification, set it to `false`; a missing keyring then fails
+startup.
 
 ### Provider
 

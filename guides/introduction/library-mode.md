@@ -33,6 +33,11 @@ Set `http_enabled: false` unless you intentionally want LLMProxy to start its ow
 
 LLMProxy detects the configured repo adapter through `repo.__adapter__/0`. The storage implementation supports SQLite, PostgreSQL, MySQL-compatible adapters, and QuackDB/DuckDB. Database adapter dependencies belong to the host application.
 
+Provider-token encryption does not require a custom Ecto type or repo. Configure
+`LLMProxy.Provider.TokenCodec.AESGCM` with a separate 32-byte keyring. Keep the
+active and prior keys available during rotation. See the configuration reference
+for the complete codec options.
+
 ## Migrations
 
 With Igniter installed, add LLMProxy's migration path to the host aliases:
@@ -89,7 +94,9 @@ Pass either:
 - `:api_key` with a raw LLMProxy key or an existing API-key schema/map; or
 - `:actor` with `%LLMProxy.Actor{}`.
 
-The key determines model access, quotas, budget limits, attribution, and stored usage. The master key is accepted for bootstrap and operator calls but should not be distributed to ordinary clients.
+The key determines model access, quotas, budget and concurrent-request limits,
+attribution, and stored usage. The master key is accepted for bootstrap and
+operator calls but should not be distributed to ordinary clients.
 
 ## ReqLLM provider
 

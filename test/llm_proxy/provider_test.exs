@@ -1,6 +1,9 @@
 defmodule LLMProxy.ProviderTest do
   use ExUnit.Case
 
+  import ExUnit.CaptureLog
+
+  alias LLMProxy.{ConcurrencyLimiter, Limit}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
@@ -57,7 +60,7 @@ defmodule LLMProxy.ProviderTest do
   end
 
   test "LLMProxy.chat calls Provider in-process and records usage" do
-    {:ok, key, _raw_key} = Storage.create_key("local-user")
+    {:ok, key, _raw_key} = Storage.create_key("local-user", %{capture_content: true})
 
     assert {:ok, response} =
              LLMProxy.chat("hello", model: "req-llm-provider-model", api_key: key)
@@ -72,6 +75,53 @@ defmodule LLMProxy.ProviderTest do
 
     assert [%{user_message: "hello", input_tokens: 4, output_tokens: 3}] =
              Storage.get_messages()
+  end
+
+  test "LLMProxy.chat records usage without capturing prompt content by default" do
+    secret = "seeded-private-prompt-7c2f"
+    {:ok, key, _raw_key} = Storage.create_key("private-local-user")
+    handler_id = "private-content-#{System.unique_integer([:positive])}"
+    test_pid = self()
+
+    :ok =
+      :telemetry.attach_many(
+        handler_id,
+        [
+          [:llm_proxy, :routing, :attempt, :start],
+          [:llm_proxy, :routing, :attempt, :stop]
+        ],
+        fn event, measurements, metadata, _config ->
+          send(test_pid, {:routing_event, event, measurements, metadata})
+        end,
+        nil
+      )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    log =
+      capture_log(fn ->
+        assert {:ok, response} =
+                 LLMProxy.chat(secret, model: "req-llm-provider-model", api_key: key)
+
+        assert response.usage.input_tokens == 4
+        assert response.usage.output_tokens == 3
+      end)
+
+    refute log =~ secret
+    assert Storage.get_messages() == []
+
+    [updated_key] = Storage.list_keys()
+    assert updated_key.input_tokens == 4
+    assert updated_key.output_tokens == 3
+
+    stats = Storage.get_stats()
+    assert stats.total_requests == 1
+    refute inspect(stats) =~ secret
+
+    assert_receive {:routing_event, [:llm_proxy, :routing, :attempt, :start], _, start_metadata}
+    assert_receive {:routing_event, [:llm_proxy, :routing, :attempt, :stop], _, stop_metadata}
+    refute inspect(start_metadata) =~ secret
+    refute inspect(stop_metadata) =~ secret
   end
 
   test "Provider.stream returns guarded streams and records usage after consumption" do
@@ -111,5 +161,37 @@ defmodule LLMProxy.ProviderTest do
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 4
     assert updated_key.output_tokens == 3
+  end
+
+  test "local and ReqLLM calls share the concurrent-request limit" do
+    {:ok, key, raw_key} =
+      Storage.create_key("concurrent-provider-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    assert {:ok, lease} = ConcurrencyLimiter.acquire(key)
+    on_exit(fn -> ConcurrencyLimiter.release(lease) end)
+
+    assert {:error, {:concurrency_limit, 1}} =
+             LLMProxy.chat("hello", model: "req-llm-provider-model", api_key: key)
+
+    model = %{
+      id: "req-llm-provider-model",
+      provider: :llm_proxy,
+      model: "req-llm-provider-model"
+    }
+
+    assert {:error,
+            %ReqLLM.Error.API.Request{
+              status: 429,
+              response_body: %{
+                "error" => %{
+                  "code" => "rate_limit_error",
+                  "message" => message
+                }
+              }
+            }} = ReqLLM.Generation.generate_text(model, "hello", api_key: raw_key)
+
+    assert message == ConcurrencyLimiter.error_message()
   end
 end

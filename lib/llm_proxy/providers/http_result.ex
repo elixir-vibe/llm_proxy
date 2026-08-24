@@ -35,6 +35,7 @@ defmodule LLMProxy.Providers.HTTPResult do
     error = ErrorProjection.project(exception)
 
     result(error.message, error.status, nil,
+      replay_safety: ErrorProjection.replay_safety(exception),
       provider_body: %{"error" => ErrorProjection.client_error(exception)}
     )
   end

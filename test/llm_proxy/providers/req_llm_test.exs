@@ -3,6 +3,7 @@ defmodule LLMProxy.Providers.ReqLLMTest do
 
   alias Elixir.ReqLLM.StreamEvent
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.Provider.Credential
   alias LLMProxy.Providers.{Attempt, Execution, ReqLLM, Result}
   alias LLMProxy.Providers.ReqLLM.Projection
   alias LLMProxy.Storage
@@ -101,7 +102,9 @@ defmodule LLMProxy.Providers.ReqLLMTest do
       messages: []
     }
 
-    assert {:ok, %Result{token: ^token, response: response}} =
+    token_id = token.id
+
+    assert {:ok, %Result{token: %Credential{id: ^token_id}, response: response}} =
              Execution.call_attempts([attempt], request, "user-1")
 
     assert get_in(response, ["choices", Access.at(0), "message"]) == %{
@@ -323,7 +326,9 @@ defmodule LLMProxy.Providers.ReqLLMTest do
       "messages" => [%{"role" => "user", "content" => "hello"}]
     }
 
-    assert {:error, %Result{token: ^token, status: status, error: error}} =
+    token_id = token.id
+
+    assert {:error, %Result{token: %Credential{id: ^token_id}, status: status, error: error}} =
              ReqLLM.call(body, "user-1", attempt)
 
     assert status == 429

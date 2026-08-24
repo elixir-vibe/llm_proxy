@@ -58,14 +58,15 @@ Continue with [Library Mode](library-mode.md).
 
 Choose standalone mode when multiple applications or external clients need one gateway. The bundled release owns HTTP serving, DuckDB storage, provider credentials, and operational state.
 
-A minimal runtime environment is:
+A minimal secret environment is:
 
 ```bash
 export MASTER_KEY="replace-with-a-long-random-key"
-export OPENAI_API_KEYS="sk-..."
-export DATABASE_PATH="./llm_proxy.duckdb"
-export PORT="4000"
+export LLM_PROXY_PROVIDER_KEYS='{"openai":["sk-..."]}'
 ```
+
+Set the port, database, routing policy, and other non-secret runtime values in
+the standalone TOML file described in the next guide.
 
 Continue with [Standalone Mode](standalone-mode.md) and [Standalone Deployment](../deployment/standalone-deployment.md).
 
@@ -96,7 +97,10 @@ to = "openai"
 model = "gpt-4.1-mini"
 ```
 
-Provider credentials are secrets. Put them in runtime environment variables or persisted provider-token storage, never in committed Elixir or TOML files.
+Provider credentials are secrets. In standalone mode, seed API-key pools with
+`LLM_PROXY_PROVIDER_KEYS` or use persisted provider-token storage. Library hosts
+may source credentials through their own runtime `.exs` configuration. Never put
+credentials in committed Elixir or TOML files.
 
 ## Make a request
 

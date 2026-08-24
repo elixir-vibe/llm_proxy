@@ -30,6 +30,36 @@ defmodule LLMProxy.ReleaseTasks do
     :ok
   end
 
+  @doc "Print provider-token encryption state without credential values."
+  @spec provider_tokens_status() :: :ok
+  def provider_tokens_status do
+    run_provider_token_operation(:status)
+  end
+
+  @doc "Verify that the configured codec can read all provider tokens."
+  @spec provider_tokens_verify() :: :ok
+  def provider_tokens_verify do
+    run_provider_token_operation(:verify)
+  end
+
+  @doc "Encrypt plaintext provider tokens with the active codec key."
+  @spec provider_tokens_encrypt() :: :ok
+  def provider_tokens_encrypt do
+    run_provider_token_operation(:encrypt_all)
+  end
+
+  @doc "Re-encrypt all provider tokens with the active codec key."
+  @spec provider_tokens_rotate() :: :ok
+  def provider_tokens_rotate do
+    run_provider_token_operation(:rotate_all)
+  end
+
+  @doc "Restore provider tokens to plaintext for a controlled rollback."
+  @spec provider_tokens_decrypt() :: :ok
+  def provider_tokens_decrypt do
+    run_provider_token_operation(:decrypt_all)
+  end
+
   @doc "Start deployment drain mode on the running LLMProxy service."
   @spec drain_start() :: :ok
   def drain_start do
@@ -91,9 +121,7 @@ defmodule LLMProxy.ReleaseTasks do
   end
 
   defp ops_call(op, payload \\ %{}, opts \\ []) do
-    socket =
-      LLMProxy.Config.rpc_socket() || System.get_env("LLM_PROXY_RPC_SOCKET") ||
-        raise "LLM_PROXY_RPC_SOCKET is not configured"
+    socket = LLMProxy.Config.rpc_socket() || raise "LLMProxy RPC socket is not configured"
 
     with :ok <- SafeRPC.Atoms.prepare(LLMProxy.Ops.client_atoms()),
          :ok <- SafeRPC.prepare(socket) do
@@ -144,6 +172,22 @@ defmodule LLMProxy.ReleaseTasks do
         label: "codex-login"
       })
     end)
+  end
+
+  defp run_provider_token_operation(operation) do
+    result =
+      with_repo(fn ->
+        apply(LLMProxy.Provider.TokenCodec.Migration, operation, [])
+      end)
+
+    case result do
+      {:ok, counts} ->
+        IO.puts("Provider token operation complete: #{inspect(counts)}")
+        :ok
+
+      {:error, _reason} ->
+        raise "provider token operation failed"
+    end
   end
 
   defp with_repo(fun) do
