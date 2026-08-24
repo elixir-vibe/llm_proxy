@@ -8,6 +8,7 @@ defmodule LLMProxy.Config.TOML do
   """
 
   alias LLMProxy.Catalog.Model
+  alias LLMProxy.Config.ProviderUsage, as: ProviderUsageConfig
   alias LLMProxy.Storage.Repo.QuackDB
 
   @type decoded :: keyword()
@@ -315,7 +316,7 @@ defmodule LLMProxy.Config.TOML do
 
   defp normalize_value(:usage_paths, paths) when is_list(paths) do
     if paths != [] and length(paths) <= 3 and length(paths) == MapSet.size(MapSet.new(paths)) and
-         Enum.all?(paths, &valid_usage_path?/1) do
+         Enum.all?(paths, &ProviderUsageConfig.valid_path?/1) do
       paths
     else
       raise ArgumentError,
@@ -329,14 +330,6 @@ defmodule LLMProxy.Config.TOML do
   end
 
   defp normalize_value(_key, value), do: value
-
-  defp valid_usage_path?(path) when is_binary(path) do
-    byte_size(path) <= 256 and String.starts_with?(path, "/") and
-      not String.starts_with?(path, "//") and
-      not String.contains?(path, ["?", "#", "\\", "\r", "\n"])
-  end
-
-  defp valid_usage_path?(_path), do: false
 
   defp normalize_model_values(%{routing: routing} = model),
     do: %{model | routing: Model.routing_strategy!(routing)}

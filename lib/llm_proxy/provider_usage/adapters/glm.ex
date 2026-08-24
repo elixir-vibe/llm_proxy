@@ -27,14 +27,7 @@ defmodule LLMProxy.ProviderUsage.Adapters.GLM do
 
   @doc false
   @spec parse(String.t()) :: {:ok, Result.t()} | {:error, term()}
-  def parse(body) when is_binary(body) do
-    case Response.decode(body) do
-      {:ok, response} -> parse_response(response)
-      {:error, reason} -> {:error, {:invalid_response, reason}}
-    end
-  end
-
-  def parse(_body), do: {:error, :invalid_response}
+  def parse(body), do: Adapter.parse_json(body, Response, &parse_response/1)
 
   defp parse_response(%Authentication{code: code}) when code in [401, 403],
     do: {:error, :authentication_failed}

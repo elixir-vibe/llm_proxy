@@ -26,14 +26,7 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
 
   @doc false
   @spec parse(String.t()) :: {:ok, Result.t()} | {:error, term()}
-  def parse(body) when is_binary(body) do
-    case Response.decode(body) do
-      {:ok, response} -> parse_response(response)
-      {:error, reason} -> {:error, {:invalid_response, reason}}
-    end
-  end
-
-  def parse(_body), do: {:error, :invalid_response}
+  def parse(body), do: Adapter.parse_json(body, Response, &parse_response/1)
 
   defp parse_response(%Current{rate_limit: limits} = response) do
     with :ok <- validate_current_state(response),

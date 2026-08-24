@@ -4,6 +4,7 @@ defmodule LLMProxy.Config do
   """
 
   alias LLMProxy.Config.Catalog
+  alias LLMProxy.Config.ProviderUsage, as: ProviderUsageConfig
 
   def master_key, do: Application.get_env(:llm_proxy, :master_key)
 
@@ -352,7 +353,7 @@ defmodule LLMProxy.Config do
   defp validate_usage_paths!(provider, paths) when is_list(paths) do
     unless paths != [] and length(paths) <= 3 and
              length(paths) == MapSet.size(MapSet.new(paths)) and
-             Enum.all?(paths, &valid_usage_path?/1) do
+             Enum.all?(paths, &ProviderUsageConfig.valid_path?/1) do
       raise ArgumentError,
             "provider #{inspect(provider)} usage_paths must contain one through three distinct absolute origin paths"
     end
@@ -362,14 +363,6 @@ defmodule LLMProxy.Config do
     raise ArgumentError,
           "provider #{inspect(provider)} usage_paths must contain one through three distinct absolute origin paths"
   end
-
-  defp valid_usage_path?(path) when is_binary(path) do
-    byte_size(path) <= 256 and String.starts_with?(path, "/") and
-      not String.starts_with?(path, "//") and
-      not String.contains?(path, ["?", "#", "\\", "\r", "\n"])
-  end
-
-  defp valid_usage_path?(_path), do: false
 
   defp normalize_value(value) when is_list(value) do
     if Keyword.keyword?(value) do

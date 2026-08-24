@@ -8,6 +8,19 @@ defmodule LLMProxy.ProviderUsage.Adapter do
               {:ok, Result.t()} | {:error, term()}
 
   @doc false
+  @spec parse_json(term(), module(), (term() -> {:ok, Result.t()} | {:error, term()})) ::
+          {:ok, Result.t()} | {:error, term()}
+  def parse_json(body, response_module, parser)
+      when is_binary(body) and is_atom(response_module) and is_function(parser, 1) do
+    case response_module.decode(body) do
+      {:ok, response} -> parser.(response)
+      {:error, reason} -> {:error, {:invalid_response, reason}}
+    end
+  end
+
+  def parse_json(_body, _response_module, _parser), do: {:error, :invalid_response}
+
+  @doc false
   @spec collect(Enumerable.t(), (term() -> {:ok, term() | nil} | {:error, term()})) ::
           {:ok, [term()]} | {:error, term()}
   def collect(items, parser) when is_function(parser, 1) do
