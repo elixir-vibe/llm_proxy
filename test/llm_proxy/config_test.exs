@@ -87,6 +87,32 @@ defmodule LLMProxy.ConfigTest do
     end
   end
 
+  test "validates exact provider usage configuration in library mode" do
+    valid = %{
+      "glm" => %{
+        adapter: :zai_coding_plan,
+        usage_adapter: "glm",
+        usage_auth_scheme: "bearer",
+        usage_paths: ["/api/monitor/usage"]
+      }
+    }
+
+    Application.put_env(:llm_proxy, :providers, valid)
+    assert Config.configured_providers() == valid
+
+    for invalid <- [
+          %{"glm" => %{usage_adapter: :glm}},
+          %{"glm" => %{usage_auth_scheme: :bearer}},
+          %{"glm" => %{usage_paths: "/api/monitor/usage"}},
+          %{"glm" => %{usage_paths: []}},
+          %{"glm" => %{usage_paths: ["relative"]}},
+          %{"glm" => %{usage_paths: ["/same", "/same"]}}
+        ] do
+      Application.put_env(:llm_proxy, :providers, invalid)
+      assert_raise ArgumentError, fn -> Config.configured_providers() end
+    end
+  end
+
   test "configures the authenticated JSON body limit in bytes" do
     Application.put_env(:llm_proxy, :body_limit_bytes, 64_000_000)
     assert Config.body_limit_bytes() == 64_000_000

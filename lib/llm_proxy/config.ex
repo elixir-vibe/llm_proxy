@@ -304,19 +304,72 @@ defmodule LLMProxy.Config do
     end
   end
 
-  defp normalize_providers(providers) when is_list(providers) do
+  defp normalize_providers(providers) when is_list(providers) or is_map(providers) do
     providers
-    |> Enum.map(fn {provider, config} -> {provider_name(provider), normalize_value(config)} end)
+    |> Enum.map(&normalize_provider/1)
     |> Map.new()
   end
 
-  defp normalize_providers(providers) when is_map(providers) do
-    providers
-    |> Enum.map(fn {provider, config} -> {provider_name(provider), normalize_value(config)} end)
-    |> Map.new()
+  defp normalize_providers(providers) do
+    raise ArgumentError, ":providers must be a keyword list or map, got: #{inspect(providers)}"
   end
 
-  defp normalize_providers(_providers), do: %{}
+  defp normalize_provider({provider, config}) do
+    case normalize_value(config) do
+      %{} = normalized ->
+        {provider_name(provider), validate_provider_usage!(provider, normalized)}
+
+      value ->
+        raise ArgumentError, "provider configuration must be a map, got: #{inspect(value)}"
+    end
+  end
+
+  defp validate_provider_usage!(provider, config) do
+    validate_usage_adapter!(provider, Map.get(config, :usage_adapter))
+    validate_usage_auth_scheme!(provider, Map.get(config, :usage_auth_scheme))
+    validate_usage_paths!(provider, Map.get(config, :usage_paths))
+    config
+  end
+
+  defp validate_usage_adapter!(_provider, nil), do: :ok
+  defp validate_usage_adapter!(_provider, "glm"), do: :ok
+
+  defp validate_usage_adapter!(provider, value) do
+    raise ArgumentError,
+          "provider #{inspect(provider)} usage_adapter must be \"glm\", got: #{inspect(value)}"
+  end
+
+  defp validate_usage_auth_scheme!(_provider, nil), do: :ok
+  defp validate_usage_auth_scheme!(_provider, value) when value in ["raw", "bearer"], do: :ok
+
+  defp validate_usage_auth_scheme!(provider, value) do
+    raise ArgumentError,
+          "provider #{inspect(provider)} usage_auth_scheme must be \"raw\" or \"bearer\", got: #{inspect(value)}"
+  end
+
+  defp validate_usage_paths!(_provider, nil), do: :ok
+
+  defp validate_usage_paths!(provider, paths) when is_list(paths) do
+    unless paths != [] and length(paths) <= 3 and
+             length(paths) == MapSet.size(MapSet.new(paths)) and
+             Enum.all?(paths, &valid_usage_path?/1) do
+      raise ArgumentError,
+            "provider #{inspect(provider)} usage_paths must contain one through three distinct absolute origin paths"
+    end
+  end
+
+  defp validate_usage_paths!(provider, _paths) do
+    raise ArgumentError,
+          "provider #{inspect(provider)} usage_paths must contain one through three distinct absolute origin paths"
+  end
+
+  defp valid_usage_path?(path) when is_binary(path) do
+    byte_size(path) <= 256 and String.starts_with?(path, "/") and
+      not String.starts_with?(path, "//") and
+      not String.contains?(path, ["?", "#", "\\", "\r", "\n"])
+  end
+
+  defp valid_usage_path?(_path), do: false
 
   defp normalize_value(value) when is_list(value) do
     if Keyword.keyword?(value) do

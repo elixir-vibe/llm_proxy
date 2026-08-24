@@ -76,7 +76,7 @@ defmodule LLMProxy.ProviderUsage.Source do
         account_label: account_label(token),
         base_url: base_url,
         usage_paths: [codex_usage_path(base_url)],
-        config_error: codex_source_error(base_url)
+        config_error: endpoint_or_source_error(token, codex_source_error(base_url))
       }
     ]
   end
@@ -123,28 +123,18 @@ defmodule LLMProxy.ProviderUsage.Source do
   end
 
   defp glm_provider?(config) do
-    usage_adapter = normalize_name(Map.get(config, :usage_adapter))
+    usage_adapter = Map.get(config, :usage_adapter)
     adapter = normalize_name(Map.get(config, :adapter))
 
     usage_adapter == "glm" or adapter in @glm_adapters
   end
 
-  defp usage_paths(config) do
-    paths =
-      case Map.get(config, :usage_paths) do
-        paths when is_list(paths) -> Enum.map(paths, &path_value/1)
-        path when is_binary(path) -> [path]
-        _other -> @default_glm_paths
-      end
-
-    Enum.uniq(paths)
-  end
+  defp usage_paths(config), do: Map.get(config, :usage_paths, @default_glm_paths)
 
   defp auth_scheme(config) do
-    case normalize_name(Map.get(config, :usage_auth_scheme, "raw")) do
+    case Map.get(config, :usage_auth_scheme, "raw") do
       "raw" -> :raw
       "bearer" -> :bearer
-      _other -> nil
     end
   end
 
@@ -213,12 +203,28 @@ defmodule LLMProxy.ProviderUsage.Source do
   defp valid_path?(_path), do: false
 
   defp account_attrs(%ProviderToken{} = token) do
-    %{
+    attrs = %{
       token_id: token.id,
       stored_token: token,
       account_label: account_label(token)
     }
+
+    case endpoint_override_error(token) do
+      nil -> attrs
+      error -> Map.put(attrs, :config_error, error)
+    end
   end
+
+  defp endpoint_or_source_error(token, source_error) do
+    endpoint_override_error(token) || source_error
+  end
+
+  defp endpoint_override_error(%ProviderToken{proxy: proxy})
+       when is_binary(proxy) and proxy != "" do
+    "Provider usage is unavailable for tokens with endpoint overrides"
+  end
+
+  defp endpoint_override_error(%ProviderToken{}), do: nil
 
   defp account_label(%ProviderToken{id: id, label: label}) do
     case safe_label(label) do
@@ -254,9 +260,6 @@ defmodule LLMProxy.ProviderUsage.Source do
     |> String.downcase()
     |> String.replace("-", "_")
   end
-
-  defp path_value(value) when is_binary(value), do: value
-  defp path_value(_value), do: nil
 
   defp pool_name(value) when is_binary(value), do: value
   defp pool_name(value) when is_atom(value), do: Atom.to_string(value)

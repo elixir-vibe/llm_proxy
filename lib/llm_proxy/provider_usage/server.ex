@@ -8,7 +8,7 @@ defmodule LLMProxy.ProviderUsage.Server do
 
   use GenServer
 
-  alias LLMProxy.ProviderUsage.{Loader, Snapshot}
+  alias LLMProxy.ProviderUsage.{Loader, Snapshot, Window}
 
   defmodule State do
     @moduledoc false
@@ -47,7 +47,7 @@ defmodule LLMProxy.ProviderUsage.Server do
   def refresh_all(server \\ __MODULE__), do: GenServer.call(server, {:refresh, :all})
 
   @spec refresh_account(integer(), GenServer.server()) :: {:ok, :started | :already_refreshing}
-  def refresh_account(id, server \\ __MODULE__) when is_integer(id) do
+  def refresh_account(id, server \\ __MODULE__) when is_integer(id) and id > 0 do
     GenServer.call(server, {:refresh, {:account, id}})
   end
 
@@ -150,30 +150,100 @@ defmodule LLMProxy.ProviderUsage.Server do
     }
   end
 
-  defp apply_refresh(state, snapshots) when is_list(snapshots) do
-    snapshots = Enum.filter(snapshots, &match?(%Snapshot{}, &1))
-
-    refreshed =
-      case state.scope do
-        :all ->
-          Map.new(snapshots, fn snapshot ->
-            {snapshot.token_id, merge_snapshot(state.snapshots[snapshot.token_id], snapshot)}
-          end)
-
-        {:account, id} ->
-          state.snapshots
-          |> Map.delete(id)
-          |> Map.merge(
-            Map.new(snapshots, fn snapshot ->
-              {snapshot.token_id, merge_snapshot(state.snapshots[snapshot.token_id], snapshot)}
-            end)
-          )
-      end
-
-    %{state | snapshots: refreshed}
+  defp apply_refresh(state, snapshots) do
+    if valid_refresh_result?(snapshots, state.scope) do
+      %{state | snapshots: refreshed_snapshots(state, snapshots)}
+    else
+      fail_refresh(state)
+    end
   end
 
-  defp apply_refresh(state, _invalid_result), do: fail_refresh(state)
+  defp refreshed_snapshots(state, snapshots) do
+    refreshed =
+      Map.new(snapshots, fn snapshot ->
+        {snapshot.token_id, merge_snapshot(state.snapshots[snapshot.token_id], snapshot)}
+      end)
+
+    case state.scope do
+      :all -> refreshed
+      {:account, id} -> state.snapshots |> Map.delete(id) |> Map.merge(refreshed)
+    end
+  end
+
+  defp valid_refresh_result?(snapshots, scope) when is_list(snapshots) do
+    ids = Enum.map(snapshots, &snapshot_id/1)
+
+    Enum.all?(snapshots, &valid_snapshot?/1) and
+      Enum.all?(ids, &scope_allows_id?(scope, &1)) and
+      length(ids) == MapSet.size(MapSet.new(ids))
+  end
+
+  defp valid_refresh_result?(_snapshots, _scope), do: false
+
+  defp snapshot_id(%Snapshot{token_id: id}), do: id
+  defp snapshot_id(_snapshot), do: nil
+
+  defp scope_allows_id?(:all, id), do: is_integer(id) and id > 0
+  defp scope_allows_id?({:account, id}, id), do: true
+  defp scope_allows_id?(_scope, _id), do: false
+
+  defp valid_snapshot?(%Snapshot{} = snapshot) do
+    valid_snapshot_identity?(snapshot) and valid_snapshot_state?(snapshot) and
+      valid_plan?(snapshot.plan) and valid_datetime?(snapshot.refreshed_at) and
+      valid_datetime?(snapshot.attempted_at) and valid_error?(snapshot.error) and
+      is_list(snapshot.windows) and length(snapshot.windows) <= 8 and
+      Enum.all?(snapshot.windows, &valid_window?/1)
+  end
+
+  defp valid_snapshot?(_snapshot), do: false
+
+  defp valid_snapshot_identity?(snapshot) do
+    is_integer(snapshot.token_id) and snapshot.token_id > 0 and
+      valid_label?(snapshot.provider_label, 80) and valid_label?(snapshot.account_label, 80)
+  end
+
+  defp valid_snapshot_state?(%Snapshot{state: :fresh} = snapshot) do
+    snapshot.availability in [:available, :limited, :unavailable] and
+      match?(%DateTime{}, snapshot.refreshed_at) and
+      match?(%DateTime{}, snapshot.attempted_at) and is_nil(snapshot.error)
+  end
+
+  defp valid_snapshot_state?(%Snapshot{state: :error} = snapshot) do
+    snapshot.availability == :unknown and is_nil(snapshot.refreshed_at) and
+      match?(%DateTime{}, snapshot.attempted_at) and is_binary(snapshot.error)
+  end
+
+  defp valid_snapshot_state?(%Snapshot{state: :disabled} = snapshot) do
+    snapshot.availability == :unavailable and snapshot.windows == [] and
+      is_nil(snapshot.refreshed_at)
+  end
+
+  defp valid_snapshot_state?(_snapshot), do: false
+
+  defp valid_window?(%Window{} = window) do
+    valid_label?(window.label, 40) and valid_percent?(window.used_percent) and
+      valid_percent?(window.remaining_percent) and
+      abs(window.used_percent + window.remaining_percent - 100) < 0.11 and
+      valid_datetime?(window.resets_at) and
+      (is_nil(window.duration_seconds) or
+         (is_integer(window.duration_seconds) and window.duration_seconds > 0))
+  end
+
+  defp valid_window?(_window), do: false
+
+  defp valid_percent?(value), do: is_number(value) and value >= 0 and value <= 100
+  defp valid_datetime?(nil), do: true
+  defp valid_datetime?(%DateTime{}), do: true
+  defp valid_datetime?(_value), do: false
+  defp valid_plan?(nil), do: true
+  defp valid_plan?(plan), do: valid_label?(plan, 40)
+  defp valid_error?(nil), do: true
+  defp valid_error?(error), do: valid_label?(error, 160)
+
+  defp valid_label?(value, maximum) do
+    is_binary(value) and value != "" and byte_size(value) <= maximum and
+      not String.contains?(value, ["\r", "\n"])
+  end
 
   defp merge_snapshot(
          %Snapshot{refreshed_at: %DateTime{}} = previous,

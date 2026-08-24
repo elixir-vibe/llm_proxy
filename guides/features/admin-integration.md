@@ -142,7 +142,7 @@ token_pool = "glm-production"
 
 Add each account API key as a separate `provider_tokens` row in `glm-production`, or seed the pool through `LLM_PROXY_PROVIDER_KEYS`. Use a short operational label such as `prod-east`. Usage output always masks a valid label, for example `p***t`, and adds the local token ID. Labels with unsafe characters, including email addresses, become `Account #<local token id>`.
 
-The first-party GLM usage plugin sends the API key as the raw `Authorization` value, which is the default. If the account endpoint requires a bearer scheme, set `usage_auth_scheme = "bearer"`. To select one qualified endpoint explicitly, set `usage_paths = ["/api/monitor/usage"]`. Usage URLs must use HTTPS, endpoint lists are limited to three paths, redirects are disabled, and per-token proxy overrides are not used for usage requests.
+The first-party GLM usage plugin sends the API key as the raw `Authorization` value, which is the default. If the account endpoint requires a bearer scheme, set `usage_auth_scheme = "bearer"`. To select one qualified endpoint explicitly, set `usage_paths = ["/api/monitor/usage"]`. Usage URLs must use HTTPS, endpoint lists are limited to three paths, redirects are disabled, and responses are capped at 256,000 bytes before JSON decoding. Tokens with per-token endpoint overrides are reported as unsupported without sending their credentials; configure a provider-level usage origin instead.
 
 Automatic refresh defaults to five minutes. The supported interval is one minute through one hour. The request deadline is one through 30 seconds. Standalone settings belong in TOML:
 

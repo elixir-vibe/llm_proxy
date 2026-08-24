@@ -24,7 +24,9 @@
 - A supervised provider-usage tracker now reports each configured OpenAI Codex
   or GLM Coding Plan account separately. The optional Incant admin surface shows
   live upstream windows, availability, reset times, freshness, and safe errors,
-  with bounded automatic refresh and manual refresh actions.
+  with bounded automatic refresh and manual refresh actions. Provider payloads
+  use strict JSONCodec boundaries, response sizes are capped, and malformed or
+  out-of-scope refresh results fail atomically.
 - Provider-token pools support affinity or fill-first selection. Fill-first
   orders healthy tokens within the existing OAuth-first/API-key-fallback
   boundary by persisted non-negative priority and stable token ID.

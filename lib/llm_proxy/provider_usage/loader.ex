@@ -93,6 +93,8 @@ defmodule LLMProxy.ProviderUsage.Loader do
   defp safe_error(:unavailable), do: "Provider usage API is unavailable"
   defp safe_error(:not_found), do: "Provider usage API is unsupported"
   defp safe_error(:invalid_response), do: "Provider returned invalid usage data"
+  defp safe_error(:response_too_large), do: "Provider returned invalid usage data"
+  defp safe_error({:invalid_response, _reason}), do: "Provider returned invalid usage data"
   defp safe_error(_reason), do: "Provider usage refresh failed"
 
   defp now, do: DateTime.utc_now() |> DateTime.truncate(:second)

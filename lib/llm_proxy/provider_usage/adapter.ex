@@ -5,7 +5,7 @@ defmodule LLMProxy.ProviderUsage.Adapter do
   alias LLMProxy.ProviderUsage.{Result, Source}
 
   @callback fetch(Credential.t(), Source.t()) ::
-              {:ok, Result.t()} | {:error, atom()}
+              {:ok, Result.t()} | {:error, term()}
 
   @doc false
   @spec collect(Enumerable.t(), (term() -> {:ok, term() | nil} | {:error, term()})) ::
@@ -34,12 +34,18 @@ defmodule LLMProxy.ProviderUsage.Adapter do
   def remaining_percent(used), do: rounded(100 - used)
 
   @doc false
-  @spec safe_plan(term()) :: String.t() | nil
-  def safe_plan(value) when is_binary(value) and byte_size(value) <= 40 do
-    if Regex.match?(~r/^[[:alnum:]_-]+$/u, value), do: value
+  @spec plan(term()) :: {:ok, String.t() | nil} | {:error, :invalid_plan}
+  def plan(nil), do: {:ok, nil}
+
+  def plan(value) when is_binary(value) and byte_size(value) <= 40 do
+    if Regex.match?(~r/^[[:alnum:]_-]+$/u, value) do
+      {:ok, value}
+    else
+      {:error, :invalid_plan}
+    end
   end
 
-  def safe_plan(_value), do: nil
+  def plan(_value), do: {:error, :invalid_plan}
 
   @doc false
   @spec valid_header_value?(term()) :: boolean()

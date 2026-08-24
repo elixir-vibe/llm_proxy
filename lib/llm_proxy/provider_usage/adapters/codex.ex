@@ -5,7 +5,14 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
 
   alias LLMProxy.Provider.Credential
   alias LLMProxy.Providers.OpenAICodex
-  alias LLMProxy.ProviderUsage.{Adapter, HTTP, Result, Source, Window}
+  alias LLMProxy.ProviderUsage.Adapter
+  alias LLMProxy.ProviderUsage.Adapters.Codex.Response
+  alias LLMProxy.ProviderUsage.Adapters.Codex.Response.Current
+  alias LLMProxy.ProviderUsage.Adapters.Codex.Response.Legacy
+  alias LLMProxy.ProviderUsage.HTTP
+  alias LLMProxy.ProviderUsage.Result
+  alias LLMProxy.ProviderUsage.Source
+  alias LLMProxy.ProviderUsage.Window
   alias ReqLLM.Providers.OpenAICodex, as: ReqLLMOpenAICodex
 
   @impl true
@@ -18,26 +25,54 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
   end
 
   @doc false
-  @spec parse(map()) :: {:ok, Result.t()} | {:error, :invalid_response | :unsupported}
-  def parse(body) when is_map(body) do
-    with limits when is_map(limits) <- body["rate_limit"] || body["rate_limits"],
-         {:ok, windows} <- windows(limits),
-         false <- windows == [] do
-      {:ok,
-       %Result{
-         availability: availability(body, limits, windows),
-         windows: windows,
-         plan: Adapter.safe_plan(body["plan_type"] || body["planType"])
-       }}
-    else
-      nil -> {:error, :unsupported}
-      true -> {:error, :unsupported}
-      {:error, _reason} -> {:error, :invalid_response}
-      _other -> {:error, :invalid_response}
+  @spec parse(String.t()) :: {:ok, Result.t()} | {:error, term()}
+  def parse(body) when is_binary(body) do
+    case Response.decode(body) do
+      {:ok, response} -> parse_response(response)
+      {:error, reason} -> {:error, {:invalid_response, reason}}
     end
   end
 
   def parse(_body), do: {:error, :invalid_response}
+
+  defp parse_response(%Current{rate_limit: limits} = response) do
+    with :ok <- validate_current_state(response),
+         {:ok, plan} <- Adapter.plan(response.plan_type),
+         {:ok, windows} <-
+           windows(
+             [
+               {"Primary", limits.primary_window},
+               {"Secondary", limits.secondary_window}
+             ],
+             &current_window/2
+           ),
+         :ok <- require_windows(windows) do
+      {:ok,
+       %Result{
+         availability: current_availability(response, windows),
+         windows: windows,
+         plan: plan
+       }}
+    end
+  end
+
+  defp parse_response(%Legacy{rate_limits: limits} = response) do
+    with :ok <- validate_legacy_state(response),
+         {:ok, plan} <- Adapter.plan(response.plan_type),
+         {:ok, windows} <-
+           windows(
+             [{"Primary", limits.primary}, {"Secondary", limits.secondary}],
+             &legacy_window/2
+           ),
+         :ok <- require_windows(windows) do
+      {:ok,
+       %Result{
+         availability: legacy_availability(response, windows),
+         windows: windows,
+         plan: plan
+       }}
+    end
+  end
 
   defp refresh_credential(credential) do
     refresh_fun = fn credentials, _opts ->
@@ -95,23 +130,30 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
     end
   end
 
-  defp windows(limits) do
-    [
-      {"Primary", limits["primary_window"] || limits["primary"]},
-      {"Secondary", limits["secondary_window"] || limits["secondary"]}
-    ]
-    |> Adapter.collect(fn {fallback_label, raw} ->
-      parse_window(raw, fallback_label)
+  defp windows(raw_windows, parser) do
+    Adapter.collect(raw_windows, fn
+      {_label, nil} -> {:ok, nil}
+      {label, raw} -> parser.(raw, label)
     end)
   end
 
-  defp parse_window(nil, _fallback_label), do: {:ok, nil}
+  defp current_window(raw, fallback_label) do
+    with {:ok, duration_seconds} <-
+           exclusive_duration(raw.limit_window_seconds, raw.window_minutes),
+         {:ok, resets_at} <- exclusive_reset(raw.reset_at, raw.resets_at) do
+      window(raw.used_percent, duration_seconds, resets_at, fallback_label)
+    end
+  end
 
-  defp parse_window(raw, fallback_label) when is_map(raw) do
-    with {:ok, used_percent} <-
-           Adapter.percent(raw["used_percent"] || raw["usedPercent"], :invalid_percent),
-         {:ok, duration_seconds} <- duration_seconds(raw),
-         {:ok, resets_at} <- reset_time(raw) do
+  defp legacy_window(raw, fallback_label) do
+    with {:ok, duration_seconds} <- duration_from_minutes(raw.window_duration_mins),
+         {:ok, resets_at} <- unix_datetime(raw.resets_at) do
+      window(raw.used_percent, duration_seconds, resets_at, fallback_label)
+    end
+  end
+
+  defp window(used_percent, duration_seconds, resets_at, fallback_label) do
+    with {:ok, used_percent} <- Adapter.percent(used_percent, :invalid_percent) do
       {:ok,
        %Window{
          label: window_label(duration_seconds, fallback_label),
@@ -123,87 +165,95 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
     end
   end
 
-  defp parse_window(_raw, _fallback_label), do: {:error, :invalid_window}
+  defp exclusive_duration(nil, nil), do: {:ok, nil}
+  defp exclusive_duration(seconds, nil), do: positive_duration(seconds, 1)
+  defp exclusive_duration(nil, minutes), do: positive_duration(minutes, 60)
+  defp exclusive_duration(_seconds, _minutes), do: {:error, :ambiguous_duration}
 
-  defp duration_seconds(raw) do
-    cond do
-      positive_number?(raw["limit_window_seconds"]) ->
-        {:ok, trunc(raw["limit_window_seconds"])}
+  defp duration_from_minutes(nil), do: {:ok, nil}
+  defp duration_from_minutes(minutes), do: positive_duration(minutes, 60)
 
-      positive_number?(raw["window_minutes"]) ->
-        {:ok, trunc(raw["window_minutes"] * 60)}
+  defp positive_duration(value, multiplier) when is_number(value) and value > 0,
+    do: {:ok, trunc(value * multiplier)}
 
-      positive_number?(raw["windowDurationMins"]) ->
-        {:ok, trunc(raw["windowDurationMins"] * 60)}
+  defp positive_duration(_value, _multiplier), do: {:error, :invalid_duration}
 
-      true ->
-        {:ok, nil}
+  defp exclusive_reset(nil, nil), do: {:ok, nil}
+  defp exclusive_reset(value, nil), do: unix_datetime(value)
+  defp exclusive_reset(nil, value), do: unix_datetime(value)
+  defp exclusive_reset(_reset_at, _resets_at), do: {:error, :ambiguous_reset_time}
+
+  defp unix_datetime(nil), do: {:ok, nil}
+
+  defp unix_datetime(value) when is_binary(value) do
+    case Integer.parse(value) do
+      {integer, ""} -> unix_datetime(integer)
+      _other -> {:error, :invalid_datetime}
     end
   end
 
-  defp reset_time(raw) do
-    value = raw["reset_at"] || raw["resets_at"] || raw["resetsAt"]
-    optional_datetime(value, :second)
-  end
-
-  defp optional_datetime(nil, _unit), do: {:ok, nil}
-
-  defp optional_datetime(value, unit) when is_integer(value) do
-    case DateTime.from_unix(value, unit) do
+  defp unix_datetime(value) when is_integer(value) and value >= 0 do
+    case DateTime.from_unix(value, :second) do
       {:ok, datetime} -> {:ok, DateTime.truncate(datetime, :second)}
       {:error, _reason} -> {:error, :invalid_datetime}
     end
   end
 
-  defp optional_datetime(value, unit) when is_float(value),
-    do: optional_datetime(trunc(value), unit)
+  defp unix_datetime(_value), do: {:error, :invalid_datetime}
 
-  defp optional_datetime(value, unit) when is_binary(value) do
-    case Integer.parse(value) do
-      {integer, ""} -> optional_datetime(integer, unit)
-      _other -> iso8601_datetime(value)
+  defp validate_current_state(%Current{} = response) do
+    with :ok <- validate_reached_type(response.rate_limit_reached_type) do
+      validate_optional_boolean(response.spend_control_reached)
     end
   end
 
-  defp optional_datetime(_value, _unit), do: {:error, :invalid_datetime}
-
-  defp iso8601_datetime(value) do
-    case DateTime.from_iso8601(value) do
-      {:ok, datetime, _offset} -> {:ok, DateTime.truncate(datetime, :second)}
-      {:error, _reason} -> {:error, :invalid_datetime}
+  defp validate_legacy_state(%Legacy{} = response) do
+    with :ok <- validate_reached_type(response.rate_limit_reached_type) do
+      validate_optional_boolean(response.spend_control_reached)
     end
   end
 
-  defp availability(body, limits, windows) do
+  defp validate_reached_type(nil), do: :ok
+  defp validate_reached_type(%{type: "rate_limit_reached"}), do: :ok
+  defp validate_reached_type(_value), do: {:error, :invalid_reached_type}
+
+  defp validate_optional_boolean(nil), do: :ok
+  defp validate_optional_boolean(value) when is_boolean(value), do: :ok
+  defp validate_optional_boolean(_value), do: {:error, :invalid_limit_state}
+
+  defp require_windows([]), do: {:error, :unsupported}
+  defp require_windows(_windows), do: :ok
+
+  defp current_availability(response, windows) do
+    limits = response.rate_limit
+
+    availability(
+      response.rate_limit_reached_type != nil or
+        match?(%{reached: true}, response.spend_control) or
+        response.spend_control_reached == true or
+        limits.allowed == false or limits.limit_reached == true,
+      windows
+    )
+  end
+
+  defp legacy_availability(response, windows) do
+    limits = response.rate_limits
+
+    availability(
+      response.rate_limit_reached_type != nil or response.spend_control_reached == true or
+        limits.allowed == false or limits.limit_reached == true,
+      windows
+    )
+  end
+
+  defp availability(true, _windows), do: :unavailable
+
+  defp availability(false, windows) do
     cond do
-      reached_type?(body["rate_limit_reached_type"] || body["rateLimitReachedType"]) ->
-        :unavailable
-
-      spend_control_reached?(body) ->
-        :unavailable
-
-      limits["allowed"] == false ->
-        :unavailable
-
-      limits["limit_reached"] == true ->
-        :unavailable
-
-      Enum.any?(windows, &(&1.used_percent >= 100)) ->
-        :unavailable
-
-      Enum.any?(windows, &(&1.used_percent >= 90)) ->
-        :limited
-
-      true ->
-        :available
+      Enum.any?(windows, &(&1.used_percent >= 100)) -> :unavailable
+      Enum.any?(windows, &(&1.used_percent >= 90)) -> :limited
+      true -> :available
     end
-  end
-
-  defp reached_type?(value), do: value not in [nil, false]
-
-  defp spend_control_reached?(body) do
-    get_in(body, ["spend_control", "reached"]) == true or
-      body["spend_control_reached"] == true or body["spendControlReached"] == true
   end
 
   defp window_label(18_000, _fallback), do: "5 hour"
@@ -223,8 +273,6 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
 
   defp duration_label(1, unit), do: "1 #{unit}"
   defp duration_label(value, unit), do: "#{value} #{unit}s"
-
-  defp positive_number?(value), do: is_number(value) and value > 0
 
   defp expired?(nil), do: false
 

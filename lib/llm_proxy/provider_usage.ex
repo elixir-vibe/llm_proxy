@@ -55,20 +55,21 @@ defmodule LLMProxy.ProviderUsage do
     if Process.whereis(Server), do: Server.refresh_all(), else: {:error, :unavailable}
   end
 
-  @spec refresh_account(integer() | String.t()) ::
+  @spec refresh_account(pos_integer()) ::
           {:ok, :started | :already_refreshing} | {:error, :unsupported | :unavailable}
-  def refresh_account(id) do
-    with {:ok, id} <- token_id(id),
-         true <- Source.supported_account?(id) do
+  def refresh_account(id) when is_integer(id) and id > 0 do
+    if Source.supported_account?(id) do
       if Process.whereis(Server) do
         Server.refresh_account(id)
       else
         {:error, :unavailable}
       end
     else
-      _other -> {:error, :unsupported}
+      {:error, :unsupported}
     end
   end
+
+  def refresh_account(_id), do: {:error, :unsupported}
 
   defp snapshot_rows(%Snapshot{windows: []} = snapshot), do: [snapshot_row(snapshot, nil)]
 
@@ -98,15 +99,4 @@ defmodule LLMProxy.ProviderUsage do
     |> String.replace("_", " ")
     |> String.capitalize()
   end
-
-  defp token_id(id) when is_integer(id) and id > 0, do: {:ok, id}
-
-  defp token_id(id) when is_binary(id) do
-    case Integer.parse(id) do
-      {parsed, ""} when parsed > 0 -> {:ok, parsed}
-      _other -> :error
-    end
-  end
-
-  defp token_id(_id), do: :error
 end

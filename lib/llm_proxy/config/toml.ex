@@ -303,7 +303,40 @@ defmodule LLMProxy.Config.TOML do
   defp normalize_value(:conversion_defaults, _value),
     do: raise(ArgumentError, "provider conversion_defaults must be a TOML table")
 
+  defp normalize_value(:usage_adapter, "glm"), do: "glm"
+
+  defp normalize_value(:usage_adapter, _value),
+    do: raise(ArgumentError, "provider usage_adapter must be glm")
+
+  defp normalize_value(:usage_auth_scheme, value) when value in ["raw", "bearer"], do: value
+
+  defp normalize_value(:usage_auth_scheme, _value),
+    do: raise(ArgumentError, "provider usage_auth_scheme must be raw or bearer")
+
+  defp normalize_value(:usage_paths, paths) when is_list(paths) do
+    if paths != [] and length(paths) <= 3 and length(paths) == MapSet.size(MapSet.new(paths)) and
+         Enum.all?(paths, &valid_usage_path?/1) do
+      paths
+    else
+      raise ArgumentError,
+            "provider usage_paths must contain one through three distinct absolute origin paths"
+    end
+  end
+
+  defp normalize_value(:usage_paths, _value) do
+    raise ArgumentError,
+          "provider usage_paths must contain one through three distinct absolute origin paths"
+  end
+
   defp normalize_value(_key, value), do: value
+
+  defp valid_usage_path?(path) when is_binary(path) do
+    byte_size(path) <= 256 and String.starts_with?(path, "/") and
+      not String.starts_with?(path, "//") and
+      not String.contains?(path, ["?", "#", "\\", "\r", "\n"])
+  end
+
+  defp valid_usage_path?(_path), do: false
 
   defp normalize_model_values(%{routing: routing} = model),
     do: %{model | routing: Model.routing_strategy!(routing)}
