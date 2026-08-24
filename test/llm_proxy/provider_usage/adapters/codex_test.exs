@@ -119,6 +119,17 @@ defmodule LLMProxy.ProviderUsage.Adapters.CodexTest do
              |> Jason.encode!()
              |> Codex.parse()
 
+    for invalid_reset <- ["not-a-timestamp", 1.5] do
+      assert {:error, {:invalid_response, _reason}} =
+               %{
+                 "rateLimits" => %{
+                   "primary" => %{"usedPercent" => 10, "resetsAt" => invalid_reset}
+                 }
+               }
+               |> Jason.encode!()
+               |> Codex.parse()
+    end
+
     assert {:error, {:invalid_response, :ambiguous_shape}} =
              %{"rate_limit" => %{}, "rateLimits" => %{}}
              |> Jason.encode!()

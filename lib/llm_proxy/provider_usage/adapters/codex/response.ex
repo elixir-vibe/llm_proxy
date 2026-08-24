@@ -107,14 +107,17 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex.Response do
 
     codec(:resets_at, cast: :integer_timestamp)
 
+    def integer_timestamp(nil), do: nil
     def integer_timestamp(value) when is_integer(value), do: value
 
     def integer_timestamp(value) when is_binary(value) do
       case Integer.parse(value) do
         {integer, ""} -> integer
-        _other -> raise ArgumentError, "invalid legacy Codex reset timestamp"
+        _other -> :invalid_timestamp
       end
     end
+
+    def integer_timestamp(_value), do: :invalid_timestamp
   end
 
   defmodule LegacyLimits do

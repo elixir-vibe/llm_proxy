@@ -78,8 +78,10 @@ defmodule LLMProxy.ProviderUsage.Adapters.GLMTest do
   end
 
   test "reports authentication, unsupported, and invalid shapes" do
-    assert {:error, :authentication_failed} =
-             %{"code" => 401} |> Jason.encode!() |> GLM.parse()
+    for authentication_failure <- [%{"code" => 401}, %{"code" => 401, "success" => false}] do
+      assert {:error, :authentication_failed} =
+               authentication_failure |> Jason.encode!() |> GLM.parse()
+    end
 
     assert {:error, :unsupported} =
              %{"success" => false} |> Jason.encode!() |> GLM.parse()
