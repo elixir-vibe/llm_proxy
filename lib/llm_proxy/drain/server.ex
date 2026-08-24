@@ -7,6 +7,7 @@ defmodule LLMProxy.Drain.Server do
 
   defstruct draining: false,
             active: %{},
+            monitors: %{},
             waiters: %{}
 
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -57,21 +58,25 @@ defmodule LLMProxy.Drain.Server do
     {:reply, {:error, :draining}, state}
   end
 
-  def handle_call({:enter, kind, meta}, _from, state) do
+  def handle_call({:enter, kind, meta}, {owner, _tag}, state) do
     ref = make_ref()
+    monitor = Process.monitor(owner)
 
     active =
       Map.put(state.active, ref, %{
         kind: normalize_kind(kind),
         meta: meta,
+        monitor: monitor,
+        owner: owner,
         started_at: System.monotonic_time(:millisecond)
       })
 
-    {:reply, {:ok, ref}, %{state | active: active}}
+    monitors = Map.put(state.monitors, monitor, ref)
+    {:reply, {:ok, ref}, %{state | active: active, monitors: monitors}}
   end
 
   def handle_call({:leave, ref}, _from, state) do
-    state = %{state | active: Map.delete(state.active, ref)}
+    state = remove_active(state, ref)
     {:reply, :ok, maybe_reply_waiters(state)}
   end
 
@@ -86,6 +91,17 @@ defmodule LLMProxy.Drain.Server do
   end
 
   @impl true
+  def handle_info({:DOWN, monitor, :process, _owner, _reason}, state) do
+    case Map.pop(state.monitors, monitor) do
+      {nil, _monitors} ->
+        {:noreply, state}
+
+      {ref, monitors} ->
+        state = %{state | active: Map.delete(state.active, ref), monitors: monitors}
+        {:noreply, maybe_reply_waiters(state)}
+    end
+  end
+
   def handle_info({:await_empty_timeout, ref}, state) do
     case Map.pop(state.waiters, ref) do
       {{from, _timer}, waiters} ->
@@ -108,6 +124,17 @@ defmodule LLMProxy.Drain.Server do
   end
 
   defp maybe_reply_waiters(state), do: state
+
+  defp remove_active(state, ref) do
+    case Map.pop(state.active, ref) do
+      {nil, _active} ->
+        state
+
+      {%{monitor: monitor}, active} ->
+        Process.demonitor(monitor, [:flush])
+        %{state | active: active, monitors: Map.delete(state.monitors, monitor)}
+    end
+  end
 
   defp await_timer(_ref, :infinity), do: nil
 
