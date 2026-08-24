@@ -219,7 +219,6 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
 
   defp validate_optional_boolean(nil), do: :ok
   defp validate_optional_boolean(value) when is_boolean(value), do: :ok
-  defp validate_optional_boolean(_value), do: {:error, :invalid_limit_state}
 
   defp require_windows([]), do: {:error, :unsupported}
   defp require_windows(_windows), do: :ok
