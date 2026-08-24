@@ -14,7 +14,7 @@ if Code.ensure_loaded?(Incant) do
       column(:route, priority: :secondary)
       column(:input_tokens, label: "Input tokens", format: :number, priority: :secondary)
       column(:output_tokens, label: "Output tokens", format: :number, priority: :secondary)
-      column(:user_message, label: "Message", priority: :secondary)
+      column(:user_message, label: "Message", priority: :secondary, sensitive: true)
 
       filter(:model, :combobox, options: :distinct)
       filter(:route, :select, options: :distinct)

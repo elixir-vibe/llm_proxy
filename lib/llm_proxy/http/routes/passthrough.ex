@@ -8,6 +8,7 @@ defmodule LLMProxy.HTTP.Routes.Passthrough do
 
   require Logger
 
+  alias LLMProxy.ConcurrencyLimiter
   alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Providers.Result
 
@@ -113,6 +114,14 @@ defmodule LLMProxy.HTTP.Routes.Passthrough do
       {:guardrail, reason} ->
         message = ErrorResponse.safe_message(reason, "Request blocked by guardrail")
         handler.send_error.(conn, 403, "permission_error", message)
+
+      {:concurrency_limit, _limit} ->
+        conn
+        |> Plug.Conn.put_resp_header(
+          "retry-after",
+          Integer.to_string(ConcurrencyLimiter.retry_after_seconds())
+        )
+        |> handler.send_error.(429, "rate_limit_error", ConcurrencyLimiter.error_message())
     end
   end
 

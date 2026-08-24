@@ -52,7 +52,8 @@ defmodule LLMProxy.Cache.Runtime do
   def enabled?(%Request{stream: true}, _context), do: false
 
   def enabled?(%Request{} = request, context) do
-    not is_nil(adapter()) and Policy.resolve(request, context).enabled
+    content_capture_enabled?(context) and not is_nil(adapter()) and
+      Policy.resolve(request, context).enabled
   end
 
   @spec policy(Request.t(), LLMProxy.Cache.context()) :: Policy.t()
@@ -86,6 +87,9 @@ defmodule LLMProxy.Cache.Runtime do
       :ok
     end
   end
+
+  defp content_capture_enabled?(%{api_key: %{capture_content: true}}), do: true
+  defp content_capture_enabled?(_context), do: false
 
   defp put_policy(context, response) do
     context

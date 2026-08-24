@@ -7,7 +7,7 @@ defmodule LLMProxy.HTTP.ErrorResponse do
   Anthropic Messages envelope when the request path targets that API.
   """
 
-  alias LLMProxy.HTTP
+  alias LLMProxy.{ConcurrencyLimiter, HTTP}
 
   @max_message_length 2_000
 
@@ -24,6 +24,16 @@ defmodule LLMProxy.HTTP.ErrorResponse do
   @spec send_openai(Plug.Conn.t(), pos_integer(), String.t(), term()) :: Plug.Conn.t()
   def send_openai(conn, status, code, message) do
     HTTP.send_json(conn, status, %{"error" => openai_error(status, code, message)})
+  end
+
+  @spec send_concurrency_limit_openai(Plug.Conn.t()) :: Plug.Conn.t()
+  def send_concurrency_limit_openai(conn) do
+    conn
+    |> Plug.Conn.put_resp_header(
+      "retry-after",
+      Integer.to_string(ConcurrencyLimiter.retry_after_seconds())
+    )
+    |> send_openai(429, "rate_limit_error", ConcurrencyLimiter.error_message())
   end
 
   @spec send_openai(Plug.Conn.t(), pos_integer(), map()) :: Plug.Conn.t()

@@ -1,6 +1,7 @@
 defmodule LLMProxy.HTTP.Routes.ModerationEndpointTest do
   use ExUnit.Case
 
+  alias LLMProxy.{ConcurrencyLimiter, Limit}
   alias LLMProxy.HTTP.Routes.ModerationEndpoint
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
@@ -43,6 +44,28 @@ defmodule LLMProxy.HTTP.Routes.ModerationEndpointTest do
 
     assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) ==
              "No OpenAI token available"
+  end
+
+  test "returns a rate-limit error when concurrent capacity is full" do
+    {:ok, key, raw_key} =
+      Storage.create_key("moderation-concurrent-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    assert {:ok, lease} = ConcurrencyLimiter.acquire(key)
+    on_exit(fn -> ConcurrencyLimiter.release(lease) end)
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{"input" => "hello"})
+      |> TestSupport.put_bearer(raw_key)
+      |> ModerationEndpoint.call(ModerationEndpoint.init([]))
+
+    assert conn.status == 429
+    assert Plug.Conn.get_resp_header(conn, "retry-after") == ["1"]
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "code"]) == "rate_limit_error"
+
+    assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) ==
+             ConcurrencyLimiter.error_message()
   end
 
   test "normalizes upstream moderation errors" do
