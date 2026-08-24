@@ -4,6 +4,7 @@ defmodule LLMProxy.Config do
   """
 
   alias LLMProxy.Config.Catalog
+  alias LLMProxy.Config.ProviderUsage, as: ProviderUsageConfig
 
   def master_key, do: Application.get_env(:llm_proxy, :master_key)
 
@@ -22,6 +23,12 @@ defmodule LLMProxy.Config do
   @default_provider_connect_timeout_ms :timer.seconds(10)
   @default_provider_receive_timeout_ms :timer.minutes(10)
   @default_remote_timeout_ms :timer.seconds(30)
+  @default_provider_usage_refresh_interval_ms :timer.minutes(5)
+  @minimum_provider_usage_refresh_interval_ms :timer.minutes(1)
+  @maximum_provider_usage_refresh_interval_ms :timer.hours(1)
+  @default_provider_usage_request_timeout_ms :timer.seconds(10)
+  @minimum_provider_usage_request_timeout_ms :timer.seconds(1)
+  @maximum_provider_usage_request_timeout_ms :timer.seconds(30)
   @default_providers %{
     "anthropic" => %{
       base_url: "https://api.anthropic.com/v1",
@@ -155,7 +162,7 @@ defmodule LLMProxy.Config do
     do: provider |> provider_name() |> provider_config()
 
   def provider_config(provider) when is_binary(provider) do
-    configured = Application.get_env(:llm_proxy, :providers, %{}) |> normalize_providers()
+    configured = configured_providers()
     name = provider_name(provider)
     provider_config = Map.get(configured, name, %{})
 
@@ -163,6 +170,11 @@ defmodule LLMProxy.Config do
     |> Map.get(name, %{})
     |> deep_merge(provider_config)
     |> default_openrouter_referer(name, provider_config)
+  end
+
+  @doc false
+  def configured_providers do
+    Application.get_env(:llm_proxy, :providers, %{}) |> normalize_providers()
   end
 
   def provider_value(provider, key), do: provider_value(provider, key, nil)
@@ -234,6 +246,54 @@ defmodule LLMProxy.Config do
   def remote_timeout_ms,
     do: Application.get_env(:llm_proxy, :remote_timeout_ms, @default_remote_timeout_ms)
 
+  def provider_usage_auto_refresh? do
+    case Application.get_env(:llm_proxy, :provider_usage_auto_refresh, true) do
+      value when is_boolean(value) ->
+        value
+
+      value ->
+        raise ArgumentError,
+              ":provider_usage_auto_refresh must be a boolean, got: #{inspect(value)}"
+    end
+  end
+
+  def provider_usage_refresh_interval_ms do
+    bounded_integer!(
+      :provider_usage_refresh_interval_ms,
+      Application.get_env(
+        :llm_proxy,
+        :provider_usage_refresh_interval_ms,
+        @default_provider_usage_refresh_interval_ms
+      ),
+      @minimum_provider_usage_refresh_interval_ms,
+      @maximum_provider_usage_refresh_interval_ms
+    )
+  end
+
+  def provider_usage_request_timeout_ms do
+    bounded_integer!(
+      :provider_usage_request_timeout_ms,
+      Application.get_env(
+        :llm_proxy,
+        :provider_usage_request_timeout_ms,
+        @default_provider_usage_request_timeout_ms
+      ),
+      @minimum_provider_usage_request_timeout_ms,
+      @maximum_provider_usage_request_timeout_ms
+    )
+  end
+
+  def provider_usage_stale_after_ms do
+    default = max(provider_usage_refresh_interval_ms() * 2, :timer.minutes(10))
+
+    bounded_integer!(
+      :provider_usage_stale_after_ms,
+      Application.get_env(:llm_proxy, :provider_usage_stale_after_ms, default),
+      provider_usage_refresh_interval_ms(),
+      :timer.hours(24)
+    )
+  end
+
   def usage_window_4h_ms, do: @usage_window_4h_ms
   def usage_window_week_ms, do: @usage_window_week_ms
 
@@ -245,19 +305,64 @@ defmodule LLMProxy.Config do
     end
   end
 
-  defp normalize_providers(providers) when is_list(providers) do
+  defp normalize_providers(providers) when is_list(providers) or is_map(providers) do
     providers
-    |> Enum.map(fn {provider, config} -> {provider_name(provider), normalize_value(config)} end)
+    |> Enum.map(&normalize_provider/1)
     |> Map.new()
   end
 
-  defp normalize_providers(providers) when is_map(providers) do
-    providers
-    |> Enum.map(fn {provider, config} -> {provider_name(provider), normalize_value(config)} end)
-    |> Map.new()
+  defp normalize_providers(providers) do
+    raise ArgumentError, ":providers must be a keyword list or map, got: #{inspect(providers)}"
   end
 
-  defp normalize_providers(_providers), do: %{}
+  defp normalize_provider({provider, config}) do
+    case normalize_value(config) do
+      %{} = normalized ->
+        {provider_name(provider), validate_provider_usage!(provider, normalized)}
+
+      value ->
+        raise ArgumentError, "provider configuration must be a map, got: #{inspect(value)}"
+    end
+  end
+
+  defp validate_provider_usage!(provider, config) do
+    validate_usage_adapter!(provider, Map.get(config, :usage_adapter))
+    validate_usage_auth_scheme!(provider, Map.get(config, :usage_auth_scheme))
+    validate_usage_paths!(provider, Map.get(config, :usage_paths))
+    config
+  end
+
+  defp validate_usage_adapter!(_provider, nil), do: :ok
+  defp validate_usage_adapter!(_provider, "glm"), do: :ok
+
+  defp validate_usage_adapter!(provider, value) do
+    raise ArgumentError,
+          "provider #{inspect(provider)} usage_adapter must be \"glm\", got: #{inspect(value)}"
+  end
+
+  defp validate_usage_auth_scheme!(_provider, nil), do: :ok
+  defp validate_usage_auth_scheme!(_provider, value) when value in ["raw", "bearer"], do: :ok
+
+  defp validate_usage_auth_scheme!(provider, value) do
+    raise ArgumentError,
+          "provider #{inspect(provider)} usage_auth_scheme must be \"raw\" or \"bearer\", got: #{inspect(value)}"
+  end
+
+  defp validate_usage_paths!(_provider, nil), do: :ok
+
+  defp validate_usage_paths!(provider, paths) when is_list(paths) do
+    unless paths != [] and length(paths) <= 3 and
+             length(paths) == MapSet.size(MapSet.new(paths)) and
+             Enum.all?(paths, &ProviderUsageConfig.valid_path?/1) do
+      raise ArgumentError,
+            "provider #{inspect(provider)} usage_paths must contain one through three distinct absolute origin paths"
+    end
+  end
+
+  defp validate_usage_paths!(provider, _paths) do
+    raise ArgumentError,
+          "provider #{inspect(provider)} usage_paths must contain one through three distinct absolute origin paths"
+  end
 
   defp normalize_value(value) when is_list(value) do
     if Keyword.keyword?(value) do
@@ -304,6 +409,9 @@ defmodule LLMProxy.Config do
     "title" => :title,
     "to" => :to,
     "token_pool" => :token_pool,
+    "usage_adapter" => :usage_adapter,
+    "usage_auth_scheme" => :usage_auth_scheme,
+    "usage_paths" => :usage_paths,
     "upstream_model" => :upstream_model,
     "weight" => :weight
   }
@@ -342,5 +450,14 @@ defmodule LLMProxy.Config do
         right_value
       end
     end)
+  end
+
+  defp bounded_integer!(_name, value, minimum, maximum)
+       when is_integer(value) and value >= minimum and value <= maximum,
+       do: value
+
+  defp bounded_integer!(name, value, minimum, maximum) do
+    raise ArgumentError,
+          ":#{name} must be an integer from #{minimum} through #{maximum}, got: #{inspect(value)}"
   end
 end

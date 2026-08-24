@@ -56,6 +56,20 @@ if Code.ensure_loaded?(Incant) do
       for atom <- ["compact", "density", "options", "select", "safe_rpc_reply"] do
         assert atom in atoms
       end
+
+      assert {:ok, %{"columns" => columns, "rows" => rows}} =
+               LLMProxy.Admin.run_widget("provider_usage", "usage_windows", %{}, %{})
+
+      assert "provider" in columns
+      assert "account" in columns
+      assert is_list(rows)
+
+      refute Enum.any?(rows, fn row ->
+               Enum.any?(
+                 ~w(token access_token refresh_token account_id cookie),
+                 &Map.has_key?(row, &1)
+               )
+             end)
     end
 
     test "runs LLMProxy model and status operations" do

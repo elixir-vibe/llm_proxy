@@ -76,6 +76,17 @@ LLM_PROXY_PROVIDER_KEYS='{"example-production":["secret-a","secret-b"]}'
 
 Persisted provider tokens remain the runtime source after seeding. A token record can override the provider base URL through its `proxy` field, but that should be reserved for intentional per-token gateways; normal endpoints belong in provider configuration.
 
+GLM Coding Plan providers can use ReqLLM's native Z.AI adapter and the same isolated pool for live account-window tracking:
+
+```toml
+[providers.glm-coding]
+adapter = "zai_coding_plan"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+token_pool = "glm-production"
+```
+
+Each API key in `glm-production` is one account in the Provider Usage dashboard. Custom compatible configurations can opt in with `usage_adapter = "glm"`. See [Admin Integration](admin-integration.md#live-provider-usage) for qualified endpoints, authentication, refresh bounds, and unsupported states.
+
 Credential pools use stable user affinity by default. Library hosts can set
 `token_selection_strategy: :fill_first`; standalone releases use
 `provider_tokens.selection_strategy = "fill_first"` in TOML. Fill-first keeps

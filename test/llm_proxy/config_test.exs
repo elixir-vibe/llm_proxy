@@ -24,6 +24,17 @@ defmodule LLMProxy.ConfigTest do
     original_provider_token_allow_plaintext =
       Application.fetch_env(:llm_proxy, :provider_token_allow_plaintext)
 
+    original_usage_auto_refresh = Application.get_env(:llm_proxy, :provider_usage_auto_refresh)
+
+    original_usage_interval =
+      Application.get_env(:llm_proxy, :provider_usage_refresh_interval_ms)
+
+    original_usage_timeout =
+      Application.get_env(:llm_proxy, :provider_usage_request_timeout_ms)
+
+    original_usage_stale_after =
+      Application.get_env(:llm_proxy, :provider_usage_stale_after_ms)
+
     on_exit(fn ->
       restore_env(:providers, original_providers)
       restore_env(:catalog, original_catalog)
@@ -42,6 +53,11 @@ defmodule LLMProxy.ConfigTest do
         :provider_token_allow_plaintext,
         original_provider_token_allow_plaintext
       )
+
+      restore_env(:provider_usage_auto_refresh, original_usage_auto_refresh)
+      restore_env(:provider_usage_refresh_interval_ms, original_usage_interval)
+      restore_env(:provider_usage_request_timeout_ms, original_usage_timeout)
+      restore_env(:provider_usage_stale_after_ms, original_usage_stale_after)
     end)
 
     :ok
@@ -68,6 +84,35 @@ defmodule LLMProxy.ConfigTest do
 
     assert_raise ArgumentError, ~r/must be :affinity or :fill_first/, fn ->
       Config.token_selection_strategy()
+    end
+  end
+
+  test "validates exact provider usage configuration in library mode" do
+    valid = %{
+      "glm" => %{
+        adapter: :zai_coding_plan,
+        usage_adapter: "glm",
+        usage_auth_scheme: "bearer",
+        usage_paths: ["/api/monitor/usage"]
+      }
+    }
+
+    Application.put_env(:llm_proxy, :providers, valid)
+    assert Config.configured_providers() == valid
+
+    for invalid <- [
+          %{"glm" => %{usage_adapter: :glm}},
+          %{"glm" => %{usage_auth_scheme: :bearer}},
+          %{"glm" => %{usage_paths: "/api/monitor/usage"}},
+          %{"glm" => %{usage_paths: []}},
+          %{"glm" => %{usage_paths: ["relative"]}},
+          %{"glm" => %{usage_paths: ["/api usage"]}},
+          %{"glm" => %{usage_paths: ["/api\tusage"]}},
+          %{"glm" => %{usage_paths: [<<"/api/", 0xFF>>]}},
+          %{"glm" => %{usage_paths: ["/same", "/same"]}}
+        ] do
+      Application.put_env(:llm_proxy, :providers, invalid)
+      assert_raise ArgumentError, fn -> Config.configured_providers() end
     end
   end
 
@@ -139,6 +184,31 @@ defmodule LLMProxy.ConfigTest do
 
     assert {:error, :invalid_codec_options} =
              TokenCodec.validate_configuration()
+  end
+
+  test "bounds provider usage refresh work" do
+    Application.put_env(:llm_proxy, :provider_usage_auto_refresh, true)
+    Application.put_env(:llm_proxy, :provider_usage_refresh_interval_ms, 60_000)
+    Application.put_env(:llm_proxy, :provider_usage_request_timeout_ms, 1_000)
+    Application.put_env(:llm_proxy, :provider_usage_stale_after_ms, 120_000)
+
+    assert Config.provider_usage_auto_refresh?()
+    assert Config.provider_usage_refresh_interval_ms() == 60_000
+    assert Config.provider_usage_request_timeout_ms() == 1_000
+    assert Config.provider_usage_stale_after_ms() == 120_000
+
+    Application.put_env(:llm_proxy, :provider_usage_refresh_interval_ms, 59_999)
+
+    assert_raise ArgumentError, ~r/provider_usage_refresh_interval_ms/, fn ->
+      Config.provider_usage_refresh_interval_ms()
+    end
+
+    Application.put_env(:llm_proxy, :provider_usage_refresh_interval_ms, 60_000)
+    Application.put_env(:llm_proxy, :provider_usage_request_timeout_ms, 30_001)
+
+    assert_raise ArgumentError, ~r/provider_usage_request_timeout_ms/, fn ->
+      Config.provider_usage_request_timeout_ms()
+    end
   end
 
   test "configures bounded concurrent ReqLLM streaming pools" do

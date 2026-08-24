@@ -32,7 +32,9 @@ defmodule LLMProxy.Application do
           LLMProxy.ConcurrencyLimiter,
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
-          LLMProxy.TokenPool.Server
+          LLMProxy.TokenPool.Server,
+          {Task.Supervisor, name: LLMProxy.ProviderUsage.TaskSupervisor, max_children: 1},
+          LLMProxy.ProviderUsage.Server
         ] ++ rpc_children() ++ http_children()
 
     opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]

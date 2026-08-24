@@ -31,6 +31,7 @@ if Code.ensure_loaded?(Incant) do
     expose(LLMProxy.Schemas.MessageLog, as: :message, readonly: true)
 
     dashboard(LLMProxy.Admin.Dashboards.Operations)
+    dashboard(LLMProxy.Admin.Dashboards.ProviderUsage)
 
     @impl Incant.Service
     def index(surface_id, params, context) when is_binary(surface_id) do
