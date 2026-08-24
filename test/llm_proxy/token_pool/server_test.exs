@@ -1,6 +1,7 @@
 defmodule LLMProxy.TokenPool.ServerTest do
   use ExUnit.Case
 
+  alias LLMProxy.ProviderUsage.Snapshot
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias LLMProxy.TokenPool.Server
@@ -117,6 +118,56 @@ defmodule LLMProxy.TokenPool.ServerTest do
 
     assert {:ok, recovered} = Server.pick_token("openai-codex", "user-1")
     assert recovered.id == primary.id
+  end
+
+  test "model cooldown does not block the same account for other models" do
+    {:ok, _first} = Storage.add_token("openai-codex", "oauth", "first")
+    {:ok, _second} = Storage.add_token("openai-codex", "oauth", "second")
+
+    assert {:ok, preferred} = Server.pick_token("openai-codex", "user-1", "model-b")
+
+    Server.mark_rate_limited(preferred, "model-a", 60_000)
+
+    assert {:ok, %{id: id}} = Server.pick_token("openai-codex", "user-1", "model-a")
+    refute id == preferred.id
+
+    assert {:ok, %{id: id}} = Server.pick_token("openai-codex", "user-1", "model-b")
+    assert id == preferred.id
+  end
+
+  test "selection skips an account with authoritative exhausted usage" do
+    {:ok, _first} = Storage.add_token("openai-codex", "oauth", "first")
+    {:ok, _second} = Storage.add_token("openai-codex", "oauth", "second")
+    assert {:ok, preferred} = Server.pick_token("openai-codex", "user-1", "codex-model")
+    usage_state = :sys.get_state(LLMProxy.ProviderUsage.Server)
+
+    snapshot = %Snapshot{
+      token_id: preferred.id,
+      provider_label: "Codex",
+      account_label: "Account ##{preferred.id}",
+      availability: :unavailable,
+      state: :fresh
+    }
+
+    :sys.replace_state(LLMProxy.ProviderUsage.Server, fn state ->
+      %{state | snapshots: %{preferred.id => snapshot}}
+    end)
+
+    on_exit(fn -> :sys.replace_state(LLMProxy.ProviderUsage.Server, fn _ -> usage_state end) end)
+
+    assert {:ok, %{id: id}} = Server.pick_token("openai-codex", "user-1", "codex-model")
+    refute id == preferred.id
+  end
+
+  test "cooldown remains active after the token-pool server restarts" do
+    {:ok, token} = Storage.add_token("openrouter", "api-key", "token-a")
+    Server.mark_rate_limited(token, 60_000)
+
+    :ok = Supervisor.terminate_child(LLMProxy.Supervisor, Server)
+    {:ok, _pid} = Supervisor.restart_child(LLMProxy.Supervisor, Server)
+    :ok = TestSupport.allow_token_pool()
+
+    assert {:error, :all_rate_limited} = Server.pick_token("openrouter", "user-1")
   end
 
   defp restore_env(key, nil), do: Application.delete_env(:llm_proxy, key)

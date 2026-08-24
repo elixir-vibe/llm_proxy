@@ -10,6 +10,7 @@ defmodule LLMProxy.Storage.Ecto do
     ApiKey,
     MessageLog,
     ProviderToken,
+    ProviderTokenCooldown,
     ServiceUsage,
     Trace,
     TraceFeedback,
@@ -414,9 +415,23 @@ defmodule LLMProxy.Storage.Ecto do
 
   def remove_token(id) do
     case Repo.get(ProviderToken, id) do
-      nil -> {:error, :not_found}
-      token -> Repo.delete(token)
+      nil ->
+        {:error, :not_found}
+
+      token ->
+        delete_provider_token(token)
     end
+  end
+
+  defp delete_provider_token(%ProviderToken{id: id} = token) do
+    Repo.transaction(fn ->
+      Repo.delete_all(from(c in ProviderTokenCooldown, where: c.token_id == ^id))
+
+      case Repo.delete(token) do
+        {:ok, token} -> token
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
+    end)
   end
 
   def set_token_enabled(id, enabled) do

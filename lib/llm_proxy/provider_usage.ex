@@ -50,6 +50,13 @@ defmodule LLMProxy.ProviderUsage do
     Enum.count(snapshots(), &(&1.state in [:stale, :error] or &1.availability == :unavailable))
   end
 
+  @spec token_available?(integer(), DateTime.t()) :: boolean()
+  def token_available?(token_id, at \\ DateTime.utc_now()) when is_integer(token_id) do
+    snapshots()
+    |> Enum.find(&(&1.token_id == token_id))
+    |> available_snapshot?(at)
+  end
+
   @spec refresh_all() :: {:ok, :started | :already_refreshing} | {:error, :unavailable}
   def refresh_all do
     if Process.whereis(Server), do: Server.refresh_all(), else: {:error, :unavailable}
@@ -99,4 +106,28 @@ defmodule LLMProxy.ProviderUsage do
     |> String.replace("_", " ")
     |> String.capitalize()
   end
+
+  @doc false
+  def available_snapshot?(snapshot, at \\ DateTime.utc_now())
+
+  def available_snapshot?(nil, _at), do: true
+
+  def available_snapshot?(%Snapshot{state: state}, _at)
+      when state in [:disabled, :stale, :error], do: true
+
+  def available_snapshot?(%Snapshot{availability: availability}, _at)
+      when availability in [:available, :limited],
+      do: true
+
+  def available_snapshot?(%Snapshot{availability: :unavailable, windows: windows}, at) do
+    case windows
+         |> Enum.map(& &1.resets_at)
+         |> Enum.reject(&is_nil/1)
+         |> Enum.min_by(&DateTime.to_unix(&1, :microsecond), fn -> nil end) do
+      nil -> false
+      resets_at -> DateTime.compare(at, resets_at) != :lt
+    end
+  end
+
+  def available_snapshot?(_snapshot, _at), do: false
 end

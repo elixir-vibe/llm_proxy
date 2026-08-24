@@ -97,6 +97,13 @@ returns to its configured place without changing the priority order. Incant's
 provider-token edit form exposes only `priority`; credential fields remain
 uneditable and private.
 
+For accounts with live provider-usage data, selection also skips fresh exhausted accounts until
+their reported reset time. A stale or failed snapshot is not used as proof of capacity. Before the
+first snapshot exists, the token remains eligible so tracker startup does not stop all traffic.
+Rate-limit cooldowns are stored by provider token and upstream model. A model-specific failure does
+not block the same account for other models. Global cooldowns remain available for errors that do
+not identify a model, and all cooldowns survive service restarts.
+
 ## Public model aliases
 
 A readable library configuration uses model aliases and routes:

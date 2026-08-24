@@ -1,8 +1,10 @@
 defmodule LLMProxy.StorageTest do
   use ExUnit.Case
 
+  alias LLMProxy.Schemas.ProviderTokenCooldown
   alias LLMProxy.Storage
   alias LLMProxy.Storage.Repo.SQLite
+  alias LLMProxy.TokenPool.Server, as: TokenPool
 
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -323,6 +325,15 @@ defmodule LLMProxy.StorageTest do
 
       {:ok, _} = Storage.remove_token(token.id)
       assert Storage.get_tokens("anthropic", "oauth") == []
+    end
+
+    test "removing a token removes its cooldown records" do
+      {:ok, token} = Storage.add_token("anthropic", "oauth", "tok-123")
+      TokenPool.mark_rate_limited(token, "claude", 60_000)
+
+      assert SQLite.get_by(ProviderTokenCooldown, token_id: token.id, model: "claude")
+      assert {:ok, _token} = Storage.remove_token(token.id)
+      refute SQLite.get_by(ProviderTokenCooldown, token_id: token.id, model: "claude")
     end
 
     test "disable token excludes from get_tokens" do

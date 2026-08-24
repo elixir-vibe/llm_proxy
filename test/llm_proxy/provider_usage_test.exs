@@ -4,7 +4,7 @@ defmodule LLMProxy.ProviderUsageTest do
   import Plug.Conn
 
   alias LLMProxy.Provider.TokenCodec.AESGCM
-  alias LLMProxy.ProviderUsage.{Loader, Source}
+  alias LLMProxy.ProviderUsage.{Loader, Snapshot, Source, Window}
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias Req.Test, as: ReqTest
@@ -206,5 +206,29 @@ defmodule LLMProxy.ProviderUsageTest do
     assert [snapshot] = Loader.refresh({:account, token.id})
     assert snapshot.state == :error
     assert snapshot.error == "Provider returned invalid usage data"
+  end
+
+  test "uses fresh upstream availability and recovers at the reported reset" do
+    now = DateTime.utc_now()
+    reset = DateTime.add(now, 60, :second)
+
+    assert LLMProxy.ProviderUsage.available_snapshot?(nil, now)
+
+    snapshot = %Snapshot{
+      token_id: 1,
+      provider_label: "Codex",
+      account_label: "Account #1",
+      availability: :unavailable,
+      state: :fresh,
+      windows: [
+        %Window{label: "Primary", used_percent: 100, remaining_percent: 0, resets_at: reset}
+      ]
+    }
+
+    refute LLMProxy.ProviderUsage.available_snapshot?(snapshot, now)
+    assert LLMProxy.ProviderUsage.available_snapshot?(snapshot, reset)
+    assert LLMProxy.ProviderUsage.available_snapshot?(%{snapshot | state: :stale}, reset)
+    assert LLMProxy.ProviderUsage.available_snapshot?(%{snapshot | state: :error}, reset)
+    assert LLMProxy.ProviderUsage.available_snapshot?(%{snapshot | state: :disabled}, reset)
   end
 end

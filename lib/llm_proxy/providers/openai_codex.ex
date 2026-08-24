@@ -31,8 +31,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @impl true
   def call(body, user_id) do
-    with {:ok, token} <- pick_token(user_id),
-         {:ok, request} <- request_from_chat_body(body),
+    with {:ok, request} <- request_from_chat_body(body),
+         {:ok, token} <- pick_token(user_id, request.model),
          {:ok, response} <- generate(request, token, stream?: false) do
       {:ok,
        Result.response(
@@ -51,8 +51,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @impl true
   def stream(body, user_id) do
-    with {:ok, token} <- pick_token(user_id),
-         {:ok, request} <- request_from_chat_body(body),
+    with {:ok, request} <- request_from_chat_body(body),
+         {:ok, token} <- pick_token(user_id, request.model),
          {:ok, stream_response} <- generate(request, token, stream?: true) do
       {:ok,
        Result.stream(Events.openai_chat_events(stream_response.stream, request.model), token)}
@@ -61,8 +61,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @impl true
   def call_native(body, user_id) do
-    with {:ok, token} <- pick_token(user_id),
-         {:ok, request} <- request_from_responses_body(body),
+    with {:ok, request} <- request_from_responses_body(body),
+         {:ok, token} <- pick_token(user_id, request.model),
          {:ok, response} <- generate(request, token, stream?: false) do
       {:ok,
        Result.response(
@@ -74,8 +74,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @impl true
   def stream_native(body, user_id) do
-    with {:ok, token} <- pick_token(user_id),
-         {:ok, request} <- request_from_responses_body(body),
+    with {:ok, request} <- request_from_responses_body(body),
+         {:ok, token} <- pick_token(user_id, request.model),
          {:ok, stream_response} <- generate(request, token, stream?: true) do
       stream = Stream.map(stream_response.stream, &Events.responses_event/1)
       {:ok, Result.stream(Stream.reject(stream, &is_nil/1), token)}
@@ -160,8 +160,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
     OAuth.refresh_if_needed(token, refresh_fun)
   end
 
-  defp pick_token(user_id) do
-    case TokenPool.pick_token_by_kind(name(), "oauth", user_id) do
+  defp pick_token(user_id, model) do
+    case TokenPool.pick_token_by_kind(name(), "oauth", user_id, model) do
       {:ok, token} -> normalize_token_refresh(refresh_token_if_needed(token))
       {:error, _reason} -> provider_error("No available OpenAI Codex OAuth tokens", 503)
     end

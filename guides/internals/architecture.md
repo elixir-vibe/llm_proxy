@@ -51,7 +51,7 @@ LLMProxy
 │   └── Routing              deployment ordering strategies
 ├── Protocol                 OpenAI/Anthropic request normalization
 ├── Catalog                  public model aliases and deployment data
-├── TokenPool                credential selection and cooldown state
+├── TokenPool                credential selection and persisted cooldown state
 ├── Cache                    adapter, deterministic key, and policy
 ├── GuardrailPipeline        request, response, and stream policy hooks
 ├── ConcurrencyLimiter       monitored per-key request and stream leases

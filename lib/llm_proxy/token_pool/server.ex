@@ -12,7 +12,7 @@ defmodule LLMProxy.TokenPool.Server do
 
   alias LLMProxy.Provider.Credential
   alias LLMProxy.Provider.TokenCodec
-  alias LLMProxy.Schemas.ProviderToken
+  alias LLMProxy.Schemas.{ProviderToken, ProviderTokenCooldown}
   alias LLMProxy.Storage.Repo
 
   import Bitwise
@@ -20,37 +20,44 @@ defmodule LLMProxy.TokenPool.Server do
 
   defmodule State do
     @moduledoc """
-    Runtime state for provider-token cooldown timestamps.
+    Runtime token-pool server state.
     """
-    defstruct cooldowns: %{}
+    defstruct []
   end
 
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, %State{}, name: __MODULE__)
   end
 
-  def pick_token(provider, user_id \\ "") do
-    GenServer.call(__MODULE__, {:pick_token, provider, user_id})
+  def pick_token(provider, user_id \\ "", model \\ nil) do
+    GenServer.call(__MODULE__, {:pick_token, provider, user_id, model})
   end
 
-  def pick_token_by_kind(provider, kind, user_id \\ "") do
-    GenServer.call(__MODULE__, {:pick_token_by_kind, provider, kind, user_id})
+  def pick_token_by_kind(provider, kind, user_id \\ "", model \\ nil) do
+    GenServer.call(__MODULE__, {:pick_token_by_kind, provider, kind, user_id, model})
   end
 
   def mark_rate_limited(token, cooldown_ms \\ LLMProxy.Config.token_cooldown_ms())
 
   def mark_rate_limited(%ProviderToken{id: id}, cooldown_ms) do
     Logger.warning("Token #{id} marked as rate-limited")
-    GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
+    persist_cooldown(id, "*", cooldown_ms)
   end
 
   def mark_rate_limited(%Credential{id: id}, cooldown_ms) do
     Logger.warning("Token #{id} marked as rate-limited")
-    GenServer.cast(__MODULE__, {:mark_rate_limited, id, cooldown_ms})
+    persist_cooldown(id, "*", cooldown_ms)
+  end
+
+  def mark_rate_limited(token, model, cooldown_ms)
+      when is_binary(model) and is_integer(cooldown_ms) do
+    Logger.warning("Token #{token.id} marked as rate-limited for model #{model}")
+    persist_cooldown(token.id, model, cooldown_ms)
   end
 
   def clear_rate_limits do
-    GenServer.cast(__MODULE__, :clear_rate_limits)
+    Repo.delete_all(ProviderTokenCooldown)
+    :ok
   end
 
   # Callbacks
@@ -61,14 +68,14 @@ defmodule LLMProxy.TokenPool.Server do
   end
 
   @impl true
-  def handle_call({:pick_token, provider, user_id}, _from, state) do
-    result = do_pick_with_fallback(provider, user_id, state)
+  def handle_call({:pick_token, provider, user_id, model}, _from, state) do
+    result = do_pick_with_fallback(provider, user_id, model, state)
     {:reply, result, state}
   end
 
   @impl true
-  def handle_call({:pick_token_by_kind, provider, kind, user_id}, _from, state) do
-    case do_pick_by_kind(provider, kind, user_id, state) do
+  def handle_call({:pick_token_by_kind, provider, kind, user_id, model}, _from, state) do
+    case do_pick_by_kind(provider, kind, user_id, model, state) do
       {:ok, token} -> {:reply, {:ok, token}, state}
       {:error, reason} -> {:reply, {:error, reason}, state}
       :none -> {:reply, {:error, :no_tokens}, state}
@@ -76,31 +83,18 @@ defmodule LLMProxy.TokenPool.Server do
     end
   end
 
-  @impl true
-  def handle_cast({:mark_rate_limited, token_id, cooldown_ms}, state) do
-    cooldowns =
-      Map.put(state.cooldowns, token_id, System.monotonic_time(:millisecond) + cooldown_ms)
-
-    {:noreply, %{state | cooldowns: cooldowns}}
-  end
-
-  @impl true
-  def handle_cast(:clear_rate_limits, state) do
-    {:noreply, %{state | cooldowns: %{}}}
-  end
-
   # Private
 
-  defp do_pick_with_fallback(provider, user_id, state) do
-    case do_pick_oauth(provider, user_id, state) do
+  defp do_pick_with_fallback(provider, user_id, model, state) do
+    case do_pick_oauth(provider, user_id, model, state) do
       {:ok, token} -> {:ok, token}
       {:error, _reason} = error -> error
-      oauth_status -> pick_api_key_after_oauth(provider, user_id, state, oauth_status)
+      oauth_status -> pick_api_key_after_oauth(provider, user_id, model, state, oauth_status)
     end
   end
 
-  defp pick_api_key_after_oauth(provider, user_id, state, oauth_status) do
-    case do_pick_by_kind(provider, "api-key", user_id, state) do
+  defp pick_api_key_after_oauth(provider, user_id, model, state, oauth_status) do
+    case do_pick_by_kind(provider, "api-key", user_id, model, state) do
       {:ok, token} -> {:ok, token}
       {:error, _reason} = error -> error
       api_key_status -> fallback_error(oauth_status, api_key_status)
@@ -111,30 +105,29 @@ defmodule LLMProxy.TokenPool.Server do
   defp fallback_error(_oauth_status, :none), do: {:error, :no_tokens}
   defp fallback_error(_oauth_status, :all_rate_limited), do: {:error, :all_rate_limited}
 
-  defp do_pick_oauth(provider, user_id, state) do
-    do_pick_by_kind(provider, "oauth", user_id, state)
+  defp do_pick_oauth(provider, user_id, model, state) do
+    do_pick_by_kind(provider, "oauth", user_id, model, state)
   end
 
-  defp do_pick_by_kind(provider, kind, user_id, state) do
+  defp do_pick_by_kind(provider, kind, user_id, model, _state) do
     strategy = LLMProxy.Config.token_selection_strategy()
     tokens = get_enabled_tokens(provider, kind, strategy)
 
     case tokens do
       [] -> :none
-      tokens -> pick_available(tokens, user_id, state, strategy)
+      tokens -> pick_available(tokens, user_id, model, strategy)
     end
   end
 
-  defp pick_available(tokens, user_id, state, strategy) do
-    now = System.monotonic_time(:millisecond)
+  defp pick_available(tokens, user_id, model, strategy) do
+    now = DateTime.utc_now()
+    blocked = tokens |> blocked_token_ids(model, now) |> MapSet.new()
 
     tokens
     |> ordered_candidates(strategy, user_id)
     |> Enum.find(fn token ->
-      case Map.get(state.cooldowns, token.id) do
-        nil -> true
-        expires_at -> now >= expires_at
-      end
+      not MapSet.member?(blocked, token.id) and
+        LLMProxy.ProviderUsage.token_available?(token.id, now)
     end)
     |> case do
       nil -> :all_rate_limited
@@ -152,6 +145,32 @@ defmodule LLMProxy.TokenPool.Server do
     |> Stream.cycle()
     |> Stream.drop(start_idx)
     |> Stream.take(pool_size)
+  end
+
+  defp blocked_token_ids(tokens, model, now) do
+    ids = Enum.map(tokens, & &1.id)
+    models = if is_binary(model), do: ["*", model], else: ["*"]
+
+    ProviderTokenCooldown
+    |> where([c], c.token_id in ^ids and c.model in ^models and c.available_at > ^now)
+    |> select([c], c.token_id)
+    |> Repo.all()
+  end
+
+  defp persist_cooldown(token_id, model, cooldown_ms) do
+    available_at = DateTime.add(DateTime.utc_now(), cooldown_ms, :millisecond)
+
+    %ProviderTokenCooldown{}
+    |> ProviderTokenCooldown.changeset(%{
+      token_id: token_id,
+      model: model,
+      available_at: available_at,
+      reason: "rate_limited"
+    })
+    |> Repo.insert(
+      on_conflict: [set: [available_at: available_at, reason: "rate_limited"]],
+      conflict_target: [:token_id, :model]
+    )
   end
 
   defp pick_index(_user_id, pool_size) when pool_size <= 1, do: 0
