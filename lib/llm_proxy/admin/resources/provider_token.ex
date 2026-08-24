@@ -7,6 +7,12 @@ if Code.ensure_loaded?(Incant) do
       repo: LLMProxy.Storage.Repo,
       title: "Provider Tokens"
 
+    changeset({LLMProxy.Admin.Resources.ProviderToken, :priority_changeset})
+
+    form do
+      field(:priority, :number, min: 0, step: 1)
+    end
+
     table density: :compact, default_sort: [provider: :asc] do
       column(:provider, link: true, priority: :primary)
       column(:kind, priority: :secondary)
@@ -39,6 +45,7 @@ if Code.ensure_loaded?(Incant) do
         callback: :enable
       )
 
+      action(:edit, label: "Edit priority")
       action(:remove, confirm: true, destructive: true, callback: :remove)
 
       actions do
@@ -54,6 +61,13 @@ if Code.ensure_loaded?(Incant) do
       end
 
       search([:provider, :label])
+    end
+
+    def priority_changeset(token, attrs) do
+      token
+      |> Ecto.Changeset.cast(attrs, [:priority])
+      |> Ecto.Changeset.validate_required([:priority])
+      |> Ecto.Changeset.validate_number(:priority, greater_than_or_equal_to: 0)
     end
 
     def disable(%{id: id}, _assigns), do: set_enabled(id, false)

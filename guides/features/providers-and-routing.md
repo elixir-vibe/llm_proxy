@@ -76,13 +76,15 @@ LLM_PROXY_PROVIDER_KEYS='{"example-production":["secret-a","secret-b"]}'
 
 Persisted provider tokens remain the runtime source after seeding. A token record can override the provider base URL through its `proxy` field, but that should be reserved for intentional per-token gateways; normal endpoints belong in provider configuration.
 
-Credential pools use stable user affinity by default. Library applications set
-`token_selection_strategy: :fill_first` in Elixir configuration. Standalone releases set
-`token_selection_strategy = "fill_first"` in the `[routing]` TOML table. Fill-first selection
-uses the highest-priority healthy token until it enters cooldown, then continues in descending
-priority order. Higher integer `priority` values are selected first, and token ID breaks ties.
-Disabled and cooling-down tokens are skipped. A recovered token returns to its configured place
-without changing the priority order.
+Credential pools use stable user affinity by default. Library hosts can set
+`token_selection_strategy: :fill_first`; standalone releases use
+`provider_tokens.selection_strategy = "fill_first"` in TOML. Fill-first keeps
+the existing OAuth-first, API-key-fallback boundary and orders healthy tokens
+within each credential kind by descending non-negative `priority`, then ascending
+token ID. Disabled and cooling-down tokens are skipped. A recovered token
+returns to its configured place without changing the priority order. Incant's
+provider-token edit form exposes only `priority`; credential fields remain
+uneditable and private.
 
 ## Public model aliases
 

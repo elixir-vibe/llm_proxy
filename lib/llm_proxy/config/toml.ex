@@ -16,8 +16,8 @@ defmodule LLMProxy.Config.TOML do
   @top_level_keys ~w(catalog models provider_tokens providers routing server storage telemetry)
   @server_keys ~w(body_limit_bytes port public_url rpc_socket)
   @storage_keys ~w(database quackdb_endpoint quackdb_uri)
-  @routing_keys ~w(max_retries provider_connect_timeout_ms replay_policy token_selection_strategy)
-  @provider_token_keys ~w(allow_plaintext)
+  @routing_keys ~w(max_retries provider_connect_timeout_ms replay_policy)
+  @provider_token_keys ~w(allow_plaintext selection_strategy)
   @telemetry_keys ~w(otlp_endpoint)
   @catalog_keys ~w(models public_models)
 
@@ -133,10 +133,6 @@ defmodule LLMProxy.Config.TOML do
     |> put_if_present(:max_retries, non_negative_integer(routing, "max_retries"))
     |> put_if_present(:replay_policy, replay_policy(routing["replay_policy"]))
     |> put_if_present(
-      :token_selection_strategy,
-      token_selection_strategy(routing["token_selection_strategy"])
-    )
-    |> put_if_present(
       :provider_connect_timeout_ms,
       positive_integer(routing, "provider_connect_timeout_ms")
     )
@@ -152,15 +148,6 @@ defmodule LLMProxy.Config.TOML do
     raise ArgumentError, "routing.replay_policy must be safe_only or allow_uncertain"
   end
 
-  defp token_selection_strategy(nil), do: nil
-  defp token_selection_strategy("affinity"), do: :affinity
-  defp token_selection_strategy("fill_first"), do: :fill_first
-
-  defp token_selection_strategy(_strategy) do
-    raise ArgumentError,
-          "routing.token_selection_strategy must be affinity or fill_first"
-  end
-
   defp provider_tokens(nil), do: []
 
   defp provider_tokens(%{} = provider_tokens) do
@@ -171,10 +158,23 @@ defmodule LLMProxy.Config.TOML do
       :provider_token_allow_plaintext,
       optional_boolean(provider_tokens, "allow_plaintext")
     )
+    |> put_if_present(
+      :token_selection_strategy,
+      token_selection_strategy(provider_tokens["selection_strategy"])
+    )
   end
 
   defp provider_tokens(_provider_tokens) do
     raise ArgumentError, "provider_tokens must be a TOML table"
+  end
+
+  defp token_selection_strategy(nil), do: nil
+  defp token_selection_strategy("affinity"), do: :affinity
+  defp token_selection_strategy("fill_first"), do: :fill_first
+
+  defp token_selection_strategy(_strategy) do
+    raise ArgumentError,
+          "provider_tokens.selection_strategy must be affinity or fill_first"
   end
 
   defp telemetry(nil), do: []

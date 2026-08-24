@@ -356,6 +356,11 @@ defmodule LLMProxy.StorageTest do
                Storage.add_token("openai", "api-key", "tok", %{priority: -1})
 
       assert changeset.errors[:priority]
+
+      assert {:error, changeset} =
+               Storage.add_token("openai", "api-key", "tok", %{priority: nil})
+
+      assert changeset.errors[:priority]
     end
   end
 

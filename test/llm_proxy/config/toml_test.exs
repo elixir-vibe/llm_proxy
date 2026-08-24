@@ -25,6 +25,7 @@ defmodule LLMProxy.Config.TOMLTest do
 
     [provider_tokens]
     allow_plaintext = false
+    selection_strategy = "fill_first"
 
     [telemetry]
     otlp_endpoint = "http://127.0.0.1:4318"
@@ -60,6 +61,7 @@ defmodule LLMProxy.Config.TOMLTest do
     assert llm_proxy[:provider_connect_timeout_ms] == 15_000
     assert llm_proxy[:token_selection_strategy] == :fill_first
     refute llm_proxy[:provider_token_allow_plaintext]
+    assert llm_proxy[:token_selection_strategy] == :fill_first
 
     assert llm_proxy[:quackdb_server][:database] == "/var/lib/llm-proxy/main.duckdb"
     assert llm_proxy[:quackdb_server][:endpoint] == "quack:localhost:9494"
@@ -118,6 +120,10 @@ defmodule LLMProxy.Config.TOMLTest do
 
     assert_raise ArgumentError, ~r/provider_tokens contains unsupported configuration keys/, fn ->
       TOML.decode(~s([provider_tokens]\nkeys = "must-not-live-in-toml"))
+    end
+
+    assert_raise ArgumentError, ~r/selection_strategy must be affinity or fill_first/, fn ->
+      TOML.decode(~s([provider_tokens]\nselection_strategy = "random"))
     end
   end
 
