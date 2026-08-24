@@ -117,6 +117,13 @@ defmodule LLMProxy.Storage.Ecto do
     end
   end
 
+  def set_content_capture(id, enabled) when is_boolean(enabled) do
+    case Repo.get(ApiKey, id) do
+      nil -> {:error, :not_found}
+      key -> key |> ApiKey.changeset(%{capture_content: enabled}) |> Repo.update()
+    end
+  end
+
   def check_model_access(key, model) do
     case key.allowed_models do
       nil ->

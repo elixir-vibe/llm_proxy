@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Added
+
+- API keys can now set an in-memory concurrent-request limit with stream-safe,
+  process-monitored leases across in-process, ReqLLM, SafeRPC, and HTTP
+  generation or moderation calls.
+- API keys now expose an explicit `capture_content` policy for message, trace-body,
+  and deterministic response-cache storage.
+
+### Changed
+
+- Content capture is disabled by default for new API keys. Usage, cost, latency,
+  and content-free trace metadata remain available, while message extraction,
+  trace-body serialization, and cache access require explicit capture consent.
+- Provider fallback now has a strict attempt budget and replays only proven-safe failures by default. Timeouts and 5xx responses require the explicit `:allow_uncertain` compatibility policy, and visible streams are never replayed.
+
+### Security
+
+- Sensitive Incant fields are redacted before local rendering or remote SafeRPC
+  transport.
+
+### Migration
+
+- Existing trace-enabled keys retain content capture. Other existing keys stop
+  automatic message and cache capture after migration. Operators must define
+  retention and remove content stored before this change according to policy.
+
 ## 0.1.1 - 2026-08-01
 
 ### Fixed

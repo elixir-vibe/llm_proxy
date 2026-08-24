@@ -113,6 +113,10 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     ErrorResponse.send_openai(conn, 403, "permission_error", message)
   end
 
+  defp handle_provider_error(conn, {:concurrency_limit, _limit}) do
+    ErrorResponse.send_concurrency_limit_openai(conn)
+  end
+
   defp finish_stream(conn, %Result{kind: :stream} = result, trace_id) do
     from_protocol = provider_protocol(result.provider)
     telemetry = Telemetry.stream_context(result.provider.name(), result.model, trace_id)

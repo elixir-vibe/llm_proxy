@@ -216,6 +216,7 @@ defmodule LLMProxy.Providers.ReqLLM do
     if error.status == 429, do: TokenPool.mark_rate_limited(token)
 
     Result.error(error.message, error.status, token,
+      replay_safety: ErrorProjection.replay_safety(reason),
       provider_body: %{"error" => ErrorProjection.client_error(reason)}
     )
   end

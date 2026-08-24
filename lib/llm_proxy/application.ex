@@ -27,6 +27,7 @@ defmodule LLMProxy.Application do
       storage_children() ++
         [
           LLMProxy.Drain,
+          LLMProxy.ConcurrencyLimiter,
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
           LLMProxy.TokenPool.Server

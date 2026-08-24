@@ -28,7 +28,7 @@ Out of scope for the core package:
 ### Governance
 
 - Add per-model and future actor/team budget scopes without weakening the existing API-key boundary.
-- Add RPM, TPM, and concurrent-request limits to the composable limit model.
+- Add RPM and TPM limits to the composable limit model.
 - Improve cache-hit accounting and policy visibility.
 
 ### Routing

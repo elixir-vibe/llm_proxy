@@ -135,7 +135,31 @@ Default open-circuit cooldown. Default: 30 seconds.
 config :llm_proxy, max_retries: 1
 ```
 
-Compatibility retry/fallback limit for configured fallback chains. Default: 1.
+Compatibility retry/fallback limit for configured fallback chains. Default: 1. The strict provider-dispatch budget is `max_retries + 1`; open-circuit and unsupported-protocol route skips do not consume it.
+
+Standalone TOML:
+
+```toml
+[routing]
+max_retries = 1
+```
+
+### Replay Policy
+
+```elixir
+config :llm_proxy, replay_policy: :safe_only
+```
+
+`:safe_only` permits fallback only when LLMProxy has evidence that the upstream did not accept work, such as unavailable credentials, a clear connection failure, or a 429 refusal. This is the default.
+
+`:allow_uncertain` also permits replay after timeouts and 5xx responses. Use it only when duplicate cost and side effects are acceptable. It restores the earlier fallback behavior.
+
+Standalone TOML:
+
+```toml
+[routing]
+replay_policy = "safe_only"
+```
 
 ### Fallbacks
 

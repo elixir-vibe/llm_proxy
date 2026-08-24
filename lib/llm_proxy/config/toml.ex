@@ -9,7 +9,12 @@ defmodule LLMProxy.Config.TOML do
 
   alias LLMProxy.Catalog.Model
 
-  @type decoded :: [providers: map(), models: [map()]]
+  @type decoded :: [
+          providers: map(),
+          models: [map()],
+          max_retries: non_neg_integer(),
+          replay_policy: :safe_only | :allow_uncertain
+        ]
   @type reason :: Toml.reason()
 
   @spec decode(String.t(), keyword()) :: {:ok, decoded()} | {:error, reason()}
@@ -27,15 +32,46 @@ defmodule LLMProxy.Config.TOML do
   end
 
   defp normalize(data) when is_map(data) do
+    routing = data["routing"]
+
     []
     |> put_if_present(:providers, providers(data["providers"]))
     |> put_if_present(:models, models(data["models"] || get_in(data, ["catalog", "models"])))
+    |> put_if_present(:max_retries, routing_max_retries(routing))
+    |> put_if_present(:replay_policy, routing_replay_policy(routing))
     |> Enum.reverse()
   end
 
   defp put_if_present(config, _key, nil), do: config
   defp put_if_present(config, _key, []), do: config
   defp put_if_present(config, key, value), do: [{key, value} | config]
+
+  defp routing_max_retries(nil), do: nil
+
+  defp routing_max_retries(%{"max_retries" => retries}) when is_integer(retries) and retries >= 0,
+    do: retries
+
+  defp routing_max_retries(%{"max_retries" => retries}) do
+    raise ArgumentError,
+          "routing.max_retries must be a non-negative integer, got: #{inspect(retries)}"
+  end
+
+  defp routing_max_retries(%{}), do: nil
+
+  defp routing_max_retries(routing) do
+    raise ArgumentError, "routing must be a TOML table, got: #{inspect(routing)}"
+  end
+
+  defp routing_replay_policy(nil), do: nil
+  defp routing_replay_policy(%{"replay_policy" => "safe_only"}), do: :safe_only
+  defp routing_replay_policy(%{"replay_policy" => "allow_uncertain"}), do: :allow_uncertain
+
+  defp routing_replay_policy(%{"replay_policy" => policy}) do
+    raise ArgumentError,
+          "routing.replay_policy must be safe_only or allow_uncertain, got: #{inspect(policy)}"
+  end
+
+  defp routing_replay_policy(%{}), do: nil
 
   defp providers(nil), do: nil
 

@@ -71,7 +71,29 @@ defmodule LLMProxy.Config do
   def public_url, do: Application.get_env(:llm_proxy, :public_url, "")
   def provider_key_seeds, do: Application.get_env(:llm_proxy, :provider_key_seeds, %{})
   def fallbacks, do: Application.get_env(:llm_proxy, :fallbacks, %{})
-  def max_retries, do: Application.get_env(:llm_proxy, :max_retries, 1)
+
+  def max_retries do
+    case Application.get_env(:llm_proxy, :max_retries, 1) do
+      retries when is_integer(retries) and retries >= 0 ->
+        retries
+
+      value ->
+        raise ArgumentError, ":max_retries must be a non-negative integer, got: #{inspect(value)}"
+    end
+  end
+
+  def max_attempts, do: max_retries() + 1
+
+  def replay_policy do
+    case Application.get_env(:llm_proxy, :replay_policy, :safe_only) do
+      policy when policy in [:safe_only, :allow_uncertain] ->
+        policy
+
+      value ->
+        raise ArgumentError,
+              ":replay_policy must be :safe_only or :allow_uncertain, got: #{inspect(value)}"
+    end
+  end
 
   def body_limit_bytes do
     case Application.get_env(:llm_proxy, :body_limit_bytes, 32_000_000) do
