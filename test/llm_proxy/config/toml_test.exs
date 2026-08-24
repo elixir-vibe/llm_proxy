@@ -82,4 +82,11 @@ defmodule LLMProxy.Config.TOMLTest do
   test "returns TOML parser errors" do
     assert {:error, {:invalid_toml, _reason}} = TOML.decode("[invalid]\na = 1 b = 2")
   end
+
+  test "decodes a public model allowlist, including an empty list" do
+    assert {:ok, [public_models: ["codex", "glm"]]} =
+             TOML.decode(~s(public_models = ["codex", "glm"]))
+
+    assert {:ok, [public_models: []]} = TOML.decode("public_models = []")
+  end
 end

@@ -158,6 +158,14 @@ Ordered modules implementing `LLMProxy.Guardrail`.
 ## Provider Configuration
 {: .col-2}
 
+### Public Model Allowlist
+
+```elixir
+config :llm_proxy, public_models: ["fast", "codex"]
+```
+
+Filters model discovery and request admission. Unset by default, which exposes all registered models. Standalone releases also accept a top-level `public_models` list in TOML or a JSON array in `LLM_PROXY_PUBLIC_MODELS`.
+
 ### Built-in Provider Keys
 
 ```elixir

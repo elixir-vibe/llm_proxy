@@ -30,12 +30,18 @@ defmodule LLMProxy.Config.TOML do
     []
     |> put_if_present(:providers, providers(data["providers"]))
     |> put_if_present(:models, models(data["models"] || get_in(data, ["catalog", "models"])))
+    |> put_if_not_nil(:public_models, public_models(data["public_models"]))
     |> Enum.reverse()
   end
 
   defp put_if_present(config, _key, nil), do: config
   defp put_if_present(config, _key, []), do: config
   defp put_if_present(config, key, value), do: [{key, value} | config]
+  defp put_if_not_nil(config, _key, nil), do: config
+  defp put_if_not_nil(config, key, value), do: [{key, value} | config]
+
+  defp public_models(models) when is_list(models), do: models
+  defp public_models(_models), do: nil
 
   defp providers(nil), do: nil
 

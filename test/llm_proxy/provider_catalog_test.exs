@@ -37,6 +37,7 @@ defmodule LLMProxy.ProviderCatalogTest do
   end
 
   setup do
+    original_public_models = Application.get_env(:llm_proxy, :public_models)
     TestSupport.checkout_repo()
     Catalog.load([])
     Registry.register(Provider)
@@ -50,7 +51,15 @@ defmodule LLMProxy.ProviderCatalogTest do
       )
     )
 
-    on_exit(fn -> Catalog.load([]) end)
+    on_exit(fn ->
+      Catalog.load([])
+
+      if original_public_models == nil do
+        Application.delete_env(:llm_proxy, :public_models)
+      else
+        Application.put_env(:llm_proxy, :public_models, original_public_models)
+      end
+    end)
 
     :ok
   end
@@ -64,5 +73,13 @@ defmodule LLMProxy.ProviderCatalogTest do
     assert LLMProxy.Response.to_openai(response)["model"] == "upstream-catalog-model"
     assert response.usage.input_tokens == 2
     assert response.usage.output_tokens == 3
+  end
+
+  test "LLMProxy.Provider rejects a model outside the public allowlist" do
+    {:ok, key, _raw_key} = Storage.create_key("catalog-user")
+    Application.put_env(:llm_proxy, :public_models, ["another-model"])
+
+    assert {:error, {:not_found, "Model 'public-catalog-model' not found"}} =
+             LLMProxy.chat("hello", model: "public-catalog-model", api_key: key)
   end
 end

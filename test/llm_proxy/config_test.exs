@@ -11,6 +11,7 @@ defmodule LLMProxy.ConfigTest do
     original_models = Application.get_env(:llm_proxy, :models)
     original_body_limit = Application.get_env(:llm_proxy, :body_limit_bytes)
     original_connect_timeout = Application.get_env(:llm_proxy, :provider_connect_timeout_ms)
+    original_public_models = Application.get_env(:llm_proxy, :public_models)
 
     on_exit(fn ->
       restore_env(:providers, original_providers)
@@ -18,9 +19,18 @@ defmodule LLMProxy.ConfigTest do
       restore_env(:models, original_models)
       restore_env(:body_limit_bytes, original_body_limit)
       restore_env(:provider_connect_timeout_ms, original_connect_timeout)
+      restore_env(:public_models, original_public_models)
     end)
 
     :ok
+  end
+
+  test "validates the public model allowlist" do
+    Application.put_env(:llm_proxy, :public_models, ["model-a", "model-a", "model-b"])
+    assert Config.public_models() == ["model-a", "model-b"]
+
+    Application.put_env(:llm_proxy, :public_models, [""])
+    assert_raise ArgumentError, ~r/non-empty model IDs/, &Config.public_models/0
   end
 
   test "configures the authenticated JSON body limit in bytes" do

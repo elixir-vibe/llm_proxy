@@ -111,6 +111,20 @@ defmodule LLMProxy.Providers.Registry do
     LLMProxy.Catalog.all_models() ++ provider_models
   end
 
+  def public_models do
+    case LLMProxy.Config.public_models() do
+      nil -> all_models()
+      allowed -> Enum.filter(all_models(), &(&1.id in allowed))
+    end
+  end
+
+  def public_model?(model_id) when is_binary(model_id) do
+    case LLMProxy.Config.public_models() do
+      nil -> true
+      allowed -> model_id in allowed
+    end
+  end
+
   def list_providers do
     :persistent_term.get(@registry_key, %{})
   end

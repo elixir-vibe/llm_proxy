@@ -140,6 +140,8 @@ export PORT="4000"
 Configure public providers and model aliases as data in `/etc/llm-proxy/config.toml`:
 
 ```toml
+public_models = ["fast"]
+
 [providers.openai-primary]
 adapter = "openai"
 base_url = "https://api.openai.com/v1"
@@ -154,6 +156,8 @@ to = "openai-primary"
 model = "gpt-4.1-mini"
 timeout = 30000
 ```
+
+`public_models` is optional. When set, it is the allowlist for model discovery and requests. When unset, the proxy keeps the complete registered model catalog for compatibility.
 
 Credentials do not belong in TOML. Bootstrap named pools with `LLM_PROXY_PROVIDER_KEYS` or manage persisted tokens through the optional admin integration.
 

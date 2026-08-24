@@ -261,8 +261,14 @@ defmodule LLMProxy.Provider do
   defp check_quota(%Actor{kind: :master}, _api_key), do: :ok
   defp check_quota(_actor, api_key), do: LLMProxy.Storage.check_quota(api_key)
 
-  defp check_model_access(%{id: "master"}, _model), do: :ok
-  defp check_model_access(api_key, model), do: LLMProxy.Storage.check_model_access(api_key, model)
+  defp check_model_access(api_key, model) do
+    if Registry.public_model?(model), do: check_key_model_access(api_key, model), else: :error
+  end
+
+  defp check_key_model_access(%{id: "master"}, _model), do: :ok
+
+  defp check_key_model_access(api_key, model),
+    do: LLMProxy.Storage.check_model_access(api_key, model)
 
   defp put_message_log_id(opts, {:ok, %{id: id}}), do: Keyword.put(opts, :message_log_id, id)
   defp put_message_log_id(opts, _result), do: opts

@@ -69,9 +69,16 @@ if config_env() in [:dev, :prod] do
       json -> Jason.decode!(json)
     end
 
+  public_models =
+    case System.get_env("LLM_PROXY_PUBLIC_MODELS") do
+      nil -> nil
+      json -> Jason.decode!(json)
+    end
+
   config :llm_proxy,
     master_key: System.get_env("MASTER_KEY"),
     provider_key_seeds: provider_key_seeds,
+    public_models: public_models,
     public_url: public_url,
     rpc_socket: System.get_env("LLM_PROXY_RPC_SOCKET"),
     providers: %{
