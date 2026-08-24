@@ -11,6 +11,8 @@ defmodule LLMProxy.ConfigTest do
     original_models = Application.get_env(:llm_proxy, :models)
     original_body_limit = Application.get_env(:llm_proxy, :body_limit_bytes)
     original_connect_timeout = Application.get_env(:llm_proxy, :provider_connect_timeout_ms)
+    original_max_retries = Application.get_env(:llm_proxy, :max_retries)
+    original_replay_policy = Application.get_env(:llm_proxy, :replay_policy)
 
     on_exit(fn ->
       restore_env(:providers, original_providers)
@@ -18,6 +20,8 @@ defmodule LLMProxy.ConfigTest do
       restore_env(:models, original_models)
       restore_env(:body_limit_bytes, original_body_limit)
       restore_env(:provider_connect_timeout_ms, original_connect_timeout)
+      restore_env(:max_retries, original_max_retries)
+      restore_env(:replay_policy, original_replay_policy)
     end)
 
     :ok
@@ -43,6 +47,27 @@ defmodule LLMProxy.ConfigTest do
     assert_raise ArgumentError, ~r/:provider_connect_timeout_ms must be a positive integer/, fn ->
       Config.provider_connect_timeout_ms()
     end
+  end
+
+  test "derives a finite attempt budget from max retries" do
+    Application.put_env(:llm_proxy, :max_retries, 2)
+
+    assert Config.max_retries() == 2
+    assert Config.max_attempts() == 3
+
+    Application.put_env(:llm_proxy, :max_retries, -1)
+
+    assert_raise ArgumentError, ~r/:max_retries must be a non-negative integer/, fn ->
+      Config.max_attempts()
+    end
+  end
+
+  test "configures an explicit replay policy" do
+    Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
+    assert Config.replay_policy() == :allow_uncertain
+
+    Application.put_env(:llm_proxy, :replay_policy, :always)
+    assert_raise ArgumentError, ~r/:replay_policy must be/, fn -> Config.replay_policy() end
   end
 
   test "configures bounded concurrent ReqLLM streaming pools" do

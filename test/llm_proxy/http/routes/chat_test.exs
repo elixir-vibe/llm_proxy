@@ -188,6 +188,7 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
       LLMProxy.Drain.cancel()
       Application.delete_env(:llm_proxy, :blocking_stream_parent)
       Application.delete_env(:llm_proxy, :fallbacks)
+      Application.delete_env(:llm_proxy, :replay_policy)
     end)
 
     :ok
@@ -367,6 +368,7 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
 
   test "tracks usage and response model for fallback provider" do
     Application.put_env(:llm_proxy, :fallbacks, %{"fake-chat-error" => ["fallback-chat-model"]})
+    Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
     {:ok, _key, raw_key} = Storage.create_key("fallback-user")
 
     conn =

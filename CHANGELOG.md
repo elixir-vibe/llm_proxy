@@ -15,6 +15,7 @@
 - Content capture is disabled by default for new API keys. Usage, cost, latency,
   and content-free trace metadata remain available, while message extraction,
   trace-body serialization, and cache access require explicit capture consent.
+- Provider fallback now has a strict attempt budget and replays only proven-safe failures by default. Timeouts and 5xx responses require the explicit `:allow_uncertain` compatibility policy, and visible streams are never replayed.
 
 ### Security
 
