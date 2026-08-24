@@ -33,6 +33,10 @@ defmodule LLMProxy.ProviderUsage.Adapters.GLM do
     do: {:error, :authentication_failed}
 
   defp parse_response(%Authentication{}), do: {:error, :invalid_response}
+
+  defp parse_response(%Failure{code: code}) when code in [401, 403],
+    do: {:error, :authentication_failed}
+
   defp parse_response(%Failure{success: false}), do: {:error, :unsupported}
   defp parse_response(%Failure{}), do: {:error, :invalid_response}
 

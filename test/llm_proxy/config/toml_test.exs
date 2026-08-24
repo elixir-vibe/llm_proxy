@@ -203,6 +203,8 @@ defmodule LLMProxy.Config.TOMLTest do
           "[]",
           "[1]",
           ~s(["relative"]),
+          ~s(["/api usage"]),
+          ~S(["/api\tusage"]),
           ~s(["/same", "/same"]),
           ~s(["/one", "/two", "/three", "/four"])
         ] do

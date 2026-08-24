@@ -106,6 +106,9 @@ defmodule LLMProxy.ConfigTest do
           %{"glm" => %{usage_paths: "/api/monitor/usage"}},
           %{"glm" => %{usage_paths: []}},
           %{"glm" => %{usage_paths: ["relative"]}},
+          %{"glm" => %{usage_paths: ["/api usage"]}},
+          %{"glm" => %{usage_paths: ["/api\tusage"]}},
+          %{"glm" => %{usage_paths: [<<"/api/", 0xFF>>]}},
           %{"glm" => %{usage_paths: ["/same", "/same"]}}
         ] do
       Application.put_env(:llm_proxy, :providers, invalid)
