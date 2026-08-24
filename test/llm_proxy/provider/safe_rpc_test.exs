@@ -2,6 +2,7 @@ defmodule LLMProxy.Provider.SafeRPCTest do
   use ExUnit.Case
 
   alias Ecto.Adapters.SQL.Sandbox
+  alias LLMProxy.{ConcurrencyLimiter, Limit}
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
@@ -63,6 +64,29 @@ defmodule LLMProxy.Provider.SafeRPCTest do
 
     assert ReqLLM.Response.text(response) == "hello over SafeRPC"
     assert response.usage.input_tokens == 5
+
+    GenServer.stop(server)
+  end
+
+  test "SafeRPC calls share the concurrent-request limit" do
+    {:ok, key, raw_key} =
+      Storage.create_key("safe-rpc-concurrent-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    socket = socket_path("concurrency")
+    {:ok, server} = Server.start_link(socket: socket)
+    Sandbox.allow(LLMProxy.Storage.Repo.SQLite, self(), server)
+
+    assert {:ok, lease} = ConcurrencyLimiter.acquire(key)
+
+    on_exit(fn -> ConcurrencyLimiter.release(lease) end)
+
+    assert {:ok, request} =
+             LLMProxy.Provider.chat_request("hello", model: "req-llm-safe-rpc-model")
+
+    assert {:error, {:concurrency_limit, 1}} =
+             SafeRPC.call(socket, {LLMProxy, :chat}, request, meta: %{api_key: raw_key})
 
     GenServer.stop(server)
   end

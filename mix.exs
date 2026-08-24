@@ -122,6 +122,7 @@ defmodule LLMProxy.MixProject do
           LLMProxy.Phoenix.Router
         ],
         Operations: [
+          LLMProxy.ConcurrencyLimiter,
           LLMProxy.Drain,
           LLMProxy.Ops,
           LLMProxy.ReleaseTasks,

@@ -24,7 +24,8 @@ Model listing and health are public.
 GET /health
 ```
 
-Standalone router only. Reports version, readiness, drain state, serving state, and active request/stream/agent counts.
+Standalone router only. Reports version, readiness, drain state, serving state,
+active request/stream/agent counts, and aggregate concurrent-admission counters.
 
 ### Models
 
@@ -139,7 +140,12 @@ The same identifier links HTTP responses, usage, messages, traces, telemetry, an
 
 Authenticated JSON routes enforce the configured body limit after authentication and quota checks. Default: 32 MB.
 
-Requests above the limit receive HTTP 413. Malformed protocol requests receive structured 400 errors. Authentication failures receive 401, model-access or policy failures receive 403, unknown models receive 404, and upstream errors preserve a canonical provider status when available.
+Requests above the body limit receive HTTP 413. Malformed protocol requests
+receive structured 400 errors. Authentication failures receive 401,
+model-access or policy failures receive 403, unknown models receive 404, and
+upstream errors preserve a canonical provider status when available. Calls
+rejected by a per-key concurrent-request limit receive HTTP 429 and
+`Retry-After: 1`.
 
 ## Phoenix Mounts
 
