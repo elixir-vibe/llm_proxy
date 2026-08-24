@@ -7,6 +7,10 @@ defmodule LLMProxy.Config.ProviderTest do
     path = tmp_path("llm-proxy-config.toml")
 
     File.write!(path, """
+    [routing]
+    max_retries = 2
+    replay_policy = "safe_only"
+
     [providers.openai-codex]
     base_url = "https://chatgpt.com/backend-api"
 
@@ -23,8 +27,11 @@ defmodule LLMProxy.Config.ProviderTest do
     assert Keyword.get(config, :llm_proxy)[:providers]["openai-codex"].base_url ==
              "https://chatgpt.com/backend-api"
 
-    assert [%{name: "codex", routes: [%{to: "openai-codex"}]}] =
-             Keyword.get(config, :llm_proxy)[:models]
+    llm_proxy = Keyword.fetch!(config, :llm_proxy)
+
+    assert [%{name: "codex", routes: [%{to: "openai-codex"}]}] = llm_proxy[:models]
+    assert llm_proxy[:max_retries] == 2
+    assert llm_proxy[:replay_policy] == :safe_only
   end
 
   test "load/2 is a no-op when file is absent" do

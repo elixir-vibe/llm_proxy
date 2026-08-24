@@ -79,6 +79,28 @@ defmodule LLMProxy.Config.TOMLTest do
              TOML.decode(input)
   end
 
+  test "decodes standalone routing policy" do
+    input = """
+    [routing]
+    max_retries = 2
+    replay_policy = "allow_uncertain"
+    """
+
+    assert {:ok, [max_retries: 2, replay_policy: :allow_uncertain]} = TOML.decode(input)
+  end
+
+  test "rejects invalid standalone routing policy" do
+    assert_raise ArgumentError, ~r/routing.max_retries must be a non-negative integer/, fn ->
+      TOML.decode("[routing]\nmax_retries = -1")
+    end
+
+    assert_raise ArgumentError,
+                 ~r/routing.replay_policy must be safe_only or allow_uncertain/,
+                 fn ->
+                   TOML.decode(~s([routing]\nreplay_policy = "always"))
+                 end
+  end
+
   test "returns TOML parser errors" do
     assert {:error, {:invalid_toml, _reason}} = TOML.decode("[invalid]\na = 1 b = 2")
   end

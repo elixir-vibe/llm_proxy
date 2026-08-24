@@ -43,27 +43,6 @@ if config_env() in [:dev, :prod] do
       json -> Jason.decode!(json)
     end
 
-  max_retries = String.to_integer(System.get_env("LLM_MAX_RETRIES", "1"))
-
-  max_attempts =
-    case System.get_env("LLM_MAX_ATTEMPTS") do
-      nil ->
-        max_retries + 1
-
-      value ->
-        case Integer.parse(value) do
-          {attempts, ""} when attempts > 0 -> attempts
-          _other -> raise "LLM_MAX_ATTEMPTS must be a positive integer"
-        end
-    end
-
-  replay_policy =
-    case System.get_env("LLM_PROXY_REPLAY_POLICY", "safe_only") do
-      "safe_only" -> :safe_only
-      "allow_uncertain" -> :allow_uncertain
-      _other -> raise "LLM_PROXY_REPLAY_POLICY must be safe_only or allow_uncertain"
-    end
-
   public_url = System.get_env("PUBLIC_URL", "")
 
   body_limit_bytes =
@@ -105,9 +84,7 @@ if config_env() in [:dev, :prod] do
       "openai-codex" => %{oauth_tokens: System.get_env("OPENAI_CODEX_TOKENS", "")}
     },
     fallbacks: fallbacks,
-    max_retries: max_retries,
-    max_attempts: max_attempts,
-    replay_policy: replay_policy,
+    max_retries: String.to_integer(System.get_env("LLM_MAX_RETRIES", "1")),
     provider_connect_timeout_ms: provider_connect_timeout_ms,
     body_limit_bytes: body_limit_bytes
 end

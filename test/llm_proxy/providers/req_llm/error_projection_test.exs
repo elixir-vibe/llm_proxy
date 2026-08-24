@@ -192,6 +192,23 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
     assert ErrorProjection.replay_safety(%Req.TransportError{reason: :econnreset}) == :uncertain
 
     assert ErrorProjection.replay_safety(
+             WebSockex.RequestError.exception(code: 401, message: "Unauthorized")
+           ) == :forbidden
+
+    assert ErrorProjection.replay_safety(
+             WebSockex.RequestError.exception(code: 429, message: "Rate limited")
+           ) == :safe
+
+    assert ErrorProjection.replay_safety(
+             WebSockex.RequestError.exception(code: 503, message: "Unavailable")
+           ) == :safe
+
+    assert ErrorProjection.replay_safety(%{reason: "econnrefused"}) == :uncertain
+
+    assert ErrorProjection.replay_safety(RuntimeError.exception("certificate request failed")) ==
+             :uncertain
+
+    assert ErrorProjection.replay_safety(
              APIRequestError.exception(reason: "denied", status: 401, retryable: false)
            ) == :forbidden
   end

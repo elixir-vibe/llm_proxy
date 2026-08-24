@@ -46,6 +46,10 @@ Never put API keys, OAuth tokens, or proxy credentials in TOML.
 The release optionally reads `/etc/llm-proxy/config.toml`. Override that path with `LLM_PROXY_CONFIG_TOML`.
 
 ```toml
+[routing]
+max_retries = 1
+replay_policy = "safe_only"
+
 [providers.example-service]
 adapter = "openai"
 base_url = "https://api.example.com/v1"
@@ -63,7 +67,7 @@ failure_threshold = 3
 cooldown_ms = 30000
 ```
 
-The TOML loader accepts provider and model data only. Secrets remain in environment variables or persisted provider-token storage. If the file is absent, startup continues with environment and compiled configuration.
+The TOML loader accepts routing policy plus provider and model data. Secrets remain in environment variables or persisted provider-token storage. If the file is absent, startup continues with environment and compiled configuration.
 
 See [Providers and Routing](../features/providers-and-routing.md) for the complete model shape.
 

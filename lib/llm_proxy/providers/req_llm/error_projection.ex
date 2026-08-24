@@ -52,6 +52,12 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   @spec replay_safety(term()) :: LLMProxy.Providers.Result.replay_safety()
   def replay_safety(%ReqLLM.Error.API.Timeout{kind: :connect}), do: :safe
   def replay_safety(%ReqLLM.Error.API.Timeout{}), do: :uncertain
+  def replay_safety(%WebSockex.RequestError{code: 429}), do: :safe
+
+  def replay_safety(%WebSockex.RequestError{code: status})
+      when is_integer(status) and status >= 400 and status < 500,
+      do: :forbidden
+
   def replay_safety(%WebSockex.RequestError{}), do: :safe
 
   def replay_safety(reason) do
@@ -180,20 +186,13 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   defp transport_reason?(_reason), do: false
 
-  defp safe_transport_reason?(reason) do
-    reason = field(reason, :reason) || field(reason, :original) || reason
+  defp safe_transport_reason?(%Req.TransportError{reason: reason}),
+    do: reason in @safe_transport_reasons
 
-    reason in @safe_transport_reasons or
-      (is_binary(reason) and
-         String.contains?(String.downcase(reason), [
-           "connection refused",
-           "econnrefused",
-           "nxdomain",
-           "enotfound",
-           "unreachable",
-           "certificate"
-         ]))
-  end
+  defp safe_transport_reason?(reason) when is_atom(reason),
+    do: reason in @safe_transport_reasons
+
+  defp safe_transport_reason?(_reason), do: false
 
   defp code(%RequestError{code: code}), do: code
   defp code(%ReqLLM.Error.API.Timeout{kind: kind}), do: "upstream_#{kind}_timeout"

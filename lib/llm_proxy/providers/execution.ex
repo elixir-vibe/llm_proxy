@@ -69,6 +69,7 @@ defmodule LLMProxy.Providers.Execution do
   defp try_call([%Attempt{} = attempt | rest], body, user_id, budget, last_error) do
     cond do
       not CircuitBreaker.available?(attempt) ->
+        emit_skip(:attempt, attempt, budget, rest, :circuit_open)
         try_call(rest, body, user_id, budget, last_error)
 
       not budget_available?(budget) ->
@@ -128,6 +129,7 @@ defmodule LLMProxy.Providers.Execution do
   defp try_stream([%Attempt{} = attempt | rest], body, user_id, budget, last_error) do
     cond do
       not CircuitBreaker.available?(attempt) ->
+        emit_skip(:stream_attempt, attempt, budget, rest, :circuit_open)
         try_stream(rest, body, user_id, budget, last_error)
 
       not budget_available?(budget) ->
@@ -210,9 +212,11 @@ defmodule LLMProxy.Providers.Execution do
        ) do
     cond do
       not CircuitBreaker.available?(attempt) ->
+        emit_skip(native_event(function), attempt, budget, rest, :circuit_open)
         try_native(rest, function, request, user_id, api_name, budget, last_error)
 
       not function_exported?(attempt.provider, function, 2) ->
+        emit_skip(native_event(function), attempt, budget, rest, :unsupported_protocol)
         error = unsupported_native_error(attempt, api_name)
         try_native(rest, function, request, user_id, api_name, budget, error)
 
@@ -331,6 +335,17 @@ defmodule LLMProxy.Providers.Execution do
       })
 
     Telemetry.emit([:routing, event, :exception], attempt, %{status: result.status}, metadata)
+  end
+
+  defp emit_skip(event, attempt, budget, rest, reason) do
+    metadata =
+      Map.merge(attempt_metadata(budget), %{
+        replay_safety: :safe,
+        replay_decision: if(rest == [], do: :stop, else: :retry),
+        replay_reason: reason
+      })
+
+    Telemetry.emit([:routing, event, :skip], attempt, %{}, metadata)
   end
 
   defp maybe_record_circuit_failure(attempt, {:error, %Result{status: status}} = error)

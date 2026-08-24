@@ -115,17 +115,14 @@ Default open-circuit cooldown. Default: 30 seconds.
 config :llm_proxy, max_retries: 1
 ```
 
-Compatibility retry/fallback limit for configured fallback chains. Default: 1.
+Compatibility retry/fallback limit for configured fallback chains. Default: 1. The strict provider-dispatch budget is `max_retries + 1`; open-circuit and unsupported-protocol route skips do not consume it.
 
-### Max Attempts
+Standalone TOML:
 
-```elixir
-config :llm_proxy, max_attempts: 2
+```toml
+[routing]
+max_retries = 1
 ```
-
-Strict maximum provider dispatches for one request. Open-circuit and unsupported-protocol route skips do not consume the budget. When unset, the compatibility value is `max_retries + 1`.
-
-Standalone environment: `LLM_MAX_ATTEMPTS`.
 
 ### Replay Policy
 
@@ -137,7 +134,12 @@ config :llm_proxy, replay_policy: :safe_only
 
 `:allow_uncertain` also permits replay after timeouts and 5xx responses. Use it only when duplicate cost and side effects are acceptable. It restores the earlier fallback behavior.
 
-Standalone environment: `LLM_PROXY_REPLAY_POLICY=safe_only|allow_uncertain`.
+Standalone TOML:
+
+```toml
+[routing]
+replay_policy = "safe_only"
+```
 
 ### Fallbacks
 
@@ -416,22 +418,6 @@ LLM_MAX_RETRIES=1
 ```
 
 Compatibility fallback count. Default: `1`.
-
-### Max Attempts
-
-```text
-LLM_MAX_ATTEMPTS=2
-```
-
-Strict provider-dispatch budget. Default: `LLM_MAX_RETRIES + 1`.
-
-### Replay Policy
-
-```text
-LLM_PROXY_REPLAY_POLICY=safe_only
-```
-
-Use `safe_only` or `allow_uncertain`. Default: `safe_only`.
 
 ### QuackDB URI
 

@@ -173,6 +173,7 @@ Routing event prefixes include:
 [:llm_proxy, :routing, :attempt, :start]
 [:llm_proxy, :routing, :attempt, :stop]
 [:llm_proxy, :routing, :attempt, :exception]
+[:llm_proxy, :routing, :attempt, :skip]
 [:llm_proxy, :routing, :stream_attempt, :start]
 ```
 
@@ -187,7 +188,7 @@ Circuit event prefixes include:
 
 Metadata identifies provider, upstream model, and timeout. Stop and exception events add result-specific measurements or metadata.
 
-Attempt events also include `attempt_number`, `max_attempts`, and `replay_policy`. Failure events add `replay_safety`, `replay_decision`, and `replay_reason`. These values are bounded routing labels and do not include request or response content.
+Attempt events also include `attempt_number`, `max_attempts`, and `replay_policy`. Failure and route-skip events add `replay_safety`, `replay_decision`, and `replay_reason`. Skip reasons distinguish open circuits from unsupported native protocols without consuming the attempt budget. These values are bounded routing labels and do not include request or response content.
 
 ## OpenTelemetry
 

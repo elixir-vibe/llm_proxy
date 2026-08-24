@@ -136,7 +136,7 @@ defmodule LLMProxy.Providers.ExecutionTest do
 
     on_exit(fn ->
       Application.delete_env(:llm_proxy, :fallbacks)
-      Application.delete_env(:llm_proxy, :max_attempts)
+      Application.delete_env(:llm_proxy, :max_retries)
       Application.delete_env(:llm_proxy, :replay_policy)
       CircuitBreaker.reset()
     end)
@@ -219,7 +219,7 @@ defmodule LLMProxy.Providers.ExecutionTest do
     end
 
     test "enforces the provider dispatch budget" do
-      Application.put_env(:llm_proxy, :max_attempts, 2)
+      Application.put_env(:llm_proxy, :max_retries, 1)
 
       attempts = [
         %Attempt{
@@ -243,7 +243,20 @@ defmodule LLMProxy.Providers.ExecutionTest do
     end
 
     test "open-circuit skips do not consume the dispatch budget" do
-      Application.put_env(:llm_proxy, :max_attempts, 1)
+      Application.put_env(:llm_proxy, :max_retries, 0)
+      handler_id = {__MODULE__, self(), :circuit_skip}
+      parent = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:llm_proxy, :routing, :attempt, :skip],
+        fn event, measurements, metadata, _config ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
 
       skipped = %Attempt{
         provider: ConnectFailProvider,
@@ -262,6 +275,13 @@ defmodule LLMProxy.Providers.ExecutionTest do
                )
 
       assert_received :third_attempt
+
+      assert_receive {:telemetry, [:llm_proxy, :routing, :attempt, :skip], %{}, metadata}
+      assert metadata.attempt_number == 0
+      assert metadata.max_attempts == 1
+      assert metadata.replay_safety == :safe
+      assert metadata.replay_decision == :retry
+      assert metadata.replay_reason == :circuit_open
     end
 
     test "emits bounded content-free replay metadata" do
@@ -327,6 +347,40 @@ defmodule LLMProxy.Providers.ExecutionTest do
   end
 
   describe "native attempts" do
+    test "reports unsupported protocol skips without consuming the budget" do
+      handler_id = {__MODULE__, self(), :unsupported_native_skip}
+      parent = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:llm_proxy, :routing, :native_attempt, :skip],
+        fn event, measurements, metadata, _config ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, %Result{provider: NativeBodyProvider}} =
+               Execution.call_native_attempts(
+                 [
+                   {SuccessProvider, "unsupported-native"},
+                   {NativeBodyProvider, "upstream-native"}
+                 ],
+                 request("public-alias"),
+                 "user",
+                 "Native API"
+               )
+
+      assert_receive {:telemetry, [:llm_proxy, :routing, :native_attempt, :skip], %{}, metadata}
+      assert metadata.attempt_number == 0
+      assert metadata.max_attempts == 2
+      assert metadata.replay_safety == :safe
+      assert metadata.replay_decision == :retry
+      assert metadata.replay_reason == :unsupported_protocol
+    end
+
     test "send the upstream attempt model in native bodies" do
       assert {:ok, %Result{response: %{"ok" => true}, provider: NativeBodyProvider}} =
                Execution.call_native_attempts(
@@ -381,6 +435,18 @@ defmodule LLMProxy.Providers.ExecutionTest do
   end
 
   describe "stream/4 with fallbacks" do
+    test "replays clear stream setup connect failures" do
+      assert {:ok, %Result{provider: FallbackProvider}} =
+               Execution.stream_attempts(
+                 [
+                   {ConnectFailProvider, "m"},
+                   {FallbackProvider, "fallback-model"}
+                 ],
+                 stream_request("m"),
+                 "user"
+               )
+    end
+
     test "compatibility policy permits fallback streams after uncertain errors" do
       Application.put_env(:llm_proxy, :fallbacks, %{"m" => ["fallback-model"]})
       Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
