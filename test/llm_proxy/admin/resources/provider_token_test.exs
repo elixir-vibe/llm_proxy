@@ -5,6 +5,7 @@ if Code.ensure_loaded?(Incant) do
     @moduletag :incant
 
     alias Incant.ActionResult
+    alias Incant.Live.FormState
     alias LLMProxy.Admin.Resources.ProviderToken
     alias LLMProxy.Storage
 
@@ -22,7 +23,7 @@ if Code.ensure_loaded?(Incant) do
       assert Enum.any?(resource.table.actions, &(&1.name == :edit))
 
       assert {:ok, "Record updated", updated} =
-               Incant.Live.FormState.save(:edit, resource, token, %{
+               FormState.save(:edit, resource, token, %{
                  "priority" => "42",
                  "token" => "must-not-replace-token"
                })
