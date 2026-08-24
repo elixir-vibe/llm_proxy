@@ -21,6 +21,8 @@
 
 ### Added
 
+- API keys can be disabled and re-enabled without deleting their limits, usage,
+  or audit history. Disabled keys receive the normal invalid-key response.
 - Provider API keys and OAuth tokens can use a pluggable at-rest codec with a
   versioned AES-256-GCM keyring, explicit migration, verification, rotation,
   and controlled plaintext rollback tasks.
@@ -47,6 +49,7 @@
 
 ### Migration
 
+- Existing API keys remain enabled when lifecycle state is added.
 - Existing trace-enabled keys retain content capture. Other existing keys stop
   automatic message and cache capture after migration. Operators must define
   retention and remove content stored before this change according to policy.
