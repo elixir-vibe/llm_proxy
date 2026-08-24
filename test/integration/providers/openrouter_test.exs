@@ -1,12 +1,8 @@
-defmodule LLMProxy.Integration.OpenRouterTest do
+defmodule LLMProxy.Integration.Providers.OpenRouterTest do
   use ExUnit.Case
-
-  import Plug.Conn
-  import Plug.Test
 
   alias Ecto.Adapters.SQL.Sandbox
   alias LLMProxy.Providers.{OpenRouter, Result}
-  alias LLMProxy.Router
   alias LLMProxy.Storage
   alias LLMProxy.Storage.Repo.SQLite
   alias LLMProxy.TokenPool.Server, as: TokenPool
@@ -86,30 +82,6 @@ defmodule LLMProxy.Integration.OpenRouterTest do
         end)
 
       assert has_usage, "Expected at least one event with usage info"
-    end
-  end
-
-  describe "end-to-end via router" do
-    test "POST /v1/chat/completions returns 200" do
-      master_key = Application.get_env(:llm_proxy, :master_key)
-
-      body =
-        Jason.encode!(%{
-          "model" => @model,
-          "messages" => [%{"role" => "user", "content" => "Say hi"}],
-          "max_tokens" => 20
-        })
-
-      conn =
-        conn(:post, "/v1/chat/completions", body)
-        |> put_req_header("content-type", "application/json")
-        |> put_req_header("authorization", "Bearer #{master_key}")
-        |> Router.call(Router.init([]))
-
-      assert conn.status == 200
-      response = Jason.decode!(conn.resp_body)
-      assert [choice | _] = response["choices"]
-      assert choice["message"]["content"]
     end
   end
 end

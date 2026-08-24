@@ -11,6 +11,7 @@ defmodule LLMProxy.Storage do
   def update_key_usage(key, usage), do: adapter().update_key_usage(key, usage)
   def update_key_quota(id, quota_attrs), do: adapter().update_key_quota(id, quota_attrs)
   def update_key_models(id, allowed_models), do: adapter().update_key_models(id, allowed_models)
+  def set_content_capture(id, enabled), do: adapter().set_content_capture(id, enabled)
   def check_model_access(key, model), do: adapter().check_model_access(key, model)
 
   def record_usage(attrs), do: adapter().record_usage(attrs)

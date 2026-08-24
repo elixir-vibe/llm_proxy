@@ -17,8 +17,23 @@ defmodule LLMProxy.Providers.ResultTest do
   end
 
   test "constructs tagged error results with retry metadata" do
-    assert %Result{kind: :error, error: "rate limited", status: 429, retry_after_ms: 100} =
+    assert %Result{
+             kind: :error,
+             error: "rate limited",
+             status: 429,
+             retry_after_ms: 100,
+             replay_safety: :safe
+           } =
              Result.error("rate limited", 429, nil, retry_after_ms: 100)
+  end
+
+  test "classifies server errors as uncertain unless a provider proves safety" do
+    assert Result.error("server error", 500, nil).replay_safety == :uncertain
+
+    assert Result.error("connect failed", 502, nil, replay_safety: :safe).replay_safety ==
+             :safe
+
+    assert Result.error("bad request", 400, nil).replay_safety == :forbidden
   end
 
   test "constructs unavailable token errors without exposing pool internals" do
@@ -26,7 +41,8 @@ defmodule LLMProxy.Providers.ResultTest do
             %Result{
               kind: :error,
               error: "No available provider credentials",
-              status: 503
+              status: 503,
+              replay_safety: :safe
             } = result} = Result.unavailable_tokens({:no_tokens, :private_pool})
 
     assert Result.client_error(result)["code"] == "service_unavailable"

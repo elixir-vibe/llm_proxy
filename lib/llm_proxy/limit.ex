@@ -1,6 +1,6 @@
 defmodule LLMProxy.Limit do
   @moduledoc """
-  Usage limit for API keys.
+  Composable usage and runtime limits for API keys.
   """
 
   import Ecto.Query
@@ -14,7 +14,8 @@ defmodule LLMProxy.Limit do
     :output_tokens,
     :cache_read_tokens,
     :cache_write_tokens,
-    :requests
+    :requests,
+    :concurrent_requests
   ]
   @windows [:minute, :hour, :four_hours, :day, :week, :month]
 
@@ -24,7 +25,8 @@ defmodule LLMProxy.Limit do
     "output_tokens" => :output_tokens,
     "cache_read_tokens" => :cache_read_tokens,
     "cache_write_tokens" => :cache_write_tokens,
-    "requests" => :requests
+    "requests" => :requests,
+    "concurrent_requests" => :concurrent_requests
   }
 
   @window_aliases %{
@@ -56,13 +58,16 @@ defmodule LLMProxy.Limit do
 
   @type metric :: unquote(Enum.reduce(@metrics, &{:|, [], [&1, &2]}))
   @type window :: unquote(Enum.reduce(@windows, &{:|, [], [&1, &2]}))
-  @type t :: %__MODULE__{metric: metric(), window: window(), max: number()}
+  @type t :: %__MODULE__{metric: metric(), window: window() | nil, max: number()}
 
   @spec cost(window(), number()) :: t()
   def cost(window, max), do: new(:cost_usd, window, max)
 
   @spec requests(window(), non_neg_integer()) :: t()
   def requests(window, max), do: new(:requests, window, max)
+
+  @spec concurrent_requests(non_neg_integer()) :: t()
+  def concurrent_requests(max), do: new(:concurrent_requests, nil, max)
 
   @spec input_tokens(window(), non_neg_integer()) :: t()
   def input_tokens(window, max), do: new(:input_tokens, window, max)
@@ -76,9 +81,14 @@ defmodule LLMProxy.Limit do
   @spec cache_write_tokens(window(), non_neg_integer()) :: t()
   def cache_write_tokens(window, max), do: new(:cache_write_tokens, window, max)
 
-  @spec new(metric(), window(), number()) :: t()
+  @spec new(metric(), window() | nil, number()) :: t()
+  def new(:concurrent_requests, nil, max) when is_integer(max) and max >= 0 do
+    %__MODULE__{metric: :concurrent_requests, window: nil, max: max}
+  end
+
   def new(metric, window, max)
-      when metric in @metrics and window in @windows and is_number(max) and max >= 0 do
+      when metric in @metrics and metric != :concurrent_requests and window in @windows and
+             is_number(max) and max >= 0 do
     %__MODULE__{metric: metric, window: window, max: max}
   end
 
@@ -101,6 +111,28 @@ defmodule LLMProxy.Limit do
   end
 
   def check(_key), do: :ok
+
+  @doc """
+  Returns the most restrictive concurrent-request limit for an API key.
+
+  Concurrent limits do not use a stored usage window. Runtime admission uses
+  this value without a storage query.
+  """
+  @spec concurrent_request_limit(map()) :: non_neg_integer() | nil
+  def concurrent_request_limit(%{budget_limits: limits}) do
+    limits =
+      limits
+      |> normalize_all()
+      |> Enum.filter(&(&1.metric == :concurrent_requests))
+      |> Enum.map(& &1.max)
+
+    case limits do
+      [] -> nil
+      limits -> Enum.min(limits)
+    end
+  end
+
+  def concurrent_request_limit(_key), do: nil
 
   @spec normalize(term()) :: {:ok, [t()]} | {:error, String.t()}
   def normalize(nil), do: {:ok, []}
@@ -131,17 +163,33 @@ defmodule LLMProxy.Limit do
     end
   end
 
-  defp normalize_limit(%__MODULE__{} = limit), do: {:ok, limit}
+  defp normalize_limit(%__MODULE__{} = limit) do
+    limit
+    |> Map.from_struct()
+    |> normalize_limit()
+  end
 
   defp normalize_limit(%{} = limit) do
-    with {:ok, metric} <- normalize_metric(get(limit, :metric, "metric")),
-         {:ok, window} <- normalize_window(get(limit, :window, "window")),
-         {:ok, max} <- normalize_max(get(limit, :max, "max")) do
-      {:ok, new(metric, window, max)}
+    with {:ok, metric} <- normalize_metric(get(limit, :metric, "metric")) do
+      normalize_limit(metric, limit)
     end
   end
 
   defp normalize_limit(_limit), do: {:error, "limit must be a map"}
+
+  defp normalize_limit(:concurrent_requests, limit) do
+    with :ok <- normalize_concurrent_window(get(limit, :window, "window")),
+         {:ok, max} <- normalize_concurrent_max(get(limit, :max, "max")) do
+      {:ok, new(:concurrent_requests, nil, max)}
+    end
+  end
+
+  defp normalize_limit(metric, limit) do
+    with {:ok, window} <- normalize_window(get(limit, :window, "window")),
+         {:ok, max} <- normalize_max(get(limit, :max, "max")) do
+      {:ok, new(metric, window, max)}
+    end
+  end
 
   defp normalize_metric(metric) when is_atom(metric) do
     if metric in metrics(), do: {:ok, metric}, else: {:error, "invalid metric"}
@@ -171,6 +219,16 @@ defmodule LLMProxy.Limit do
 
   defp normalize_max(max) when is_number(max) and max >= 0, do: {:ok, max}
   defp normalize_max(_max), do: {:error, "invalid max"}
+
+  defp normalize_concurrent_window(nil), do: :ok
+
+  defp normalize_concurrent_window(_window),
+    do: {:error, "concurrent limit must not use a window"}
+
+  defp normalize_concurrent_max(max) when is_integer(max) and max >= 0, do: {:ok, max}
+  defp normalize_concurrent_max(_max), do: {:error, "invalid concurrent max"}
+
+  defp check_limit(_key_id, %__MODULE__{metric: :concurrent_requests}), do: :ok
 
   defp check_limit(key_id, %__MODULE__{} = limit) do
     usage = usage(key_id, limit.metric, Map.fetch!(@window_ms, limit.window))

@@ -16,9 +16,21 @@ defmodule LLMProxy.StorageTest do
 
       assert key.name == "test-user"
       assert key.input_tokens == 0
+      assert key.capture_content == false
 
       found = Storage.find_key(raw_key)
       assert found.id == key.id
+    end
+
+    test "content capture is an explicit per-key setting" do
+      {:ok, key, raw_key} = Storage.create_key("content-user", %{capture_content: true})
+
+      assert key.capture_content == true
+      assert Storage.find_key(raw_key).capture_content == true
+
+      assert {:ok, updated_key} = Storage.set_content_capture(key.id, false)
+      assert updated_key.capture_content == false
+      assert Storage.find_key(raw_key).capture_content == false
     end
 
     test "find_key returns nil for unknown key" do

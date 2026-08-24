@@ -1,6 +1,7 @@
 defmodule LLMProxy.Schemas.ApiKey do
   @moduledoc """
-  Ecto schema for LLMProxy API keys, quotas, budgets, model access, and aggregate usage counters.
+  Ecto schema for LLMProxy API keys, quotas, budgets, content policy, model access,
+  and aggregate usage counters.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -25,6 +26,7 @@ defmodule LLMProxy.Schemas.ApiKey do
     field(:budget_period, :string)
     field(:budget_limits, LLMProxy.Storage.JSON)
     field(:trace_requests, :boolean, default: false)
+    field(:capture_content, :boolean, default: false)
     field(:input_tokens, :integer, default: 0)
     field(:output_tokens, :integer, default: 0)
     field(:cache_read_tokens, :integer, default: 0)
@@ -54,6 +56,7 @@ defmodule LLMProxy.Schemas.ApiKey do
       :budget_period,
       :budget_limits,
       :trace_requests,
+      :capture_content,
       :input_tokens,
       :output_tokens,
       :cache_read_tokens,

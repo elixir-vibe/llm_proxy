@@ -28,7 +28,8 @@ if Code.ensure_loaded?(Incant) do
                "input_tokens",
                "output_tokens",
                "cache_read_tokens",
-               "trace_requests"
+               "trace_requests",
+               "capture_content"
              ]
 
       assert Enum.map(api_key.table.columns, & &1.opts[:priority]) == [
@@ -38,6 +39,7 @@ if Code.ensure_loaded?(Incant) do
                :secondary,
                :secondary,
                :tertiary,
+               :secondary,
                :secondary
              ]
 
@@ -62,7 +64,19 @@ if Code.ensure_loaded?(Incant) do
                "user_message"
              ]
 
-      refute Enum.find(message.table.columns, &(&1.id == "user_message")).opts[:sensitive]
+      assert Enum.find(message.table.columns, &(&1.id == "user_message")).opts[:sensitive]
+
+      secret = "seeded-admin-message-2d4a"
+      message_resource = Incant.metadata(LLMProxy.Admin.Resources.Message)
+
+      redacted =
+        Incant.Sensitive.redact_row(
+          %{id: 1, model: "test", user_message: secret},
+          message_resource
+        )
+
+      assert redacted.user_message == "[redacted]"
+      refute inspect(redacted) =~ secret
 
       assert Enum.map(provider_token.table.page_actions, & &1.id) == [
                "codex_oauth_start",
@@ -89,6 +103,7 @@ if Code.ensure_loaded?(Incant) do
       assert disable.opts[:callback] == {LLMProxy.Admin.Resources.ProviderToken, :disable}
       assert disable.opts[:available_if] == [enabled: true]
       assert disable.opts[:confirm] == "Disable this provider token?"
+      assert Enum.find(provider_metadata.table.columns, &(&1.name == :proxy)).opts[:sensitive]
 
       assert [%{id: "operations", title: "Operations"} = dashboard] = contract.dashboards
 

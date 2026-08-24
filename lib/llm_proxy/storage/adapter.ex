@@ -11,6 +11,7 @@ defmodule LLMProxy.Storage.Adapter do
   @callback update_key_usage(term(), map()) :: term()
   @callback update_key_quota(term(), map()) :: {:ok, term()} | {:error, term()}
   @callback update_key_models(term(), list() | nil) :: {:ok, term()} | {:error, term()}
+  @callback set_content_capture(term(), boolean()) :: {:ok, term()} | {:error, term()}
   @callback check_model_access(term(), String.t()) :: :ok | {:error, String.t()}
   @callback record_usage(map()) :: {:ok, term()} | {:error, term()}
   @callback get_usage_in_window(String.t(), integer()) :: map()
@@ -28,7 +29,7 @@ defmodule LLMProxy.Storage.Adapter do
   @callback set_token_enabled(term(), boolean()) :: {:ok, term()} | {:error, term()}
   @callback update_token_proxy(term(), String.t() | nil) :: {:ok, term()} | {:error, term()}
   @callback update_token_oauth(term(), map()) :: {:ok, term()} | {:error, term()}
-  @callback seed_tokens_from_env([map()]) :: :ok
+  @callback seed_tokens_from_env([map()]) :: :ok | {:error, term()}
   @callback log_message(map()) :: {:ok, term()} | {:error, term()}
   @callback update_message_usage(term(), map()) :: {:ok, term()} | {:error, term()}
   @callback get_messages(map()) :: [term()]
