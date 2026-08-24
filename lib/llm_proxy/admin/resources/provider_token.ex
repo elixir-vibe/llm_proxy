@@ -19,7 +19,7 @@ if Code.ensure_loaded?(Incant) do
         priority: :primary
       )
 
-      column(:proxy, priority: :tertiary)
+      column(:proxy, priority: :tertiary, sensitive: true)
       column(:added_at, format: :datetime, priority: :tertiary)
 
       filter(:provider, :text)
