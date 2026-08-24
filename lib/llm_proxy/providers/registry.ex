@@ -6,6 +6,7 @@ defmodule LLMProxy.Providers.Registry do
   Model→provider lookup is O(1).
   """
 
+  alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.Attempt
 
   @registry_key :llm_proxy_providers
@@ -47,8 +48,14 @@ defmodule LLMProxy.Providers.Registry do
     end
   end
 
-  def resolve_attempts(model_id) when is_binary(model_id) do
-    case LLMProxy.Catalog.resolve_deployments(model_id) do
+  def resolve_attempts(%Request{model: model_id} = request) when is_binary(model_id) do
+    resolve_attempts(model_id, request)
+  end
+
+  def resolve_attempts(model_id) when is_binary(model_id), do: resolve_attempts(model_id, nil)
+
+  defp resolve_attempts(model_id, request) do
+    case LLMProxy.Catalog.resolve_deployments(model_id, request) do
       {:ok, deployments} ->
         {:ok, Enum.map(deployments, &Attempt.new/1) ++ retry_fallbacks(model_id)}
 

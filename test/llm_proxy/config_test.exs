@@ -82,10 +82,14 @@ defmodule LLMProxy.ConfigTest do
           [to: :openai, model: "gpt-4o-mini", timeout_ms: 15_000],
           [to: :anthropic, model: "claude-3-haiku-20240307", order: 2]
         ]
+      ],
+      adaptive: [
+        routing: :latency_aware,
+        routes: [[to: :openai, model: "gpt-4o-mini"]]
       ]
     )
 
-    assert [codex, kimi, fast] = Config.catalog()
+    assert [codex, kimi, fast, adaptive] = Config.catalog()
 
     assert codex.name == "codex"
     assert [%{provider: OpenAICodex, upstream_model: "gpt-5.3-codex-spark"}] = codex.deployments
@@ -97,6 +101,8 @@ defmodule LLMProxy.ConfigTest do
              %{provider: OpenAI, upstream_model: "gpt-4o-mini", timeout_ms: 15_000},
              %{provider: Anthropic, upstream_model: "claude-3-haiku-20240307", order: 2}
            ] = fast.deployments
+
+    assert adaptive.routing_strategy == :latency_aware
 
     assert kimi.name == "kimi"
 

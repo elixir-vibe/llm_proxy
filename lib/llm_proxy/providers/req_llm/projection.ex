@@ -26,15 +26,15 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
 
   @spec events(StreamEvent.t(), String.t()) :: [Event.t()]
   def events(%StreamEvent{type: :start}, model) do
-    [Event.new(stream_chunk(model, %{"role" => "assistant"}, nil))]
+    [Event.new(stream_chunk(model, %{"role" => "assistant"}, nil), kind: :start)]
   end
 
   def events(%StreamEvent{type: :text_delta, data: text}, model) do
-    [Event.new(stream_chunk(model, %{"content" => text}, nil))]
+    [Event.new(stream_chunk(model, %{"content" => text}, nil), kind: :content)]
   end
 
   def events(%StreamEvent{type: :reasoning_delta, data: text}, model) do
-    [Event.new(stream_chunk(model, %{"reasoning_content" => text}, nil))]
+    [Event.new(stream_chunk(model, %{"reasoning_content" => text}, nil), kind: :reasoning)]
   end
 
   def events(%StreamEvent{type: :tool_call, data: call}, model) do
@@ -49,7 +49,7 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
       ]
     }
 
-    [Event.new(stream_chunk(model, delta, nil))]
+    [Event.new(stream_chunk(model, delta, nil), kind: :tool_call)]
   end
 
   def events(%StreamEvent{type: :usage, data: stream_usage}, model) do
@@ -63,15 +63,15 @@ defmodule LLMProxy.Providers.ReqLLM.Projection do
       "usage" => rendered
     }
 
-    [Event.new(data, usage: Usage.from_openai(rendered))]
+    [Event.new(data, usage: Usage.from_openai(rendered), kind: :usage)]
   end
 
   def events(%StreamEvent{type: :finish, data: data}, model) do
-    [Event.new(stream_chunk(model, %{}, finish_reason(data.finish_reason)))]
+    [Event.new(stream_chunk(model, %{}, finish_reason(data.finish_reason)), kind: :finish)]
   end
 
   def events(%StreamEvent{type: :error, data: error}, _model) do
-    [Event.new(%{"error" => ErrorProjection.client_error(error)})]
+    [Event.new(%{"error" => ErrorProjection.client_error(error)}, kind: :error)]
   end
 
   def events(_event, _model), do: []

@@ -33,8 +33,9 @@ Out of scope for the core package:
 
 ### Routing
 
-- Add latency-aware and least-busy strategies when enough runtime measurements exist to make them predictable.
-- Improve operator visibility into route eligibility, cooldowns, and circuit state.
+- Improve the latency-aware strategy with operator-visible route eligibility and measurements.
+- Add least-busy routing when enough runtime measurements exist to make it predictable.
+- Improve operator visibility into cooldowns and circuit state.
 - Keep provider credentials isolated as routing configurations grow.
 
 ### Observability

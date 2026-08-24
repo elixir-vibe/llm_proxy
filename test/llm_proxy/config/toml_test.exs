@@ -65,6 +65,29 @@ defmodule LLMProxy.Config.TOMLTest do
             ]} = TOML.decode(input)
   end
 
+  test "decodes latency-aware routing" do
+    input = """
+    [[models]]
+    name = "fastest"
+    routing = "latency_aware"
+
+    [[models.routes]]
+    to = "openrouter"
+    model = "upstream-model"
+    """
+
+    assert {:ok,
+            [
+              models: [
+                %{
+                  name: "fastest",
+                  routing: :latency_aware,
+                  routes: [%{to: "openrouter", model: "upstream-model"}]
+                }
+              ]
+            ]} = TOML.decode(input)
+  end
+
   test "supports catalog.models as an alternate TOML nesting" do
     input = """
     [[catalog.models]]

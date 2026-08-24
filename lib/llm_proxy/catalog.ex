@@ -4,7 +4,8 @@ defmodule LLMProxy.Catalog do
   """
 
   alias LLMProxy.Catalog.Model
-  alias LLMProxy.Providers.Routing.RoundRobin
+  alias LLMProxy.Protocol.Request
+  alias LLMProxy.Providers.Routing.{Performance, RoundRobin}
 
   @catalog_key :llm_proxy_catalog
 
@@ -43,14 +44,15 @@ defmodule LLMProxy.Catalog do
     end
   end
 
-  @spec resolve_deployments(String.t()) :: {:ok, [LLMProxy.Catalog.Deployment.t()]} | :error
-  def resolve_deployments(name) when is_binary(name) do
+  @spec resolve_deployments(String.t(), Request.t() | nil) ::
+          {:ok, [LLMProxy.Catalog.Deployment.t()]} | :error
+  def resolve_deployments(name, request \\ nil) when is_binary(name) do
     case get_model(name) do
       %Model{deployments: []} ->
         :error
 
       %Model{deployments: deployments, routing_strategy: strategy} ->
-        {:ok, route(strategy, name, deployments)}
+        {:ok, route(strategy, name, deployments, request)}
 
       nil ->
         :error
@@ -68,14 +70,17 @@ defmodule LLMProxy.Catalog do
     end)
   end
 
-  defp route(:lowest_cost, _name, deployments), do: order_by_lowest_cost(deployments)
-  defp route(:round_robin, name, deployments), do: RoundRobin.order(name, deployments)
-  defp route(:shuffle, _name, deployments), do: shuffle_by_order_group(deployments)
+  defp route(:latency_aware, name, deployments, %Request{} = request),
+    do: Performance.order(name, deployments, request)
 
-  defp route(:weighted_shuffle, _name, deployments),
+  defp route(:lowest_cost, _name, deployments, _request), do: order_by_lowest_cost(deployments)
+  defp route(:round_robin, name, deployments, _request), do: RoundRobin.order(name, deployments)
+  defp route(:shuffle, _name, deployments, _request), do: shuffle_by_order_group(deployments)
+
+  defp route(:weighted_shuffle, _name, deployments, _request),
     do: weighted_shuffle_by_order_group(deployments)
 
-  defp route(_strategy, _name, deployments), do: Enum.sort_by(deployments, & &1.order)
+  defp route(_strategy, _name, deployments, _request), do: Enum.sort_by(deployments, & &1.order)
 
   defp shuffle_by_order_group(deployments) do
     deployments

@@ -29,6 +29,7 @@ defmodule LLMProxy.Application do
           LLMProxy.Drain,
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
+          LLMProxy.Providers.Routing.Performance,
           LLMProxy.TokenPool.Server
         ] ++ rpc_children() ++ http_children()
 

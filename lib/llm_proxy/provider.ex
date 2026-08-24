@@ -47,7 +47,7 @@ defmodule LLMProxy.Provider do
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
-           Registry.resolve_attempts(request.model) do
+           Registry.resolve_attempts(request) do
       Logger.debug(
         "Provider request from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
@@ -82,7 +82,7 @@ defmodule LLMProxy.Provider do
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
-           Registry.resolve_attempts(request.model) do
+           Registry.resolve_attempts(request) do
       Logger.debug(
         "Provider stream from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
@@ -332,7 +332,7 @@ defmodule LLMProxy.Provider do
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
-           Registry.resolve_attempts(request.model) do
+           Registry.resolve_attempts(request) do
       Logger.debug(
         "Provider native #{function} from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
       )
@@ -443,7 +443,9 @@ defmodule LLMProxy.Provider do
 
           {:ok, %Event{} = event} ->
             usage = merge_stream_usage(usage, event)
-            ttft_ms = ttft_ms || System.monotonic_time(:millisecond) - start
+
+            ttft_ms = first_output_latency(ttft_ms, event, start)
+
             {[event], {usage, ttft_ms}}
 
           {:error, _reason} ->
@@ -458,6 +460,12 @@ defmodule LLMProxy.Provider do
       fn _acc -> :ok end
     )
   end
+
+  defp first_output_latency(nil, %Event{} = event, start) do
+    if Event.output_delta?(event), do: System.monotonic_time(:millisecond) - start
+  end
+
+  defp first_output_latency(ttft_ms, _event, _start), do: ttft_ms
 
   defp merge_stream_usage(usage, %Event{usage: event_usage}) when not is_nil(event_usage) do
     Usage.merge_max(usage, event_usage)

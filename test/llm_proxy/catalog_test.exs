@@ -3,9 +3,10 @@ defmodule LLMProxy.CatalogTest do
 
   alias LLMProxy.Catalog
   alias LLMProxy.Catalog.{Deployment, Model}
+  alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.{Anthropic, OpenAI, Registry}
   alias LLMProxy.Providers.Attempt
-  alias LLMProxy.Providers.Routing.RoundRobin
+  alias LLMProxy.Providers.Routing.{Performance, RoundRobin, Sample}
 
   defmodule Provider do
     def name, do: "catalog-provider"
@@ -15,6 +16,7 @@ defmodule LLMProxy.CatalogTest do
   setup do
     Catalog.load([])
     RoundRobin.reset()
+    Performance.reset()
     Registry.register(Provider)
 
     on_exit(fn ->
@@ -22,6 +24,7 @@ defmodule LLMProxy.CatalogTest do
       Application.delete_env(:llm_proxy, :max_retries)
       Catalog.load([])
       RoundRobin.reset()
+      Performance.reset()
     end)
 
     :ok
@@ -106,6 +109,39 @@ defmodule LLMProxy.CatalogTest do
               %Attempt{provider: Provider, model: "upstream-model"},
               %Attempt{provider: Provider, model: "second-upstream-model"}
             ]} = Registry.resolve_attempts("weighted")
+  end
+
+  test "latency-aware strategy uses request-specific deployment observations" do
+    slow = deployment(Provider, "upstream-model")
+    fast = deployment(Provider, "second-upstream-model")
+
+    Catalog.put_model(model("adaptive", [slow, fast], routing_strategy: :latency_aware))
+
+    request = %Request{
+      protocol: :openai_chat,
+      model: "adaptive",
+      body: %{"model" => "adaptive"},
+      stream: false
+    }
+
+    now = System.monotonic_time(:millisecond)
+
+    for {deployment, duration} <- [{slow, 500}, {fast, 100}], _sample <- 1..3 do
+      Performance.observe(Attempt.new(deployment), %Sample{
+        operation: request.protocol,
+        stream: false,
+        outcome: :success,
+        duration_ms: duration,
+        output_tokens: 0,
+        observed_at: now
+      })
+    end
+
+    assert {:ok,
+            [
+              %Attempt{model: "second-upstream-model"},
+              %Attempt{model: "upstream-model"}
+            ]} = Registry.resolve_attempts(request)
   end
 
   test "lowest cost strategy orders deployments by LLMDB pricing" do

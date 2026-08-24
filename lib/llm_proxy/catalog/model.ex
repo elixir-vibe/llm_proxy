@@ -5,13 +5,21 @@ defmodule LLMProxy.Catalog.Model do
 
   alias LLMProxy.Catalog.Deployment
 
-  @routing_strategies [:ordered, :shuffle, :round_robin, :weighted_shuffle, :lowest_cost]
+  @routing_strategies [
+    :ordered,
+    :shuffle,
+    :round_robin,
+    :weighted_shuffle,
+    :lowest_cost,
+    :latency_aware
+  ]
   @routing_strategy_names Map.new(@routing_strategies, &{Atom.to_string(&1), &1})
 
   @enforce_keys [:name]
   defstruct name: nil, hidden: false, routing_strategy: :ordered, deployments: [], metadata: %{}
 
-  @type routing_strategy :: :ordered | :shuffle | :round_robin | :weighted_shuffle | :lowest_cost
+  @type routing_strategy ::
+          :ordered | :shuffle | :round_robin | :weighted_shuffle | :lowest_cost | :latency_aware
   @type t :: %__MODULE__{
           name: String.t(),
           hidden: boolean(),
