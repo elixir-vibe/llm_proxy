@@ -3,35 +3,33 @@ defmodule LLMProxy.Repo.Migrations.AddContentCaptureToApiKeys do
 
   import Ecto.Query
 
-  defmodule ApiKey do
-    use Ecto.Schema
-
-    @primary_key false
-    schema "api_keys" do
-      field :trace_requests, :boolean
-      field :capture_content, :boolean
-    end
-  end
+  @disable_ddl_transaction true
 
   def up do
-    # QuackDB cannot add a constrained column to an existing table. The API-key
-    # schema supplies the false default for new rows; this migration backfills
-    # every existing row before preserving the prior full-trace behavior.
+    drop(index(:api_keys, [:hash]))
+
     alter table(:api_keys) do
-      add :capture_content, :boolean
+      add(:capture_content, :boolean, default: false, null: false)
     end
 
     flush()
 
-    repo().update_all(ApiKey, set: [capture_content: false])
+    from("api_keys",
+      where: [trace_requests: true],
+      update: [set: [capture_content: type(^true, :boolean)]]
+    )
+    |> repo().update_all([])
 
-    from(key in ApiKey, where: key.trace_requests == true)
-    |> repo().update_all(set: [capture_content: true])
+    create(unique_index(:api_keys, [:hash]))
   end
 
   def down do
+    drop(index(:api_keys, [:hash]))
+
     alter table(:api_keys) do
-      remove :capture_content
+      remove(:capture_content)
     end
+
+    create(unique_index(:api_keys, [:hash]))
   end
 end
