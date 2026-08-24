@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+- Standalone non-secret runtime settings now come from TOML instead of
+  environment variables. `PORT`, `PUBLIC_URL`, `DATABASE_PATH`, `QUACKDB_URI`,
+  `QUACKDB_ENDPOINT`, `LLM_PROXY_RPC_SOCKET`, `LLM_PROXY_BODY_LIMIT_BYTES`,
+  `LLM_PROXY_PROVIDER_CONNECT_TIMEOUT_MS`, `LLM_MAX_RETRIES`,
+  `LLM_FALLBACKS`, and `OTEL_EXPORTER_OTLP_ENDPOINT` are no longer read.
+  Configure the corresponding `[server]`, `[storage]`, `[routing]`,
+  `[telemetry]`, provider, and model-route settings in the standalone TOML file.
+- Standalone `OPENAI_API_KEYS`, `ANTHROPIC_API_KEYS`, `OPENROUTER_API_KEYS`, and
+  `OPENAI_CODEX_TOKENS` bootstrapping has been removed. Seed API-key pools with
+  the secret `LLM_PROXY_PROVIDER_KEYS` JSON object. Provision Codex OAuth through
+  the admin login flow and preserve its stored token rows in backups.
+- Standalone TOML is now strict and rejects unknown sections, unknown keys, and
+  provider credentials. Library mode remains configured through ordinary Elixir
+  application configuration and may source secrets however the host chooses.
+
 ### Added
 
 - Provider API keys and OAuth tokens can use a pluggable at-rest codec with a

@@ -128,18 +128,34 @@ See [Library Mode](https://hexdocs.pm/llm_proxy/library-mode.html) for storage, 
 
 The standalone release runs a local HTTP gateway backed by DuckDB through QuackDB. It listens on `127.0.0.1` and is intended to sit behind your reverse proxy or service mesh.
 
-Configure secrets with environment variables:
+Configure only secrets and the optional TOML location through the environment:
 
 ```bash
 export MASTER_KEY="replace-with-a-long-random-key"
-export OPENAI_API_KEYS="sk-..."
-export DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
-export PORT="4000"
+export LLM_PROXY_PROVIDER_KEYS='{"openai":["sk-..."]}'
+export LLM_PROXY_CONFIG_TOML="/etc/llm-proxy/config.toml"
 ```
 
-Configure public providers and model aliases as data in `/etc/llm-proxy/config.toml`:
+Configure standalone runtime settings, public providers, and model aliases as
+data in that TOML file:
 
 ```toml
+[server]
+port = 4000
+public_url = "https://llm.example.com"
+body_limit_bytes = 32000000
+rpc_socket = "/run/llm-proxy/rpc.sock"
+
+[storage]
+database = "/var/lib/llm-proxy/llm_proxy.duckdb"
+quackdb_uri = "http://127.0.0.1:9494"
+quackdb_endpoint = "quack:localhost:9494"
+
+[routing]
+max_retries = 1
+replay_policy = "safe_only"
+provider_connect_timeout_ms = 10000
+
 [providers.openai-primary]
 adapter = "openai"
 base_url = "https://api.openai.com/v1"

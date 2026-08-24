@@ -144,10 +144,12 @@ defmodule LLMProxy.Config do
   def provider_config(provider) when is_binary(provider) do
     configured = Application.get_env(:llm_proxy, :providers, %{}) |> normalize_providers()
     name = provider_name(provider)
+    provider_config = Map.get(configured, name, %{})
 
     @default_providers
     |> Map.get(name, %{})
-    |> deep_merge(Map.get(configured, name, %{}))
+    |> deep_merge(provider_config)
+    |> default_openrouter_referer(name, provider_config)
   end
 
   def provider_value(provider, key), do: provider_value(provider, key, nil)
@@ -289,6 +291,16 @@ defmodule LLMProxy.Config do
   end
 
   defp provider_name(provider) when is_binary(provider), do: String.replace(provider, "_", "-")
+
+  defp default_openrouter_referer(config, "openrouter", configured) do
+    if Map.has_key?(configured, :http_referer) do
+      config
+    else
+      Map.put(config, :http_referer, public_url())
+    end
+  end
+
+  defp default_openrouter_referer(config, _name, _configured), do: config
 
   defp deep_merge(left, right) do
     Map.merge(left, right, fn _key, left_value, right_value ->

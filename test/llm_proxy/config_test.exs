@@ -15,6 +15,7 @@ defmodule LLMProxy.ConfigTest do
     original_connect_timeout = Application.get_env(:llm_proxy, :provider_connect_timeout_ms)
     original_max_retries = Application.get_env(:llm_proxy, :max_retries)
     original_replay_policy = Application.get_env(:llm_proxy, :replay_policy)
+    original_public_url = Application.get_env(:llm_proxy, :public_url)
     original_provider_token_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
     original_provider_token_keyring = Application.fetch_env(:llm_proxy, :provider_token_keyring)
 
@@ -29,6 +30,7 @@ defmodule LLMProxy.ConfigTest do
       restore_env(:provider_connect_timeout_ms, original_connect_timeout)
       restore_env(:max_retries, original_max_retries)
       restore_env(:replay_policy, original_replay_policy)
+      restore_env(:public_url, original_public_url)
       restore_fetched_env(:provider_token_codec, original_provider_token_codec)
       restore_fetched_env(:provider_token_keyring, original_provider_token_keyring)
 
@@ -117,6 +119,19 @@ defmodule LLMProxy.ConfigTest do
              size: 4,
              count: 8
            ]
+  end
+
+  test "uses the standalone public URL as OpenRouter's default referer" do
+    Application.put_env(:llm_proxy, :public_url, "https://llm.example.com")
+    Application.put_env(:llm_proxy, :providers, %{})
+
+    assert Config.provider_value("openrouter", :http_referer) == "https://llm.example.com"
+
+    Application.put_env(:llm_proxy, :providers, %{
+      "openrouter" => %{http_referer: "https://override.example"}
+    })
+
+    assert Config.provider_value("openrouter", :http_referer) == "https://override.example"
   end
 
   test "normalizes readable provider config" do

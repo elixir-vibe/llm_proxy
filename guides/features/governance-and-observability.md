@@ -201,7 +201,7 @@ llm_proxy.provider.stream
 
 Spans include provider and model attributes plus the LLMProxy trace ID. HTTP, Ecto, and Req integrations are instrumented through their OpenTelemetry packages.
 
-Standalone releases enable OTLP export when `OTEL_EXPORTER_OTLP_ENDPOINT` is set. Without it, trace export is disabled.
+Standalone releases enable OTLP export when `telemetry.otlp_endpoint` is set in TOML. Without it, trace export is disabled.
 
 ## Operational admin
 

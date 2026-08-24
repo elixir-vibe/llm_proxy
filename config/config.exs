@@ -27,27 +27,13 @@ config :opentelemetry_exporter,
   otlp_protocol: :http_protobuf
 
 config :release_kit, :artifact,
-  port: 4101,
+  port: 4000,
   health_path: "/health",
-  env_clear: %{
-    "DATABASE_PATH" => "/var/lib/toys/llm-proxy/main.duckdb",
-    "PORT" => "4101",
-    "PUBLIC_URL" => "https://llm.elixir.toys",
-    "LLM_PROXY_PROVIDER_CONNECT_TIMEOUT_MS" => "10000",
-    "LLM_PROXY_RPC_SOCKET" => "/run/toys/llm-proxy/rpc.sock",
-    "QUACKDB_BINARY_CACHE_DIR" => "/var/lib/toys/llm-proxy/duckdb-bin",
-    "QUACKDB_ENDPOINT" => "quack:localhost:9494",
-    "QUACKDB_URI" => "http://127.0.0.1:9494",
-    "RELEASE_DISTRIBUTION" => "none"
-  },
+  env_clear: %{"RELEASE_DISTRIBUTION" => "none"},
   env_secret: [
     "MASTER_KEY",
-    "ANTHROPIC_API_KEYS",
     "LLM_PROXY_PROVIDER_KEYS",
-    "LLM_PROXY_PROVIDER_TOKEN_KEYRING",
-    "OPENAI_API_KEYS",
-    "OPENAI_CODEX_TOKENS",
-    "OPENROUTER_API_KEYS"
+    "LLM_PROXY_PROVIDER_TOKEN_KEYRING"
   ]
 
 import_config "#{config_env()}.exs"
