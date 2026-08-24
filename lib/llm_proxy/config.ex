@@ -186,6 +186,17 @@ defmodule LLMProxy.Config do
   def token_cooldown_ms,
     do: Application.get_env(:llm_proxy, :token_cooldown_ms, @default_token_cooldown_ms)
 
+  def token_selection_strategy do
+    case Application.get_env(:llm_proxy, :token_selection_strategy, :affinity) do
+      strategy when strategy in [:affinity, :fill_first] ->
+        strategy
+
+      value ->
+        raise ArgumentError,
+              ":token_selection_strategy must be :affinity or :fill_first, got: #{inspect(value)}"
+    end
+  end
+
   def deployment_failure_threshold,
     do:
       Application.get_env(

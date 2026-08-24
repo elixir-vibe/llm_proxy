@@ -11,6 +11,7 @@ if Code.ensure_loaded?(Incant) do
       column(:provider, link: true, priority: :primary)
       column(:kind, priority: :secondary)
       column(:label, priority: :primary)
+      column(:priority, priority: :secondary)
 
       column(:enabled,
         as: :boolean,

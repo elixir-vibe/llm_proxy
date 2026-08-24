@@ -113,6 +113,23 @@ bytes. This keyring is separate from `:master_key`. Writes use only the active
 key ID. Reads accept all key IDs in the keyring. The default plaintext codec is
 for compatibility and does not protect stored credentials.
 
+### Token Selection Strategy
+
+```elixir
+config :llm_proxy, token_selection_strategy: :fill_first
+```
+
+Credential selection within each kind. `:affinity` uses a stable user hash and is the default.
+`:fill_first` uses the highest enabled token `priority`, then the lowest token ID to break ties.
+Cooling-down tokens are skipped without changing this order. Standalone releases use
+`routing.token_selection_strategy` in TOML.
+
+Set priority when adding a provider token. Higher values are selected first:
+
+```elixir
+LLMProxy.Storage.add_token("openai-codex", "oauth", access_token, %{priority: 100})
+```
+
 ### Deployment Failure Threshold
 
 ```elixir
@@ -423,6 +440,7 @@ quackdb_endpoint = "quack:localhost:9494"
 max_retries = 1
 replay_policy = "safe_only"
 provider_connect_timeout_ms = 10000
+token_selection_strategy = "affinity"
 ```
 
 Fallback deployments belong in model routes, not a separate fallback map.
