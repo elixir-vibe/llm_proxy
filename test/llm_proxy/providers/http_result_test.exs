@@ -4,6 +4,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
   alias LLMProxy.Providers.{HTTPResult, Result}
   alias LLMProxy.Schemas.ProviderTokenCooldown
   alias LLMProxy.Storage.Repo.SQLite
+  alias LLMProxy.TokenPool.Cooldown
 
   describe "retry_after_ms/1" do
     test "parses retry-after seconds" do
@@ -15,6 +16,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
                nil
 
       assert HTTPResult.retry_after_ms(%{}) == nil
+      assert HTTPResult.retry_after_ms(%{"retry-after" => ["999999999999999999"]}) == nil
     end
   end
 
@@ -45,12 +47,13 @@ defmodule LLMProxy.Providers.HTTPResultTest do
 
       assert SQLite.get_by(ProviderTokenCooldown,
                token_id: token.id,
-               model: "model-a"
+               scope: "model",
+               model_key: Cooldown.model_key!("model-a")
              )
 
       refute SQLite.get_by(ProviderTokenCooldown,
                token_id: token.id,
-               model: "*"
+               scope: "account"
              )
     end
 

@@ -85,10 +85,15 @@ defmodule LLMProxy.Providers.Result do
   def stream_failure(provider, model, token, reason)
       when is_atom(provider) and is_binary(model) do
     result =
-      if Code.ensure_loaded?(provider) and function_exported?(provider, :stream_error, 2) do
-        provider.stream_error(reason, token)
-      else
-        error("Upstream provider stream failed", 502, token)
+      cond do
+        Code.ensure_loaded?(provider) and function_exported?(provider, :stream_error, 3) ->
+          provider.stream_error(reason, token, model)
+
+        Code.ensure_loaded?(provider) and function_exported?(provider, :stream_error, 2) ->
+          provider.stream_error(reason, token)
+
+        true ->
+          error("Upstream provider stream failed", 502, token)
       end
 
     %{result | provider: provider, provider_name: provider_name(provider), model: model}

@@ -91,7 +91,8 @@ Provider transport timeout and standalone Cowboy idle ceiling. Default: 10 minut
 config :llm_proxy, token_cooldown_ms: :timer.hours(4)
 ```
 
-Default credential cooldown after rate limiting. Default: 4 hours.
+Default credential cooldown after rate limiting. Must be a positive integer no greater than 31
+days. Default: 4 hours.
 
 ### Provider Token Selection
 

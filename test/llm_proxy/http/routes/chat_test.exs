@@ -91,7 +91,7 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
        )}
     end
 
-    def stream_error(reason, token) do
+    def stream_error(reason, token, _model) do
       message = Exception.message(reason)
 
       Result.error(message, 400, token,

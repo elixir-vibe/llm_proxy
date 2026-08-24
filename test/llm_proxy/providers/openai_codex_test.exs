@@ -105,7 +105,12 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   end
 
   test "lazy stream errors preserve a safe upstream reason" do
-    result = OpenAICodex.stream_error(RuntimeError.exception("WebSocket closed 1000"), nil)
+    result =
+      OpenAICodex.stream_error(
+        RuntimeError.exception("WebSocket closed 1000"),
+        nil,
+        "gpt-5.6-codex"
+      )
 
     assert result.status == 502
     assert result.error == "WebSocket closed 1000"

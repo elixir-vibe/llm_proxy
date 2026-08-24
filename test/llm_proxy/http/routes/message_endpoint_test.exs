@@ -80,7 +80,8 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpointTest do
        )}
     end
 
-    def stream_error(reason, token), do: Result.error(Exception.message(reason), 400, token)
+    def stream_error(reason, token, _model),
+      do: Result.error(Exception.message(reason), 400, token)
 
     def extract_usage(response) do
       usage = response["usage"] || %{}

@@ -98,11 +98,17 @@ provider-token edit form exposes only `priority`; credential fields remain
 uneditable and private.
 
 For accounts with live provider-usage data, selection also skips fresh exhausted accounts until
-their reported reset time. A stale or failed snapshot is not used as proof of capacity. Before the
-first snapshot exists, the token remains eligible so tracker startup does not stop all traffic.
-Rate-limit cooldowns are stored by provider token and upstream model. A model-specific failure does
-not block the same account for other models. Global cooldowns remain available for errors that do
-not identify a model, and all cooldowns survive service restarts.
+all exhausted windows with known reset times have reset. An exhausted window without a reset stays
+blocked until a fresh snapshot reports capacity. A stale or failed snapshot is not used as proof of
+capacity. Before the first snapshot exists, the token remains eligible so tracker startup does not
+stop all traffic.
+
+Rate-limit cooldowns are stored by provider token and scope. Model-scoped cooldowns persist a
+bounded SHA-256 model key rather than the raw model ID, so one model's failure does not block the
+same account for other models or disclose request metadata in cooldown storage. Account-scoped
+cooldowns remain available for errors that do not identify a model. Cooldowns survive service
+restarts, never shorten an existing deadline, and expired rows are pruned when a new cooldown is
+recorded.
 
 ## Public model aliases
 

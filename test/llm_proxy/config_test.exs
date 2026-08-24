@@ -17,6 +17,7 @@ defmodule LLMProxy.ConfigTest do
     original_replay_policy = Application.get_env(:llm_proxy, :replay_policy)
     original_public_models = Application.get_env(:llm_proxy, :public_models)
     original_token_selection = Application.get_env(:llm_proxy, :token_selection_strategy)
+    original_token_cooldown = Application.get_env(:llm_proxy, :token_cooldown_ms)
     original_public_url = Application.get_env(:llm_proxy, :public_url)
     original_provider_token_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
     original_provider_token_keyring = Application.fetch_env(:llm_proxy, :provider_token_keyring)
@@ -45,6 +46,7 @@ defmodule LLMProxy.ConfigTest do
       restore_env(:replay_policy, original_replay_policy)
       restore_env(:public_models, original_public_models)
       restore_env(:token_selection_strategy, original_token_selection)
+      restore_env(:token_cooldown_ms, original_token_cooldown)
       restore_env(:public_url, original_public_url)
       restore_fetched_env(:provider_token_codec, original_provider_token_codec)
       restore_fetched_env(:provider_token_keyring, original_provider_token_keyring)
@@ -70,6 +72,16 @@ defmodule LLMProxy.ConfigTest do
     for invalid <- [[""], [" "], [nil], "model-a"] do
       Application.put_env(:llm_proxy, :public_models, invalid)
       assert_raise ArgumentError, fn -> Config.public_models() end
+    end
+  end
+
+  test "validates token cooldown bounds" do
+    Application.put_env(:llm_proxy, :token_cooldown_ms, 1)
+    assert Config.token_cooldown_ms() == 1
+
+    for invalid <- [0, -1, :timer.hours(24) * 31 + 1, "1000"] do
+      Application.put_env(:llm_proxy, :token_cooldown_ms, invalid)
+      assert_raise ArgumentError, fn -> Config.token_cooldown_ms() end
     end
   end
 

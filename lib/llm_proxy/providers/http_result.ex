@@ -5,6 +5,7 @@ defmodule LLMProxy.Providers.HTTPResult do
 
   alias LLMProxy.Providers.ReqLLM.ErrorProjection
   alias LLMProxy.Providers.Result
+  alias LLMProxy.TokenPool.Cooldown
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
   def post(req, body, token, model \\ nil) do
@@ -47,10 +48,16 @@ defmodule LLMProxy.Providers.HTTPResult do
   end
 
   def retry_after_ms(headers) do
-    headers
-    |> Map.get("retry-after", [])
-    |> List.first()
-    |> parse_retry_after()
+    case headers |> Map.get("retry-after", []) |> List.first() |> parse_retry_after() do
+      0 ->
+        0
+
+      duration_ms when is_integer(duration_ms) ->
+        if Cooldown.valid_duration?(duration_ms), do: duration_ms, else: nil
+
+      nil ->
+        nil
+    end
   end
 
   def provider_details(%{"error" => error}), do: error
@@ -60,6 +67,8 @@ defmodule LLMProxy.Providers.HTTPResult do
   def extract(%{"error" => message}) when is_binary(message), do: message
   def extract(body) when is_binary(body), do: body
   def extract(_body), do: "Upstream provider request failed"
+
+  defp mark_rate_limited(429, _token, _model, 0), do: :ok
 
   defp mark_rate_limited(429, token, model, retry_after_ms)
        when not is_nil(token) and is_binary(model) do

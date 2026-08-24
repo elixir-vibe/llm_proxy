@@ -83,9 +83,12 @@ defmodule LLMProxy.Providers.OpenAICodex do
   end
 
   @impl true
-  def stream_error(reason, token) do
+  def stream_error(reason, token, model) do
     error = ErrorProjection.project(reason)
-    if error.status == 429 and token, do: TokenPool.mark_rate_limited(token)
+
+    if error.status == 429 and token do
+      TokenPool.mark_rate_limited(token, model, LLMProxy.Config.token_cooldown_ms())
+    end
 
     Result.error(error.message, error.status, token,
       provider_body: %{"error" => ErrorProjection.client_error(reason)}
@@ -178,7 +181,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
     case ReqLLM.generate_text(model_spec, context, generation_opts(request, token, false)) do
       {:ok, response} -> {:ok, response}
-      {:error, reason} -> {:error, stream_error(reason, nil)}
+      {:error, reason} -> {:error, stream_error(reason, token, request.model)}
     end
   rescue
     _exception in [ArgumentError, RuntimeError] ->
@@ -191,7 +194,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
     case ReqLLM.stream_text(model_spec, context, generation_opts(request, token, true)) do
       {:ok, response} -> {:ok, response}
-      {:error, reason} -> {:error, stream_error(reason, nil)}
+      {:error, reason} -> {:error, stream_error(reason, token, request.model)}
     end
   rescue
     _exception in [ArgumentError, RuntimeError] ->

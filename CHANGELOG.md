@@ -21,6 +21,10 @@
 
 ### Added
 
+- Token selection now skips accounts only while fresh provider-usage snapshots
+  prove exhaustion, waits for every exhausted window to reset, and persists
+  account- or model-scoped rate-limit cooldowns across restarts without storing
+  raw model IDs.
 - A supervised provider-usage tracker now reports each configured OpenAI Codex
   or GLM Coding Plan account separately. The optional Incant admin surface shows
   live upstream windows, availability, reset times, freshness, and safe errors,
