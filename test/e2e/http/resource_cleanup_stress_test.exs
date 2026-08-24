@@ -1,4 +1,4 @@
-defmodule LLMProxy.ResourceCleanupStressTest do
+defmodule LLMProxy.E2E.HTTP.ResourceCleanupStressTest do
   @moduledoc """
   Repeats loopback HTTP work and proves resources return to a bounded baseline.
 
@@ -8,6 +8,8 @@ defmodule LLMProxy.ResourceCleanupStressTest do
   """
 
   use ExUnit.Case, async: false
+
+  @moduletag :e2e
 
   alias LLMProxy.Providers.{Registry, Result}
   alias LLMProxy.Storage
