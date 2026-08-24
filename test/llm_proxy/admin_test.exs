@@ -171,6 +171,7 @@ if Code.ensure_loaded?(Incant) do
       assert Enum.map(provider_usage.widgets, & &1.id) == [
                "accounts",
                "available",
+               "exhausted",
                "attention",
                "usage_windows"
              ]
@@ -178,17 +179,14 @@ if Code.ensure_loaded?(Incant) do
       usage_windows = Enum.find(provider_usage.widgets, &(&1.id == "usage_windows"))
 
       assert Enum.map(usage_windows.opts.columns, & &1.name) == [
-               :provider,
                :account,
+               :provider,
                :window,
-               :used_percent,
-               :remaining_percent,
-               :resets_at,
+               :remaining_ratio,
+               :resets_in,
                :availability,
-               :state,
-               :last_refresh,
-               :last_attempt,
-               :error
+               :reset_credits_available,
+               :reset_credit_expires_in
              ]
 
       assert usage_windows.opts.preview_rows == 50

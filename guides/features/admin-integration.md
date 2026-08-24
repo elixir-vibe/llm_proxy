@@ -43,19 +43,26 @@ Captured message text is marked as sensitive in the Incant resource contract. LL
 
 ## Local admin in a host application
 
-A Phoenix application that embeds both packages can mount `LLMProxy.Admin` directly through Incant's router:
+A Phoenix application that embeds both packages can mount `LLMProxy.Admin` with its router helper:
 
 ```elixir
 defmodule MyAppWeb.Router do
   use MyAppWeb, :router
-  use Incant.Router
+  use LLMProxy.Admin.Router
 
   scope "/" do
     pipe_through [:browser, :require_operator]
-    incant "/admin/llm", LLMProxy.Admin
+    llm_proxy_incant "/admin/llm", LLMProxy.Admin
   end
 end
 ```
+
+This helper adds a LiveView hook that reloads the Provider Usage dashboard once
+each minute. It does not reload other admin pages. To use a different interval,
+set `config :llm_proxy, admin_provider_usage_poll_interval_ms: 60_000`. The
+supported page-poll interval is 15 seconds through one hour. Incant 0.1 does
+not provide a dashboard-level auto-refresh switch. Change the Elixir setting
+when the host needs a different interval.
 
 Use the host application's authentication and authorization pipeline around the mount. `LLMProxy.Admin.Policy` governs service-level resource and action access, but it does not replace operator authentication at the web boundary.
 
@@ -124,6 +131,13 @@ The provider-usage tracker starts with LLMProxy and keeps one in-memory snapshot
 
 OpenAI Codex usage comes from the same account-rate-limit source used by the [first-party Codex backend client](https://github.com/openai/codex/blob/main/codex-rs/backend-client/src/client/rate_limit_resets.rs). With the default `https://chatgpt.com/backend-api` base, LLMProxy uses `GET /backend-api/wham/usage`. A custom base without `/backend-api` uses its `/api/codex/usage` path. The request requires a valid Codex OAuth access token. `ChatGPT-Account-Id` is sent when the stored token or access-token claim provides it, but the ID is never returned to Incant.
 
+For Codex accounts, the dashboard also shows the available rate-limit reset
+credit count. When at least one credit is available on the first-party backend,
+LLMProxy reads `GET /backend-api/wham/rate-limit-reset-credits` and shows the
+earliest available credit expiry. This integration is read-only. LLMProxy does
+not expose or call the credit-consumption endpoint. If the optional detail
+request fails, the normal quota windows and credit count remain available.
+
 GLM Coding Plan usage comes from the Z.AI monitor API on the configured provider origin. Providers using the `zai`, `zai_coder`, or `zai_coding_plan` ReqLLM adapter qualify automatically. A custom provider can set `usage_adapter: "glm"`. The default source order is:
 
 1. `/api/monitor/usage/quota/limit`, used by [Z.AI's first-party GLM usage plugin](https://github.com/zai-org/zai-coding-plugins/blob/main/plugins/glm-plan-usage/skills/usage-query-skill/scripts/query-usage.mjs).
@@ -161,8 +175,15 @@ config :llm_proxy,
   provider_usage_auto_refresh: true,
   provider_usage_refresh_interval_ms: 300_000,
   provider_usage_request_timeout_ms: 10_000,
-  provider_usage_stale_after_ms: 600_000
+  provider_usage_stale_after_ms: 600_000,
+  admin_provider_usage_poll_interval_ms: 60_000
 ```
+
+The local Incant hook reloads the dashboard once each minute. This page poll
+does not make an upstream request or change the provider refresh interval. Set
+`provider_usage.refresh_interval_ms = 60000` in standalone TOML, or
+`provider_usage_refresh_interval_ms: 60_000` in library configuration, when the
+dashboard must receive new upstream values each minute.
 
 Set `provider_usage.auto_refresh = false` in standalone TOML to use only the Provider Tokens resource actions. Library applications set `provider_usage_auto_refresh: false` in Elixir configuration. `Refresh provider usage` starts a bounded refresh of all supported accounts. The row action refreshes one supported account. Both actions return before upstream I/O completes, so they stay inside the SafeRPC request deadline.
 

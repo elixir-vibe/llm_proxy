@@ -46,6 +46,8 @@ defmodule LLMProxy.ProviderUsage.Loader do
         availability: result.availability,
         state: :fresh,
         plan: result.plan,
+        reset_credits_available: result.reset_credits_available,
+        reset_credit_expires_at: result.reset_credit_expires_at,
         windows: result.windows,
         refreshed_at: attempted_at,
         attempted_at: attempted_at
@@ -74,6 +76,8 @@ defmodule LLMProxy.ProviderUsage.Loader do
       provider_label: source.provider_label,
       account_label: source.account_label,
       plan: Keyword.get(attrs, :plan),
+      reset_credits_available: Keyword.get(attrs, :reset_credits_available),
+      reset_credit_expires_at: Keyword.get(attrs, :reset_credit_expires_at),
       availability: Keyword.fetch!(attrs, :availability),
       state: Keyword.fetch!(attrs, :state),
       windows: Keyword.get(attrs, :windows, []),

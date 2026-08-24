@@ -188,14 +188,22 @@ defmodule LLMProxy.ProviderUsage.Server do
   defp scope_allows_id?(_scope, _id), do: false
 
   defp valid_snapshot?(%Snapshot{} = snapshot) do
-    valid_snapshot_identity?(snapshot) and valid_snapshot_state?(snapshot) and
-      valid_plan?(snapshot.plan) and valid_datetime?(snapshot.refreshed_at) and
-      valid_datetime?(snapshot.attempted_at) and valid_error?(snapshot.error) and
-      is_list(snapshot.windows) and length(snapshot.windows) <= 8 and
-      Enum.all?(snapshot.windows, &valid_window?/1)
+    valid_snapshot_metadata?(snapshot) and valid_snapshot_payload?(snapshot)
   end
 
   defp valid_snapshot?(_snapshot), do: false
+
+  defp valid_snapshot_metadata?(snapshot) do
+    valid_snapshot_identity?(snapshot) and valid_snapshot_state?(snapshot) and
+      valid_plan?(snapshot.plan) and valid_datetime?(snapshot.refreshed_at) and
+      valid_datetime?(snapshot.attempted_at) and valid_error?(snapshot.error)
+  end
+
+  defp valid_snapshot_payload?(snapshot) do
+    valid_reset_credits?(snapshot) and
+      is_list(snapshot.windows) and length(snapshot.windows) <= 8 and
+      Enum.all?(snapshot.windows, &valid_window?/1)
+  end
 
   defp valid_snapshot_identity?(snapshot) do
     is_integer(snapshot.token_id) and snapshot.token_id > 0 and
@@ -240,6 +248,19 @@ defmodule LLMProxy.ProviderUsage.Server do
   defp valid_error?(nil), do: true
   defp valid_error?(error), do: valid_label?(error, 160)
 
+  defp valid_reset_credits?(%Snapshot{
+         reset_credits_available: nil,
+         reset_credit_expires_at: nil
+       }),
+       do: true
+
+  defp valid_reset_credits?(%Snapshot{
+         reset_credits_available: count,
+         reset_credit_expires_at: expires_at
+       }) do
+    is_integer(count) and count >= 0 and count <= 1_000 and valid_datetime?(expires_at)
+  end
+
   defp valid_label?(value, maximum) do
     is_binary(value) and value != "" and byte_size(value) <= maximum and
       not String.contains?(value, ["\r", "\n"])
@@ -254,6 +275,8 @@ defmodule LLMProxy.ProviderUsage.Server do
       | availability: previous.availability,
         state: :stale,
         plan: previous.plan,
+        reset_credits_available: previous.reset_credits_available,
+        reset_credit_expires_at: previous.reset_credit_expires_at,
         windows: previous.windows,
         refreshed_at: previous.refreshed_at
     }

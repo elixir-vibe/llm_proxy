@@ -19,7 +19,7 @@ defmodule LLMProxy.ProviderUsage.HTTP do
           headers: headers,
           connect_options: [timeout: timeout],
           receive_timeout: timeout,
-          finch: [pool_timeout: timeout],
+          request_timeout: timeout,
           retry: false,
           redirect: false,
           decode_body: false,

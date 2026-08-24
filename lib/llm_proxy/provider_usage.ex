@@ -10,11 +10,18 @@ defmodule LLMProxy.ProviderUsage do
   alias LLMProxy.ProviderUsage.{Server, Snapshot, Source, Window}
 
   @columns [
-    :provider,
     :account,
+    :provider,
+    :plan,
+    :reset_credits_available,
+    :reset_credit_expires_in,
+    :reset_credit_expires_at,
     :window,
     :used_percent,
     :remaining_percent,
+    :remaining_ratio,
+    :used_ratio,
+    :resets_in,
     :resets_at,
     :availability,
     :state,
@@ -34,7 +41,18 @@ defmodule LLMProxy.ProviderUsage do
 
   @spec rows() :: %{columns: [atom()], rows: [map()]}
   def rows do
-    %{columns: @columns, rows: Enum.flat_map(snapshots(), &snapshot_rows/1)}
+    rows(snapshots())
+  end
+
+  @doc false
+  @spec rows([Snapshot.t()], DateTime.t()) :: %{columns: [atom()], rows: [map()]}
+  def rows(snapshots, now \\ DateTime.utc_now()) do
+    rows =
+      snapshots
+      |> Enum.flat_map(&snapshot_rows(&1, now))
+      |> Enum.sort_by(&row_sort_key/1)
+
+    %{columns: @columns, rows: rows}
   end
 
   @spec account_count() :: non_neg_integer()
@@ -48,6 +66,11 @@ defmodule LLMProxy.ProviderUsage do
   @spec attention_count() :: non_neg_integer()
   def attention_count do
     Enum.count(snapshots(), &(&1.state in [:stale, :error] or &1.availability == :unavailable))
+  end
+
+  @spec exhausted_count() :: non_neg_integer()
+  def exhausted_count do
+    Enum.count(snapshots(), &(&1.state == :fresh and &1.availability == :unavailable))
   end
 
   @spec token_available?(integer(), DateTime.t()) :: boolean()
@@ -78,19 +101,27 @@ defmodule LLMProxy.ProviderUsage do
 
   def refresh_account(_id), do: {:error, :unsupported}
 
-  defp snapshot_rows(%Snapshot{windows: []} = snapshot), do: [snapshot_row(snapshot, nil)]
+  defp snapshot_rows(%Snapshot{windows: []} = snapshot, now),
+    do: [snapshot_row(snapshot, nil, now)]
 
-  defp snapshot_rows(%Snapshot{} = snapshot) do
-    Enum.map(snapshot.windows, &snapshot_row(snapshot, &1))
+  defp snapshot_rows(%Snapshot{} = snapshot, now) do
+    Enum.map(snapshot.windows, &snapshot_row(snapshot, &1, now))
   end
 
-  defp snapshot_row(snapshot, window) do
+  defp snapshot_row(snapshot, window, now) do
     %{
-      provider: snapshot.provider_label,
       account: snapshot.account_label,
+      provider: snapshot.provider_label,
+      plan: snapshot.plan,
+      reset_credits_available: snapshot.reset_credits_available,
+      reset_credit_expires_in: reset_distance(snapshot.reset_credit_expires_at, now),
+      reset_credit_expires_at: snapshot.reset_credit_expires_at,
       window: window && window.label,
       used_percent: window && window.used_percent,
       remaining_percent: window && window.remaining_percent,
+      remaining_ratio: ratio(window && window.remaining_percent),
+      used_ratio: ratio(window && window.used_percent),
+      resets_in: reset_distance(window && window.resets_at, now),
       resets_at: window && window.resets_at,
       availability: humanize(snapshot.availability),
       state: humanize(snapshot.state),
@@ -98,6 +129,33 @@ defmodule LLMProxy.ProviderUsage do
       last_attempt: snapshot.attempted_at,
       error: snapshot.error
     }
+  end
+
+  defp row_sort_key(row) do
+    attention_rank = if row.availability == "Unavailable" or row.state != "Fresh", do: 0, else: 1
+    remaining = if is_number(row.remaining_ratio), do: row.remaining_ratio, else: 2
+
+    {attention_rank, remaining, row.provider, row.account, row.window || ""}
+  end
+
+  defp ratio(nil), do: nil
+  defp ratio(percent) when is_number(percent), do: percent / 100
+
+  defp reset_distance(nil, _now), do: nil
+
+  defp reset_distance(%DateTime{} = resets_at, %DateTime{} = now) do
+    seconds = DateTime.diff(resets_at, now, :second)
+    days = div(seconds, 86_400)
+    hours = seconds |> rem(86_400) |> div(3_600)
+    minutes = seconds |> rem(3_600) |> div(60)
+
+    cond do
+      seconds <= 0 -> "now"
+      seconds < 60 -> "<1m"
+      days > 0 -> "#{days}d #{hours}h"
+      hours > 0 -> "#{hours}h #{minutes}m"
+      true -> "#{minutes}m"
+    end
   end
 
   defp humanize(value) when is_atom(value) do
