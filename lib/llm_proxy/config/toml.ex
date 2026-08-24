@@ -17,7 +17,7 @@ defmodule LLMProxy.Config.TOML do
   @server_keys ~w(body_limit_bytes port public_url rpc_socket)
   @storage_keys ~w(database quackdb_endpoint quackdb_uri)
   @routing_keys ~w(max_retries provider_connect_timeout_ms replay_policy)
-  @provider_token_keys ~w(allow_plaintext)
+  @provider_token_keys ~w(allow_plaintext selection_strategy)
   @telemetry_keys ~w(otlp_endpoint)
   @catalog_keys ~w(models public_models)
 
@@ -158,10 +158,23 @@ defmodule LLMProxy.Config.TOML do
       :provider_token_allow_plaintext,
       optional_boolean(provider_tokens, "allow_plaintext")
     )
+    |> put_if_present(
+      :token_selection_strategy,
+      token_selection_strategy(provider_tokens["selection_strategy"])
+    )
   end
 
   defp provider_tokens(_provider_tokens) do
     raise ArgumentError, "provider_tokens must be a TOML table"
+  end
+
+  defp token_selection_strategy(nil), do: nil
+  defp token_selection_strategy("affinity"), do: :affinity
+  defp token_selection_strategy("fill_first"), do: :fill_first
+
+  defp token_selection_strategy(_strategy) do
+    raise ArgumentError,
+          "provider_tokens.selection_strategy must be affinity or fill_first"
   end
 
   defp telemetry(nil), do: []

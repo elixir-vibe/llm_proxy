@@ -2,7 +2,7 @@ defmodule LLMProxy.TokenPool.Server do
   @moduledoc """
   Manages provider tokens with rate-limit cooldowns.
 
-  Picks tokens using FNV-1a hash for cache affinity.
+  Picks tokens using the configured affinity or fill-first strategy.
   Priority: OAuth tokens first, then API keys as fallback.
   """
 
@@ -116,22 +116,20 @@ defmodule LLMProxy.TokenPool.Server do
   end
 
   defp do_pick_by_kind(provider, kind, user_id, state) do
-    tokens = get_enabled_tokens(provider, kind)
+    strategy = LLMProxy.Config.token_selection_strategy()
+    tokens = get_enabled_tokens(provider, kind, strategy)
 
     case tokens do
       [] -> :none
-      tokens -> pick_available(tokens, user_id, state)
+      tokens -> pick_available(tokens, user_id, state, strategy)
     end
   end
 
-  defp pick_available(tokens, user_id, state) do
+  defp pick_available(tokens, user_id, state, strategy) do
     now = System.monotonic_time(:millisecond)
-    start_idx = pick_index(user_id, length(tokens))
 
     tokens
-    |> Stream.cycle()
-    |> Stream.drop(start_idx)
-    |> Stream.take(length(tokens))
+    |> ordered_candidates(strategy, user_id)
     |> Enum.find(fn token ->
       case Map.get(state.cooldowns, token.id) do
         nil -> true
@@ -142,6 +140,18 @@ defmodule LLMProxy.TokenPool.Server do
       nil -> :all_rate_limited
       token -> TokenCodec.for_provider(token)
     end
+  end
+
+  defp ordered_candidates(tokens, :fill_first, _user_id), do: tokens
+
+  defp ordered_candidates(tokens, :affinity, user_id) do
+    pool_size = length(tokens)
+    start_idx = pick_index(user_id, pool_size)
+
+    tokens
+    |> Stream.cycle()
+    |> Stream.drop(start_idx)
+    |> Stream.take(pool_size)
   end
 
   defp pick_index(_user_id, pool_size) when pool_size <= 1, do: 0
@@ -161,10 +171,20 @@ defmodule LLMProxy.TokenPool.Server do
     end)
   end
 
-  defp get_enabled_tokens(provider, kind) do
-    ProviderToken
-    |> where([t], t.provider == ^provider and t.kind == ^kind and t.enabled == true)
-    |> order_by([t], asc: t.id)
-    |> Repo.all()
+  defp get_enabled_tokens(provider, kind, :affinity),
+    do: query_enabled_tokens(provider, kind) |> order_by([t], asc: t.id) |> Repo.all()
+
+  defp get_enabled_tokens(provider, kind, :fill_first),
+    do:
+      query_enabled_tokens(provider, kind)
+      |> order_by([t], desc: t.priority, asc: t.id)
+      |> Repo.all()
+
+  defp query_enabled_tokens(provider, kind) do
+    where(
+      ProviderToken,
+      [t],
+      t.provider == ^provider and t.kind == ^kind and t.enabled == true
+    )
   end
 end

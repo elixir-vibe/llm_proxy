@@ -74,6 +74,7 @@ otlp_endpoint = "http://127.0.0.1:4318"
 
 [provider_tokens]
 allow_plaintext = true
+selection_strategy = "affinity"
 
 [catalog]
 public_models = ["coding"]
@@ -104,6 +105,8 @@ in environment variables or persisted provider-token storage. If the file is abs
 continues with compiled defaults and secret environment configuration. Set
 `provider_tokens.allow_plaintext = false` only after encrypting and verifying all
 stored credentials; with that policy, a missing keyring fails startup.
+`provider_tokens.selection_strategy` accepts `affinity` or `fill_first` and is
+not read from the environment.
 
 See [Providers and Routing](../features/providers-and-routing.md) for the complete model shape.
 

@@ -16,6 +16,7 @@ defmodule LLMProxy.ConfigTest do
     original_max_retries = Application.get_env(:llm_proxy, :max_retries)
     original_replay_policy = Application.get_env(:llm_proxy, :replay_policy)
     original_public_models = Application.get_env(:llm_proxy, :public_models)
+    original_token_selection = Application.get_env(:llm_proxy, :token_selection_strategy)
     original_public_url = Application.get_env(:llm_proxy, :public_url)
     original_provider_token_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
     original_provider_token_keyring = Application.fetch_env(:llm_proxy, :provider_token_keyring)
@@ -32,6 +33,7 @@ defmodule LLMProxy.ConfigTest do
       restore_env(:max_retries, original_max_retries)
       restore_env(:replay_policy, original_replay_policy)
       restore_env(:public_models, original_public_models)
+      restore_env(:token_selection_strategy, original_token_selection)
       restore_env(:public_url, original_public_url)
       restore_fetched_env(:provider_token_codec, original_provider_token_codec)
       restore_fetched_env(:provider_token_keyring, original_provider_token_keyring)
@@ -52,6 +54,20 @@ defmodule LLMProxy.ConfigTest do
     for invalid <- [[""], [" "], [nil], "model-a"] do
       Application.put_env(:llm_proxy, :public_models, invalid)
       assert_raise ArgumentError, fn -> Config.public_models() end
+    end
+  end
+
+  test "validates the token selection strategy" do
+    Application.delete_env(:llm_proxy, :token_selection_strategy)
+    assert Config.token_selection_strategy() == :affinity
+
+    Application.put_env(:llm_proxy, :token_selection_strategy, :fill_first)
+    assert Config.token_selection_strategy() == :fill_first
+
+    Application.put_env(:llm_proxy, :token_selection_strategy, :random)
+
+    assert_raise ArgumentError, ~r/must be :affinity or :fill_first/, fn ->
+      Config.token_selection_strategy()
     end
   end
 

@@ -21,6 +21,9 @@
 
 ### Added
 
+- Provider-token pools support affinity or fill-first selection. Fill-first
+  orders healthy tokens within the existing OAuth-first/API-key-fallback
+  boundary by persisted non-negative priority and stable token ID.
 - An optional public-model allowlist keeps HTTP discovery, setup helpers,
   SafeRPC status, and request admission aligned. Standalone deployments
   configure visible aliases through `catalog.public_models` in strict TOML;
@@ -53,6 +56,8 @@
 
 ### Migration
 
+- Existing provider tokens receive priority `0`; indexed DuckDB tables rebuild
+  the provider/kind index while adding or removing the priority column.
 - Existing API keys remain enabled when lifecycle state is added.
 - Existing trace-enabled keys retain content capture. Other existing keys stop
   automatic message and cache capture after migration. Operators must define
