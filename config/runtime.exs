@@ -69,8 +69,21 @@ if config_env() in [:dev, :prod] do
       json -> Jason.decode!(json)
     end
 
+  provider_token_keyring =
+    case System.get_env("LLM_PROXY_PROVIDER_TOKEN_KEYRING") do
+      value when value in [nil, ""] ->
+        nil
+
+      json ->
+        case Jason.decode(json) do
+          {:ok, keyring} -> keyring
+          {:error, _reason} -> raise "invalid provider token keyring JSON"
+        end
+    end
+
   config :llm_proxy,
     master_key: System.get_env("MASTER_KEY"),
+    provider_token_keyring: provider_token_keyring,
     provider_key_seeds: provider_key_seeds,
     public_url: public_url,
     rpc_socket: System.get_env("LLM_PROXY_RPC_SOCKET"),

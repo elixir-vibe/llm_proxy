@@ -103,6 +103,13 @@ defmodule LLMProxy.MixProject do
           LLMProxy.Response,
           LLMProxy.Usage
         ],
+        "Provider Credentials": [
+          LLMProxy.Provider.Credential,
+          LLMProxy.Provider.TokenCodec,
+          LLMProxy.Provider.TokenCodec.AESGCM,
+          LLMProxy.Provider.TokenCodec.Migration,
+          LLMProxy.Provider.TokenCodec.Plaintext
+        ],
         "Catalog and Routing": [
           LLMProxy.Catalog,
           LLMProxy.Catalog.Model,

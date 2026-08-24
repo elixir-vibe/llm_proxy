@@ -3,6 +3,8 @@ defmodule LLMProxy.ConfigTest do
 
   alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Config
+  alias LLMProxy.Provider.TokenCodec
+  alias LLMProxy.Provider.TokenCodec.AESGCM
   alias LLMProxy.Providers.{Anthropic, OpenAI, OpenAICodex}
 
   setup do
@@ -13,6 +15,11 @@ defmodule LLMProxy.ConfigTest do
     original_connect_timeout = Application.get_env(:llm_proxy, :provider_connect_timeout_ms)
     original_max_retries = Application.get_env(:llm_proxy, :max_retries)
     original_replay_policy = Application.get_env(:llm_proxy, :replay_policy)
+    original_provider_token_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
+    original_provider_token_keyring = Application.fetch_env(:llm_proxy, :provider_token_keyring)
+
+    original_provider_token_allow_plaintext =
+      Application.fetch_env(:llm_proxy, :provider_token_allow_plaintext)
 
     on_exit(fn ->
       restore_env(:providers, original_providers)
@@ -22,6 +29,13 @@ defmodule LLMProxy.ConfigTest do
       restore_env(:provider_connect_timeout_ms, original_connect_timeout)
       restore_env(:max_retries, original_max_retries)
       restore_env(:replay_policy, original_replay_policy)
+      restore_fetched_env(:provider_token_codec, original_provider_token_codec)
+      restore_fetched_env(:provider_token_keyring, original_provider_token_keyring)
+
+      restore_fetched_env(
+        :provider_token_allow_plaintext,
+        original_provider_token_allow_plaintext
+      )
     end)
 
     :ok
@@ -68,6 +82,33 @@ defmodule LLMProxy.ConfigTest do
 
     Application.put_env(:llm_proxy, :replay_policy, :always)
     assert_raise ArgumentError, ~r/:replay_policy must be/, fn -> Config.replay_policy() end
+  end
+
+  test "builds the standalone codec from one secret keyring and TOML rollout policy" do
+    key = Base.encode64(:binary.copy(<<1>>, 32))
+    Application.delete_env(:llm_proxy, :provider_token_codec)
+
+    Application.put_env(:llm_proxy, :provider_token_keyring, %{
+      "active_key_id" => "v1",
+      "keys" => %{"v1" => key}
+    })
+
+    Application.put_env(:llm_proxy, :provider_token_allow_plaintext, false)
+
+    assert {AESGCM, options} = Config.provider_token_codec()
+    assert options[:active_key_id] == "v1"
+    assert options[:keys] == %{"v1" => key}
+    refute options[:allow_plaintext]
+    assert :ok = TokenCodec.validate_configuration()
+  end
+
+  test "plaintext-disabled standalone config fails closed when its keyring is absent" do
+    Application.delete_env(:llm_proxy, :provider_token_codec)
+    Application.delete_env(:llm_proxy, :provider_token_keyring)
+    Application.put_env(:llm_proxy, :provider_token_allow_plaintext, false)
+
+    assert {:error, :invalid_codec_options} =
+             TokenCodec.validate_configuration()
   end
 
   test "configures bounded concurrent ReqLLM streaming pools" do
@@ -168,4 +209,7 @@ defmodule LLMProxy.ConfigTest do
 
   defp restore_env(key, nil), do: Application.delete_env(:llm_proxy, key)
   defp restore_env(key, value), do: Application.put_env(:llm_proxy, key, value)
+
+  defp restore_fetched_env(key, {:ok, value}), do: Application.put_env(:llm_proxy, key, value)
+  defp restore_fetched_env(key, :error), do: Application.delete_env(:llm_proxy, key)
 end

@@ -11,6 +11,9 @@ defmodule LLMProxy.Config.ProviderTest do
     max_retries = 2
     replay_policy = "safe_only"
 
+    [provider_tokens]
+    allow_plaintext = false
+
     [providers.openai-codex]
     base_url = "https://chatgpt.com/backend-api"
 
@@ -32,6 +35,7 @@ defmodule LLMProxy.Config.ProviderTest do
     assert [%{name: "codex", routes: [%{to: "openai-codex"}]}] = llm_proxy[:models]
     assert llm_proxy[:max_retries] == 2
     assert llm_proxy[:replay_policy] == :safe_only
+    refute llm_proxy[:provider_token_allow_plaintext]
   end
 
   test "load/2 is a no-op when file is absent" do

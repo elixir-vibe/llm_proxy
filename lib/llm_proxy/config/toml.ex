@@ -13,7 +13,8 @@ defmodule LLMProxy.Config.TOML do
           providers: map(),
           models: [map()],
           max_retries: non_neg_integer(),
-          replay_policy: :safe_only | :allow_uncertain
+          replay_policy: :safe_only | :allow_uncertain,
+          provider_token_allow_plaintext: boolean()
         ]
   @type reason :: Toml.reason()
 
@@ -33,12 +34,17 @@ defmodule LLMProxy.Config.TOML do
 
   defp normalize(data) when is_map(data) do
     routing = data["routing"]
+    provider_tokens = data["provider_tokens"]
 
     []
     |> put_if_present(:providers, providers(data["providers"]))
     |> put_if_present(:models, models(data["models"] || get_in(data, ["catalog", "models"])))
     |> put_if_present(:max_retries, routing_max_retries(routing))
     |> put_if_present(:replay_policy, routing_replay_policy(routing))
+    |> put_if_present(
+      :provider_token_allow_plaintext,
+      provider_token_allow_plaintext(provider_tokens)
+    )
     |> Enum.reverse()
   end
 
@@ -72,6 +78,28 @@ defmodule LLMProxy.Config.TOML do
   end
 
   defp routing_replay_policy(%{}), do: nil
+
+  defp provider_token_allow_plaintext(nil), do: nil
+
+  defp provider_token_allow_plaintext(%{} = provider_tokens) do
+    case Map.keys(provider_tokens) -- ["allow_plaintext"] do
+      [] -> parse_provider_token_allow_plaintext(provider_tokens["allow_plaintext"])
+      _unknown -> raise ArgumentError, "provider_tokens only supports allow_plaintext"
+    end
+  end
+
+  defp provider_token_allow_plaintext(_provider_tokens) do
+    raise ArgumentError, "provider_tokens must be a TOML table"
+  end
+
+  defp parse_provider_token_allow_plaintext(nil), do: nil
+
+  defp parse_provider_token_allow_plaintext(allow_plaintext) when is_boolean(allow_plaintext),
+    do: allow_plaintext
+
+  defp parse_provider_token_allow_plaintext(_allow_plaintext) do
+    raise ArgumentError, "provider_tokens.allow_plaintext must be a boolean"
+  end
 
   defp providers(nil), do: nil
 

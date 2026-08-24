@@ -173,6 +173,42 @@ Application rollback and schema rollback are different decisions.
 
 Bundled migrations are forward migrations. Do not reverse database changes automatically unless the release documents and tests a safe down migration. Take a database backup before any migration that could make rollback incompatible.
 
+## Provider-token encryption
+
+Use a provider-token keyring that is separate from `MASTER_KEY`. Before the first
+encryption, back up the database and all keyring values. Start with plaintext
+compatibility enabled, then run:
+
+```bash
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_status()'
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_encrypt()'
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_verify()'
+```
+
+Run these tasks only with a backup and a storage-concurrency plan appropriate
+for the deployment. For bundled QuackDB, drain and stop the long-lived service
+before an offline release task opens the same database. The tasks print counts
+only; they do not print credentials.
+
+Test provider calls before you set `provider_tokens.allow_plaintext = false` in
+standalone TOML. Before that verification point, you can restore plaintext and
+use the prior release:
+
+```bash
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_decrypt()'
+```
+
+For key rotation, add the new and prior keys, set the new active key ID, and run:
+
+```bash
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_rotate()'
+bin/llm_proxy eval 'LLMProxy.ReleaseTasks.provider_tokens_verify()'
+```
+
+Remove a prior key only after rotation, verification, provider checks, and a new
+database backup. Keep an offline recovery copy of every key needed by retained
+backups.
+
 ## Backups
 
 Back up the DuckDB file while storage is in a consistent state. Include:

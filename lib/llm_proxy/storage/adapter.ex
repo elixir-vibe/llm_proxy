@@ -28,7 +28,7 @@ defmodule LLMProxy.Storage.Adapter do
   @callback set_token_enabled(term(), boolean()) :: {:ok, term()} | {:error, term()}
   @callback update_token_proxy(term(), String.t() | nil) :: {:ok, term()} | {:error, term()}
   @callback update_token_oauth(term(), map()) :: {:ok, term()} | {:error, term()}
-  @callback seed_tokens_from_env([map()]) :: :ok
+  @callback seed_tokens_from_env([map()]) :: :ok | {:error, term()}
   @callback log_message(map()) :: {:ok, term()} | {:error, term()}
   @callback update_message_usage(term(), map()) :: {:ok, term()} | {:error, term()}
   @callback get_messages(map()) :: [term()]

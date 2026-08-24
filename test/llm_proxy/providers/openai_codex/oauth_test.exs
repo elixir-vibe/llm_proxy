@@ -1,11 +1,23 @@
 defmodule LLMProxy.Providers.OpenAICodex.OAuthTest do
   use ExUnit.Case
 
+  alias LLMProxy.Provider.Credential
+  alias LLMProxy.Provider.TokenCodec
+  alias LLMProxy.Provider.TokenCodec.AESGCM
   alias LLMProxy.Providers.OpenAICodex.OAuth
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
 
   setup do
+    previous_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
+
+    on_exit(fn ->
+      case previous_codec do
+        {:ok, codec} -> Application.put_env(:llm_proxy, :provider_token_codec, codec)
+        :error -> Application.delete_env(:llm_proxy, :provider_token_codec)
+      end
+    end)
+
     TestSupport.checkout_repo()
   end
 
@@ -83,6 +95,43 @@ defmodule LLMProxy.Providers.OpenAICodex.OAuthTest do
     assert updated.refresh_token == "new-refresh"
     assert updated.account_id == "acct_new"
     assert DateTime.to_unix(updated.expires_at, :millisecond) == refreshed_expires
+  end
+
+  test "refreshes encrypted credentials and persists only ciphertext" do
+    key = Base.encode64(:binary.copy(<<4>>, 32))
+
+    Application.put_env(
+      :llm_proxy,
+      :provider_token_codec,
+      {AESGCM, active_key_id: "v1", keys: %{"v1" => key}}
+    )
+
+    expired = DateTime.utc_now() |> DateTime.add(-60, :second) |> DateTime.truncate(:second)
+    refreshed_expires = rounded_future_expires_ms()
+
+    assert {:ok, stored} =
+             Storage.add_token("openai-codex", "oauth", "old-access", %{
+               refresh_token: "old-refresh",
+               expires_at: expired
+             })
+
+    refresh_fun = fn _credentials, [] ->
+      {:ok,
+       %{
+         "access" => "new-access",
+         "refresh" => "new-refresh",
+         "expires" => refreshed_expires
+       }}
+    end
+
+    assert {:ok, %Credential{token: "new-access", refresh_token: "new-refresh"}} =
+             OAuth.refresh_if_needed(stored, refresh_fun)
+
+    [encrypted] = Storage.list_tokens(%{provider: "openai-codex"})
+    refute encrypted.token == "new-access"
+    refute encrypted.refresh_token == "new-refresh"
+    assert {:ok, "new-access"} = TokenCodec.decode(encrypted.token, :token)
+    assert {:ok, "new-refresh"} = TokenCodec.decode(encrypted.refresh_token, :refresh_token)
   end
 
   test "leaves non-refreshable access tokens unchanged" do
