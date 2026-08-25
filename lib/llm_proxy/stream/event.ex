@@ -5,22 +5,62 @@ defmodule LLMProxy.Stream.Event do
 
   alias LLMProxy.Usage
 
-  defstruct data: nil, usage: nil, event: nil
+  @kinds [:start, :content, :reasoning, :tool_call, :usage, :finish, :error, :metadata]
+  @option_keys [:usage, :event, :kind]
+
+  @type kind ::
+          :start | :content | :reasoning | :tool_call | :usage | :finish | :error | :metadata
+
+  defstruct data: nil, usage: nil, event: nil, kind: :metadata
 
   @type t :: %__MODULE__{
           data: map() | String.t(),
           usage: Usage.t() | nil,
-          event: String.t() | nil
+          event: String.t() | nil,
+          kind: kind()
         }
 
   @spec new(map() | String.t(), keyword()) :: t()
   def new(data, opts \\ []) do
-    %__MODULE__{data: data, usage: Keyword.get(opts, :usage), event: Keyword.get(opts, :event)}
+    if valid_data?(data) and valid_options?(opts) do
+      usage = Keyword.get(opts, :usage)
+      event = Keyword.get(opts, :event)
+      kind = Keyword.get(opts, :kind, :metadata)
+
+      if valid_usage?(usage) and (is_nil(event) or is_binary(event)) and kind in @kinds do
+        %__MODULE__{data: data, usage: usage, event: event, kind: kind}
+      else
+        raise ArgumentError, "invalid stream event options"
+      end
+    else
+      raise ArgumentError, "stream event requires map or string data and known unique options"
+    end
   end
 
+  defp valid_data?(data), do: is_map(data) or is_binary(data)
+
+  defp valid_options?(opts) do
+    if Keyword.keyword?(opts) do
+      keys = Keyword.keys(opts)
+      Enum.all?(keys, &(&1 in @option_keys)) and length(keys) == MapSet.size(MapSet.new(keys))
+    else
+      false
+    end
+  end
+
+  defp valid_usage?(nil), do: true
+  defp valid_usage?(%Usage{}), do: true
+  defp valid_usage?(_usage), do: false
+
+  @spec output_delta?(t()) :: boolean()
+  def output_delta?(%__MODULE__{kind: kind}) when kind in [:content, :reasoning, :tool_call],
+    do: true
+
+  def output_delta?(%__MODULE__{}), do: false
+
   @spec attach_usage(t(), Usage.t() | nil) :: t()
-  def attach_usage(event, nil), do: event
-  def attach_usage(%__MODULE__{} = event, usage), do: %{event | usage: usage}
+  def attach_usage(%__MODULE__{} = event, nil), do: event
+  def attach_usage(%__MODULE__{} = event, %Usage{} = usage), do: %{event | usage: usage}
 
   @spec from_openai_sse(%{optional(:data) => term()}) :: t() | nil
   def from_openai_sse(%{data: "[DONE]"}), do: nil
@@ -37,35 +77,38 @@ defmodule LLMProxy.Stream.Event do
 
   @spec from_openai_map(map()) :: t()
   def from_openai_map(%{"usage" => usage} = parsed) when is_map(usage) do
-    new(parsed, usage: Usage.from_openai(usage))
+    new(parsed, usage: Usage.from_openai(usage), kind: openai_kind(parsed))
   end
 
-  def from_openai_map(parsed), do: new(parsed)
+  def from_openai_map(parsed), do: new(parsed, kind: openai_kind(parsed))
 
   @spec responses_output_text_delta(String.t()) :: t()
   def responses_output_text_delta(text) when is_binary(text) do
-    new(%{"type" => "response.output_text.delta", "delta" => text})
+    new(%{"type" => "response.output_text.delta", "delta" => text}, kind: :content)
   end
 
   @spec responses_reasoning_delta(String.t()) :: t()
   def responses_reasoning_delta(text) when is_binary(text) do
-    new(%{"type" => "response.reasoning.delta", "delta" => text})
+    new(%{"type" => "response.reasoning.delta", "delta" => text}, kind: :reasoning)
   end
 
   @spec responses_function_call_added(non_neg_integer(), String.t(), String.t(), map()) :: t()
   def responses_function_call_added(index, id, name, arguments)
       when is_integer(index) and is_binary(id) and is_binary(name) and is_map(arguments) do
-    new(%{
-      "type" => "response.output_item.added",
-      "output_index" => index,
-      "item" => %{
-        "type" => "function_call",
-        "id" => id,
-        "call_id" => id,
-        "name" => name,
-        "arguments" => Jason.encode!(arguments)
-      }
-    })
+    new(
+      %{
+        "type" => "response.output_item.added",
+        "output_index" => index,
+        "item" => %{
+          "type" => "function_call",
+          "id" => id,
+          "call_id" => id,
+          "name" => name,
+          "arguments" => Jason.encode!(arguments)
+        }
+      },
+      kind: :tool_call
+    )
   end
 
   @spec responses_terminal(atom() | nil, String.t(), map()) :: t()
@@ -81,7 +124,8 @@ defmodule LLMProxy.Stream.Event do
           "usage" => rendered_usage
         }
       },
-      usage: Usage.from_responses(rendered_usage)
+      usage: Usage.from_responses(rendered_usage),
+      kind: :finish
     )
   end
 
@@ -144,9 +188,33 @@ defmodule LLMProxy.Stream.Event do
       ]
     }
     |> maybe_put("usage", rendered_usage)
-    |> new()
+    |> new(kind: openai_delta_kind(delta, finish_reason))
     |> attach_usage(if(rendered_usage, do: Usage.from_openai(rendered_usage)))
   end
+
+  defp openai_kind(%{"choices" => [%{"delta" => delta, "finish_reason" => finish_reason} | _]})
+       when is_map(delta),
+       do: openai_delta_kind(delta, finish_reason)
+
+  defp openai_kind(%{"usage" => usage}) when is_map(usage), do: :usage
+  defp openai_kind(%{"error" => _error}), do: :error
+  defp openai_kind(_parsed), do: :metadata
+
+  defp openai_delta_kind(%{"content" => content}, _finish_reason)
+       when is_binary(content) and content != "",
+       do: :content
+
+  defp openai_delta_kind(%{"reasoning_content" => content}, _finish_reason)
+       when is_binary(content) and content != "",
+       do: :reasoning
+
+  defp openai_delta_kind(%{"tool_calls" => calls}, _finish_reason)
+       when is_list(calls) and calls != [],
+       do: :tool_call
+
+  defp openai_delta_kind(%{"role" => _role}, nil), do: :start
+  defp openai_delta_kind(_delta, finish_reason) when not is_nil(finish_reason), do: :finish
+  defp openai_delta_kind(_delta, _finish_reason), do: :metadata
 
   defp responses_terminal_type(:incomplete), do: "response.incomplete"
   defp responses_terminal_type(_reason), do: "response.completed"

@@ -17,7 +17,10 @@ defmodule LLMProxy.Providers.Execution do
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Providers.ReplayPolicy
   alias LLMProxy.Providers.Result
+  alias LLMProxy.Providers.Routing.{Performance, Sample}
+  alias LLMProxy.Stream.Event
   alias LLMProxy.Telemetry
+  alias LLMProxy.Usage
 
   @retryable_statuses [500, 502, 503, 504, 529]
 
@@ -79,9 +82,11 @@ defmodule LLMProxy.Providers.Execution do
         budget = use_attempt(budget)
         Telemetry.emit([:routing, :attempt, :start], attempt, %{}, attempt_metadata(budget))
         call_body = Protocol.provider_request_body(body, attempt.provider, attempt.model)
+        started_at = now_ms()
 
         attempt
         |> invoke(:call, [call_body, user_id])
+        |> observe_call_result(attempt, body, started_at)
         |> handle_call_result(attempt, rest, body, user_id, budget)
     end
   end
@@ -146,9 +151,11 @@ defmodule LLMProxy.Providers.Execution do
         )
 
         stream_body = Protocol.provider_request_body(body, attempt.provider, attempt.model)
+        started_at = now_ms()
 
         attempt
         |> invoke(:stream, [stream_body, user_id])
+        |> observe_stream_result(attempt, body, started_at)
         |> handle_stream_result(attempt, rest, body, user_id, budget)
     end
   end
@@ -227,9 +234,11 @@ defmodule LLMProxy.Providers.Execution do
         budget = use_attempt(budget)
         event = native_event(function)
         Telemetry.emit([:routing, event, :start], attempt, %{}, attempt_metadata(budget))
+        started_at = now_ms()
 
         attempt
         |> invoke(function, [native_attempt_body(request, attempt.model), user_id])
+        |> observe_native_result(attempt, request, function, started_at)
         |> handle_native_result(attempt, rest, function, request, user_id, api_name, budget)
     end
   end
@@ -304,6 +313,121 @@ defmodule LLMProxy.Providers.Execution do
 
   defp native_event(:stream_native), do: :native_stream_attempt
   defp native_event(:call_native), do: :native_attempt
+
+  defp observe_call_result(result, attempt, request, started_at),
+    do: observe_call_result(result, attempt, request, started_at, :attempt)
+
+  defp observe_call_result(
+         {state, %Result{}} = result,
+         attempt,
+         request,
+         started_at,
+         event
+       )
+       when state in [:ok, :error] do
+    Performance.observe(
+      attempt,
+      sample(request, false, state_to_outcome(state), started_at),
+      event
+    )
+
+    result
+  end
+
+  defp observe_call_result(result, _attempt, _request, _started_at, _event), do: result
+
+  defp observe_stream_result(result, attempt, request, started_at),
+    do: observe_stream_result(result, attempt, request, started_at, :stream_attempt)
+
+  defp observe_stream_result(
+         {:ok, %Result{kind: :stream, stream: stream} = result},
+         attempt,
+         request,
+         started_at,
+         event
+       ) do
+    {:ok, %{result | stream: instrument_stream(stream, attempt, request, started_at, event)}}
+  end
+
+  defp observe_stream_result(
+         {:error, %Result{}} = result,
+         attempt,
+         request,
+         started_at,
+         event
+       ) do
+    Performance.observe(attempt, sample(request, true, :error, started_at), event)
+    result
+  end
+
+  defp observe_stream_result(result, _attempt, _request, _started_at, _event), do: result
+
+  defp observe_native_result(result, attempt, request, :stream_native, started_at),
+    do: observe_stream_result(result, attempt, request, started_at, :native_stream_attempt)
+
+  defp observe_native_result(result, attempt, request, :call_native, started_at),
+    do: observe_call_result(result, attempt, request, started_at, :native_attempt)
+
+  defp instrument_stream(stream, attempt, request, started_at, telemetry_event) do
+    Stream.transform(
+      stream,
+      fn -> %{first_output_at: nil, outcome: :success, usage: Usage.zero()} end,
+      fn
+        %Event{} = event, state ->
+          first_output_at =
+            if is_nil(state.first_output_at) and Event.output_delta?(event),
+              do: now_ms(),
+              else: state.first_output_at
+
+          outcome = if event.kind == :error, do: :error, else: state.outcome
+          usage = if event.usage, do: Usage.merge_max(state.usage, event.usage), else: state.usage
+
+          {[event], %{state | first_output_at: first_output_at, outcome: outcome, usage: usage}}
+
+        event, state ->
+          {[event], state}
+      end,
+      fn state ->
+        Performance.observe(
+          attempt,
+          stream_sample(request, started_at, state.first_output_at, state.outcome, state.usage),
+          telemetry_event
+        )
+
+        {[], state}
+      end,
+      fn _state -> :ok end
+    )
+  end
+
+  defp sample(request, stream, outcome, started_at) do
+    finished_at = now_ms()
+
+    %Sample{
+      operation: request.protocol,
+      stream: stream,
+      outcome: outcome,
+      duration_ms: finished_at - started_at,
+      observed_at: finished_at
+    }
+  end
+
+  defp stream_sample(request, started_at, first_output_at, outcome, usage) do
+    finished_at = now_ms()
+
+    %Sample{
+      operation: request.protocol,
+      stream: true,
+      outcome: outcome,
+      duration_ms: finished_at - started_at,
+      ttft_ms: if(first_output_at, do: first_output_at - started_at),
+      output_tokens: usage.output_tokens,
+      observed_at: finished_at
+    }
+  end
+
+  defp state_to_outcome(:ok), do: :success
+  defp state_to_outcome(:error), do: :error
 
   defp budget, do: %{used: 0, max: Config.max_attempts()}
   defp budget_available?(%{used: used, max: max}), do: used < max
@@ -404,4 +528,6 @@ defmodule LLMProxy.Providers.Execution do
       apply(provider, function, args)
     end
   end
+
+  defp now_ms, do: System.monotonic_time(:millisecond)
 end

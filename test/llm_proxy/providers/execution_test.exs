@@ -5,7 +5,9 @@ defmodule LLMProxy.Providers.ExecutionTest do
   alias LLMProxy.Providers.Attempt
   alias LLMProxy.Providers.CircuitBreaker
   alias LLMProxy.Providers.{Execution, Result}
+  alias LLMProxy.Providers.Routing.Performance
   alias LLMProxy.Stream.Event
+  alias LLMProxy.Usage
 
   defmodule SuccessProvider do
     def name, do: "success"
@@ -109,6 +111,42 @@ defmodule LLMProxy.Providers.ExecutionTest do
       do: {:ok, Result.stream([], nil)}
   end
 
+  defmodule MeasuredStreamProvider do
+    def name, do: "measured-stream"
+
+    def stream(_body, _user_id) do
+      stream =
+        [
+          {:start, Event.new(%{"start" => true}, kind: :start)},
+          {:content, Event.new(%{"content" => "hello"}, kind: :content)},
+          {:usage, Event.new(%{"usage" => true}, usage: Usage.new(2, 10), kind: :usage)}
+        ]
+        |> Stream.map(fn
+          {:start, event} ->
+            Process.sleep(2)
+            event
+
+          {:content, event} ->
+            Process.sleep(2)
+            event
+
+          {:usage, event} ->
+            Process.sleep(2)
+            event
+        end)
+
+      {:ok, Result.stream(stream, nil)}
+    end
+  end
+
+  defmodule InBandErrorStreamProvider do
+    def name, do: "in-band-error-stream"
+
+    def stream(_body, _user_id) do
+      {:ok, Result.stream([Event.new(%{"error" => "failed"}, kind: :error)], nil)}
+    end
+  end
+
   defmodule FallbackProvider do
     def name, do: "fallback"
     def models, do: ["fallback-model"]
@@ -133,12 +171,14 @@ defmodule LLMProxy.Providers.ExecutionTest do
   setup do
     LLMProxy.Providers.Registry.register(FallbackProvider)
     CircuitBreaker.reset()
+    Performance.reset()
 
     on_exit(fn ->
       Application.delete_env(:llm_proxy, :fallbacks)
       Application.delete_env(:llm_proxy, :max_retries)
       Application.delete_env(:llm_proxy, :replay_policy)
       CircuitBreaker.reset()
+      Performance.reset()
     end)
 
     :ok
@@ -409,13 +449,15 @@ defmodule LLMProxy.Providers.ExecutionTest do
 
       on_exit(fn -> :telemetry.detach(handler_id) end)
 
-      assert {:ok, %Result{stream: [], provider: NativeBodyProvider}} =
+      assert {:ok, %Result{stream: stream, provider: NativeBodyProvider}} =
                Execution.stream_native_attempts(
                  [%Attempt{provider: NativeBodyProvider, model: "upstream-native"}],
                  stream_request("public-alias"),
                  "user",
                  "Native API"
                )
+
+      assert Enum.to_list(stream) == []
 
       assert_receive {:telemetry, [:llm_proxy, :routing, :native_stream_attempt, :start], _, _}
       assert_receive {:telemetry, [:llm_proxy, :routing, :native_stream_attempt, :stop], _, _}
@@ -424,13 +466,62 @@ defmodule LLMProxy.Providers.ExecutionTest do
 
   describe "stream/4 with no fallbacks" do
     test "returns success on first try" do
-      assert {:ok, %Result{stream: [], provider: SuccessProvider, model: "m"}} =
+      assert {:ok, %Result{stream: stream, provider: SuccessProvider, model: "m"}} =
                Execution.stream(SuccessProvider, request("m"), "user", "m")
+
+      assert Enum.to_list(stream) == []
     end
 
     test "returns error on non-retryable error" do
       assert {:error, %Result{status: 401}} =
                Execution.stream(AuthErrorProvider, request("m"), "user", "m")
+    end
+  end
+
+  describe "stream performance observations" do
+    test "records stream duration, first output latency, and output tokens" do
+      handler_id = {__MODULE__, self(), :stream_performance}
+      parent = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:llm_proxy, :routing, :stream_attempt, :complete],
+        fn event, measurements, metadata, _config ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      request = stream_request("measured")
+
+      assert {:ok, %Result{stream: stream}} =
+               Execution.stream(MeasuredStreamProvider, request, "user", "measured")
+
+      assert [%Event{kind: :start}, %Event{kind: :content}, %Event{kind: :usage}] =
+               Enum.to_list(stream)
+
+      assert_receive {:telemetry, [:llm_proxy, :routing, :stream_attempt, :complete],
+                      measurements, %{outcome: :success, stream: true}}
+
+      assert measurements.duration_ms >= measurements.ttft_ms
+      assert measurements.ttft_ms > 0
+      assert measurements.output_tokens == 10
+      refute Map.has_key?(measurements, :generation_ms)
+      refute Map.has_key?(measurements, :tokens_per_second)
+    end
+
+    test "records an in-band stream error as a failed observation" do
+      request = stream_request("failed")
+
+      assert {:ok, %Result{stream: stream}} =
+               Execution.stream(InBandErrorStreamProvider, request, "user", "failed")
+
+      assert [%Event{kind: :error}] = Enum.to_list(stream)
+
+      attempt = %Attempt{provider: InBandErrorStreamProvider, model: "failed"}
+      assert %{success_count: 0, error_count: 1} = Performance.stats(attempt, request)
     end
   end
 
@@ -453,11 +544,13 @@ defmodule LLMProxy.Providers.ExecutionTest do
 
       assert {:ok,
               %{
-                stream: [%Event{data: %{"ok" => true}}],
+                stream: stream,
                 provider: FallbackProvider,
                 model: "fallback-model"
               }} =
                Execution.stream(FailProvider, request("m"), "user", "m")
+
+      assert [%Event{data: %{"ok" => true}}] = Enum.to_list(stream)
     end
 
     test "never falls back after stream output becomes visible" do

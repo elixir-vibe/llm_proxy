@@ -75,7 +75,7 @@ defmodule LLMProxy.Telemetry do
       measurements,
       Map.merge(
         %{
-          provider: attempt.provider.name(),
+          provider: attempt.provider_name || attempt.provider.name(),
           model: attempt.model,
           timeout_ms: attempt.timeout_ms
         },

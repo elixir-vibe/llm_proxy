@@ -209,6 +209,23 @@ config :llm_proxy,
   ]
 ```
 
+Routing strategies are applied within each deployment `order` group:
+
+- `:ordered` — stable ordered fallback
+- `:shuffle` — randomize deployment order
+- `:round_robin` — rotate deployments
+- `:weighted_shuffle` — weighted random ordering using deployment `weight`
+- `:lowest_cost` — prefer lower LLMDB input/output pricing
+- `:latency_aware` — explore cold deployments, then prefer the lowest median latency;
+  streaming requests use time to first output
+
+Latency-aware routing keeps bounded, node-local observations by deployment and protocol. It
+records buffered-attempt duration and stream TTFT without deriving provider throughput from
+client-paced stream consumption. Samples and stale route keys expire after five minutes. Cold
+buffered deployments rotate until they have three successful samples; streams require three
+samples with observable output. Deployments within 10% of the best observed latency continue to
+rotate. Durable usage accounting remains separate from this ephemeral routing state.
+
 Built-in providers cover OpenAI, Anthropic, OpenRouter, and OpenAI Codex OAuth. For another OpenAI-compatible service, declare a named provider with a ReqLLM `adapter`, `base_url`, and isolated `token_pool`; no provider module is required.
 
 See [Providers and Routing](https://hexdocs.pm/llm_proxy/providers-and-routing.html) for routing semantics, custom endpoints, token pools, Codex OAuth, and native protocol extensions.

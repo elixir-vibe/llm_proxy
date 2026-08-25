@@ -49,7 +49,7 @@ defmodule LLMProxy.Provider do
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
-           Registry.resolve_attempts(request.model) do
+           Registry.resolve_attempts(request) do
       with_request_lease(api_key, fn ->
         execute_call(provider, request, actor, api_key, upstream_model, attempts, route, opts)
       end)
@@ -74,7 +74,7 @@ defmodule LLMProxy.Provider do
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
-           Registry.resolve_attempts(request.model) do
+           Registry.resolve_attempts(request) do
       with_stream_lease(api_key, fn ->
         execute_stream(provider, request, actor, api_key, upstream_model, attempts, route, opts)
       end)
@@ -399,7 +399,7 @@ defmodule LLMProxy.Provider do
          {:ok, request} <- guard_before_request(request, actor, api_key, route),
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
-           Registry.resolve_attempts(request.model) do
+           Registry.resolve_attempts(request) do
       with_native_lease(function, api_key, fn ->
         execute_native_call(
           {provider, upstream_model, attempts},

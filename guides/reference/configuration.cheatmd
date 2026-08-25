@@ -349,7 +349,8 @@ config :llm_proxy,
 routing: :round_robin
 ```
 
-`:ordered`, `:shuffle`, `:round_robin`, `:weighted_shuffle`, or `:lowest_cost`.
+`:ordered`, `:shuffle`, `:round_robin`, `:weighted_shuffle`, `:lowest_cost`, or
+`:latency_aware`.
 
 ### Route Timeout
 

@@ -104,6 +104,31 @@ defmodule LLMProxy.Config.TOMLTest do
     assert config[:opentelemetry_exporter] == [otlp_endpoint: "http://127.0.0.1:4318"]
   end
 
+  test "decodes latency-aware routing" do
+    input = """
+    [[models]]
+    name = "fastest"
+    routing = "latency_aware"
+
+    [[models.routes]]
+    to = "openrouter"
+    model = "upstream-model"
+    """
+
+    assert {:ok,
+            [
+              llm_proxy: [
+                models: [
+                  %{
+                    name: "fastest",
+                    routing: :latency_aware,
+                    routes: [%{to: "openrouter", model: "upstream-model"}]
+                  }
+                ]
+              ]
+            ]} = TOML.decode(input)
+  end
+
   test "supports catalog.models as an alternate TOML nesting" do
     input = """
     [[catalog.models]]

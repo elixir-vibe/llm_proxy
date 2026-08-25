@@ -150,6 +150,15 @@ Routing happens within each `order` group. Lower order groups are attempted firs
 - `:round_robin` — rotate the first route across requests.
 - `:weighted_shuffle` — randomize by route `weight`.
 - `:lowest_cost` — order routes by LLMDB input and output pricing.
+- `:latency_aware` — explore cold routes, then prefer routes with lower median latency.
+
+Latency-aware routing never moves a deployment ahead of an earlier `order` group. Buffered calls
+rank by complete attempt duration. Streams rank only by time to first observable content,
+reasoning, or tool-call output, so downstream client pacing does not distort route selection.
+Samples and stale deployment keys expire after five minutes; a route remains cold until it has
+three usable samples. Routes within 10% of the best latency rotate rather than pinning all traffic
+to one deployment. This state is bounded, ephemeral, node-local, and separate from durable usage
+accounting and circuit breakers.
 
 A route can define:
 

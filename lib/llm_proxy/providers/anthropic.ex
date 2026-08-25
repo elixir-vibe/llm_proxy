@@ -146,18 +146,45 @@ defmodule LLMProxy.Providers.Anthropic do
   defp to_stream_event(_), do: nil
 
   defp to_stream_event_from_map(%{"type" => "message_start", "message" => msg}) do
-    event = Event.new(%{"type" => "message_start", "message" => msg})
+    event = Event.new(%{"type" => "message_start", "message" => msg}, kind: :start)
     maybe_attach_usage(event, msg["usage"])
   end
 
   defp to_stream_event_from_map(%{"type" => "message_delta"} = parsed) do
-    event = Event.new(parsed)
+    event = Event.new(parsed, kind: :finish)
     maybe_attach_usage(event, parsed["usage"])
   end
 
   defp to_stream_event_from_map(parsed) do
-    Event.new(parsed)
+    Event.new(parsed, kind: anthropic_event_kind(parsed))
   end
+
+  defp anthropic_event_kind(%{
+         "type" => "content_block_delta",
+         "delta" => %{"type" => "text_delta"}
+       }),
+       do: :content
+
+  defp anthropic_event_kind(%{
+         "type" => "content_block_delta",
+         "delta" => %{"type" => "thinking_delta"}
+       }),
+       do: :reasoning
+
+  defp anthropic_event_kind(%{
+         "type" => "content_block_delta",
+         "delta" => %{"type" => "input_json_delta"}
+       }),
+       do: :tool_call
+
+  defp anthropic_event_kind(%{
+         "type" => "content_block_start",
+         "content_block" => %{"type" => "tool_use"}
+       }),
+       do: :tool_call
+
+  defp anthropic_event_kind(%{"type" => "message_stop"}), do: :finish
+  defp anthropic_event_kind(_parsed), do: :metadata
 
   defp maybe_attach_usage(event, nil), do: event
 

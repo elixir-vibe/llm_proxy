@@ -32,6 +32,7 @@ defmodule LLMProxy.Application do
           LLMProxy.ConcurrencyLimiter,
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
+          LLMProxy.Providers.Routing.Performance,
           LLMProxy.TokenPool.Server,
           {Task.Supervisor, name: LLMProxy.ProviderUsage.TaskSupervisor, max_children: 1},
           LLMProxy.ProviderUsage.Server

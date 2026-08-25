@@ -21,6 +21,10 @@
 
 ### Added
 
+- Catalog models can use latency-aware routing within each configured order tier.
+  The supervised node-local tracker explores cold deployments, retains bounded
+  fresh samples, ranks buffered calls by median attempt duration, and ranks
+  streams only by median time to first observable output.
 - Token selection now skips accounts only while fresh provider-usage snapshots
   prove exhaustion, waits for every exhausted window to reset, and persists
   account- or model-scoped rate-limit cooldowns across restarts without storing
