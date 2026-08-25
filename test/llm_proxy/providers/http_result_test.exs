@@ -2,6 +2,9 @@ defmodule LLMProxy.Providers.HTTPResultTest do
   use ExUnit.Case, async: true
 
   alias LLMProxy.Providers.{HTTPResult, Result}
+  alias LLMProxy.Schemas.ProviderTokenCooldown
+  alias LLMProxy.Storage.Repo.SQLite
+  alias LLMProxy.TokenPool.Cooldown
 
   describe "retry_after_ms/1" do
     test "parses retry-after seconds" do
@@ -13,6 +16,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
                nil
 
       assert HTTPResult.retry_after_ms(%{}) == nil
+      assert HTTPResult.retry_after_ms(%{"retry-after" => ["999999999999999999"]}) == nil
     end
   end
 
@@ -29,6 +33,28 @@ defmodule LLMProxy.Providers.HTTPResultTest do
 
       assert {:error, %Result{status: 429, token: ^token}} =
                HTTPResult.handle_response(token, 429, %{"error" => "slow down"})
+    end
+
+    test "limits a token only for the reported model" do
+      {:ok, token} = LLMProxy.Storage.add_token("openai", "api-key", "token")
+
+      assert {:error, %Result{status: 429, token: ^token}} =
+               HTTPResult.handle_response(
+                 token,
+                 %{status: 429, body: %{"error" => "slow down"}, headers: %{}},
+                 "model-a"
+               )
+
+      assert SQLite.get_by(ProviderTokenCooldown,
+               token_id: token.id,
+               scope: "model",
+               model_key: Cooldown.model_key!("model-a")
+             )
+
+      refute SQLite.get_by(ProviderTokenCooldown,
+               token_id: token.id,
+               scope: "account"
+             )
     end
 
     test "keeps nil-token rate limits as provider errors" do

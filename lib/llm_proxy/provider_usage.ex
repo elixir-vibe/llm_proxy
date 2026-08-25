@@ -7,7 +7,7 @@ defmodule LLMProxy.ProviderUsage do
   safe status text.
   """
 
-  alias LLMProxy.ProviderUsage.{Server, Snapshot, Source}
+  alias LLMProxy.ProviderUsage.{Server, Snapshot, Source, Window}
 
   @columns [
     :provider,
@@ -48,6 +48,13 @@ defmodule LLMProxy.ProviderUsage do
   @spec attention_count() :: non_neg_integer()
   def attention_count do
     Enum.count(snapshots(), &(&1.state in [:stale, :error] or &1.availability == :unavailable))
+  end
+
+  @spec token_available?(integer(), DateTime.t()) :: boolean()
+  def token_available?(token_id, at \\ DateTime.utc_now()) when is_integer(token_id) do
+    snapshots()
+    |> Enum.find(&(&1.token_id == token_id))
+    |> available_snapshot?(at)
   end
 
   @spec refresh_all() :: {:ok, :started | :already_refreshing} | {:error, :unavailable}
@@ -98,5 +105,52 @@ defmodule LLMProxy.ProviderUsage do
     |> Atom.to_string()
     |> String.replace("_", " ")
     |> String.capitalize()
+  end
+
+  @doc false
+  def available_snapshot?(snapshot, at \\ DateTime.utc_now())
+
+  def available_snapshot?(nil, _at), do: true
+
+  def available_snapshot?(%Snapshot{state: state}, _at)
+      when state in [:disabled, :stale, :error], do: true
+
+  def available_snapshot?(%Snapshot{availability: availability}, _at)
+      when availability in [:available, :limited],
+      do: true
+
+  def available_snapshot?(%Snapshot{availability: :unavailable, windows: windows}, at)
+      when is_list(windows) do
+    case exhausted_window_resets(windows) do
+      {:ok, []} ->
+        false
+
+      {:ok, resets} ->
+        latest_reset = Enum.max_by(resets, &DateTime.to_unix(&1, :microsecond))
+        DateTime.compare(at, latest_reset) != :lt
+
+      :unknown ->
+        false
+    end
+  end
+
+  def available_snapshot?(_snapshot, _at), do: false
+
+  defp exhausted_window_resets(windows) do
+    Enum.reduce_while(windows, {:ok, []}, fn
+      %Window{used_percent: used_percent, resets_at: %DateTime{} = resets_at}, {:ok, resets}
+      when is_number(used_percent) and used_percent >= 100 ->
+        {:cont, {:ok, [resets_at | resets]}}
+
+      %Window{used_percent: used_percent, resets_at: nil}, _acc
+      when is_number(used_percent) and used_percent >= 100 ->
+        {:halt, :unknown}
+
+      %Window{}, acc ->
+        {:cont, acc}
+
+      _malformed_window, _acc ->
+        {:halt, :unknown}
+    end)
   end
 end

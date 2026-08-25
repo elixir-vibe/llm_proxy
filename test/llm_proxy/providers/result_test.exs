@@ -3,6 +3,11 @@ defmodule LLMProxy.Providers.ResultTest do
 
   alias LLMProxy.Providers.Result
 
+  defmodule LegacyStreamProvider do
+    def name, do: "legacy-stream"
+    def stream_error(_reason, token), do: Result.error("legacy failure", 400, token)
+  end
+
   test "constructs tagged response results" do
     token = %{id: 1}
 
@@ -84,6 +89,13 @@ defmodule LLMProxy.Providers.ResultTest do
              "code" => "upstream_error",
              "status" => 502
            }
+  end
+
+  test "supports legacy two-argument stream error callbacks" do
+    token = %{id: 1}
+
+    assert %Result{status: 400, token: ^token, model: "model-a"} =
+             Result.stream_failure(LegacyStreamProvider, "model-a", token, :failure)
   end
 
   test "attaches routing attempt metadata" do

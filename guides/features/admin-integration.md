@@ -168,12 +168,16 @@ Set `provider_usage.auto_refresh = false` in standalone TOML to use only the Pro
 
 Disabled tokens appear as unavailable and are not decoded or sent. Authentication failures, unsupported or absent quota APIs, timeouts, rate limits, malformed responses, and stale retained data have separate states. A failed refresh keeps the last successful windows and marks them stale.
 
+Token selection consumes this state. It skips an exhausted fresh account until the reported reset.
+It also skips stale or failed account state until a successful refresh proves capacity again.
+
 ## Backups
 
 Admin state is operational state. Back up the configured LLMProxy database, including:
 
 - API-key hashes and policy fields;
 - provider tokens and OAuth refresh material;
+- provider-token and model cooldown reset times;
 - usage, messages, traces, and feedback required by retention policy.
 
 Do not back up transient SafeRPC socket files. Restore the database, recreate runtime directories and permissions, run migrations, then let services recreate sockets.

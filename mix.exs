@@ -147,7 +147,7 @@ defmodule LLMProxy.MixProject do
       {:plug_cowboy, "~> 2.7"},
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
-      {:quackdb, "~> 0.5.15"},
+      {:quackdb, "~> 0.5.20"},
       {:req_llm, "~> 1.21"},
       {:req, "~> 0.7"},
       {:llm_db, "~> 2026.8", runtime: false},

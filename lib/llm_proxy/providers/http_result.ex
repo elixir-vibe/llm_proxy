@@ -5,20 +5,23 @@ defmodule LLMProxy.Providers.HTTPResult do
 
   alias LLMProxy.Providers.ReqLLM.ErrorProjection
   alias LLMProxy.Providers.Result
+  alias LLMProxy.TokenPool.Cooldown
   alias LLMProxy.TokenPool.Server, as: TokenPool
 
-  def post(req, body, token) do
+  def post(req, body, token, model \\ nil) do
     case Req.post(req, json: body) do
       {:ok, %{status: 200, body: response}} -> {:ok, Result.response(response, token)}
-      {:ok, response} -> handle_response(token, response)
+      {:ok, response} -> handle_response(token, response, model)
       {:error, exception} -> handle_exception(exception)
     end
   end
 
-  def handle_response(token, %{status: status, body: body, headers: headers}) do
+  def handle_response(token, response, model \\ nil)
+
+  def handle_response(token, %{status: status, body: body, headers: headers}, model) do
     retry_after_ms = retry_after_ms(headers)
 
-    mark_rate_limited(status, token, retry_after_ms)
+    mark_rate_limited(status, token, model, retry_after_ms)
 
     result(extract(body), status, token,
       retry_after_ms: retry_after_ms,
@@ -27,7 +30,7 @@ defmodule LLMProxy.Providers.HTTPResult do
   end
 
   def handle_response(token, status, body) do
-    mark_rate_limited(status, token, nil)
+    mark_rate_limited(status, token, nil, nil)
     result(extract(body), status, token, provider_body: provider_details(body))
   end
 
@@ -45,10 +48,16 @@ defmodule LLMProxy.Providers.HTTPResult do
   end
 
   def retry_after_ms(headers) do
-    headers
-    |> Map.get("retry-after", [])
-    |> List.first()
-    |> parse_retry_after()
+    case headers |> Map.get("retry-after", []) |> List.first() |> parse_retry_after() do
+      0 ->
+        0
+
+      duration_ms when is_integer(duration_ms) ->
+        if Cooldown.valid_duration?(duration_ms), do: duration_ms, else: nil
+
+      nil ->
+        nil
+    end
   end
 
   def provider_details(%{"error" => error}), do: error
@@ -59,11 +68,22 @@ defmodule LLMProxy.Providers.HTTPResult do
   def extract(body) when is_binary(body), do: body
   def extract(_body), do: "Upstream provider request failed"
 
-  defp mark_rate_limited(429, token, retry_after_ms) when not is_nil(token) do
+  defp mark_rate_limited(429, _token, _model, 0), do: :ok
+
+  defp mark_rate_limited(429, token, model, retry_after_ms)
+       when not is_nil(token) and is_binary(model) do
+    TokenPool.mark_rate_limited(
+      token,
+      model,
+      retry_after_ms || LLMProxy.Config.token_cooldown_ms()
+    )
+  end
+
+  defp mark_rate_limited(429, token, _model, retry_after_ms) when not is_nil(token) do
     TokenPool.mark_rate_limited(token, retry_after_ms || LLMProxy.Config.token_cooldown_ms())
   end
 
-  defp mark_rate_limited(_status, _token, _retry_after_ms), do: :ok
+  defp mark_rate_limited(_status, _token, _model, _retry_after_ms), do: :ok
 
   defp parse_retry_after(nil), do: nil
 

@@ -14,10 +14,9 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Provider
-  alias LLMProxy.Providers.Result
+  alias LLMProxy.Providers.{RateLimit, Result}
   alias LLMProxy.Stream.{Event, Heartbeat, SSEWriter}
   alias LLMProxy.{Telemetry, Trace, Usage}
-  alias LLMProxy.TokenPool.Server, as: TokenPool
 
   plug(Auth)
   plug(QuotaCheck)
@@ -104,16 +103,10 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
       Passthrough.error_handler(
         &send_error/4,
         fn _status -> "api_error" end,
-        &mark_rate_limited_if_needed/1
+        &RateLimit.record/1
       )
     )
   end
-
-  defp mark_rate_limited_if_needed(%Result{status: 429, token: token}) when not is_nil(token) do
-    TokenPool.mark_rate_limited(token)
-  end
-
-  defp mark_rate_limited_if_needed(_result), do: :ok
 
   defp handle_non_stream(conn, provider, response, api_key, model, trace_id) do
     usage = extract_usage(response)

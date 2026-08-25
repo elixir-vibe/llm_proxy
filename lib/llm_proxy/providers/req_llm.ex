@@ -61,7 +61,7 @@ defmodule LLMProxy.Providers.ReqLLM do
          {:ok, response} <- ReqLLM.Generation.generate_text(model, context, opts) do
       {:ok, Result.response(Projection.response(response, attempt.model), token)}
     else
-      {:error, reason} -> {:error, req_llm_error(reason, token)}
+      {:error, reason} -> {:error, req_llm_error(reason, token, attempt.model)}
     end
   end
 
@@ -75,12 +75,12 @@ defmodule LLMProxy.Providers.ReqLLM do
 
       {:ok, Result.stream(stream, token)}
     else
-      {:error, reason} -> {:error, req_llm_error(reason, token)}
+      {:error, reason} -> {:error, req_llm_error(reason, token, attempt.model)}
     end
   end
 
   @impl true
-  def stream_error(reason, token), do: req_llm_error(reason, token)
+  def stream_error(reason, token, model), do: req_llm_error(reason, token, model)
 
   @impl true
   def extract_usage(response) when is_map(response) do
@@ -92,10 +92,13 @@ defmodule LLMProxy.Providers.ReqLLM do
   @impl true
   def to_openai_response(response, model), do: Map.put(response, "model", model)
 
-  defp pick_token(%Attempt{provider_name: provider_name, token_pool: token_pool}, user_id) do
+  defp pick_token(
+         %Attempt{provider_name: provider_name, token_pool: token_pool} = attempt,
+         user_id
+       ) do
     pool = token_pool || provider_name
 
-    case TokenPool.pick_token(pool, user_id) do
+    case TokenPool.pick_token(pool, user_id, attempt.model) do
       {:ok, token} -> {:ok, token}
       {:error, reason} -> Result.unavailable_tokens(reason)
     end
@@ -211,9 +214,14 @@ defmodule LLMProxy.Providers.ReqLLM do
     end
   end
 
-  defp req_llm_error(reason, token) do
+  defp req_llm_error(reason, token, model) do
     error = ErrorProjection.project(reason)
-    if error.status == 429, do: TokenPool.mark_rate_limited(token)
+
+    if error.status == 429 do
+      if is_binary(model),
+        do: TokenPool.mark_rate_limited(token, model, LLMProxy.Config.token_cooldown_ms()),
+        else: TokenPool.mark_rate_limited(token)
+    end
 
     Result.error(error.message, error.status, token,
       replay_safety: ErrorProjection.replay_safety(reason),

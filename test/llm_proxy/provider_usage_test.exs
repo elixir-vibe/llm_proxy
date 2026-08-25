@@ -4,7 +4,7 @@ defmodule LLMProxy.ProviderUsageTest do
   import Plug.Conn
 
   alias LLMProxy.Provider.TokenCodec.AESGCM
-  alias LLMProxy.ProviderUsage.{Loader, Source}
+  alias LLMProxy.ProviderUsage.{Loader, Snapshot, Source, Window}
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias Req.Test, as: ReqTest
@@ -206,5 +206,81 @@ defmodule LLMProxy.ProviderUsageTest do
     assert [snapshot] = Loader.refresh({:account, token.id})
     assert snapshot.state == :error
     assert snapshot.error == "Provider returned invalid usage data"
+  end
+
+  test "uses fresh upstream availability and recovers at the reported reset" do
+    now = DateTime.utc_now()
+    reset = DateTime.add(now, 60, :second)
+
+    assert LLMProxy.ProviderUsage.available_snapshot?(nil, now)
+
+    snapshot = %Snapshot{
+      token_id: 1,
+      provider_label: "Codex",
+      account_label: "Account #1",
+      availability: :unavailable,
+      state: :fresh,
+      windows: [
+        %Window{label: "Primary", used_percent: 100, remaining_percent: 0, resets_at: reset}
+      ]
+    }
+
+    refute LLMProxy.ProviderUsage.available_snapshot?(snapshot, now)
+    assert LLMProxy.ProviderUsage.available_snapshot?(snapshot, reset)
+    assert LLMProxy.ProviderUsage.available_snapshot?(%{snapshot | state: :stale}, reset)
+    assert LLMProxy.ProviderUsage.available_snapshot?(%{snapshot | state: :error}, reset)
+    assert LLMProxy.ProviderUsage.available_snapshot?(%{snapshot | state: :disabled}, reset)
+  end
+
+  test "waits for every exhausted usage window to reset" do
+    now = DateTime.utc_now()
+    first_reset = DateTime.add(now, 60, :second)
+    final_reset = DateTime.add(now, 3_600, :second)
+
+    snapshot = %Snapshot{
+      token_id: 1,
+      provider_label: "Codex",
+      account_label: "Account #1",
+      availability: :unavailable,
+      state: :fresh,
+      windows: [
+        %Window{
+          label: "Primary",
+          used_percent: 100,
+          remaining_percent: 0,
+          resets_at: first_reset
+        },
+        %Window{
+          label: "Secondary",
+          used_percent: 100,
+          remaining_percent: 0,
+          resets_at: final_reset
+        },
+        %Window{
+          label: "Available",
+          used_percent: 50,
+          remaining_percent: 50,
+          resets_at: DateTime.add(now, 30, :second)
+        }
+      ]
+    }
+
+    refute LLMProxy.ProviderUsage.available_snapshot?(snapshot, first_reset)
+    assert LLMProxy.ProviderUsage.available_snapshot?(snapshot, final_reset)
+  end
+
+  test "keeps authoritative exhaustion unavailable when a blocking reset is unknown" do
+    snapshot = %Snapshot{
+      token_id: 1,
+      provider_label: "Codex",
+      account_label: "Account #1",
+      availability: :unavailable,
+      state: :fresh,
+      windows: [
+        %Window{label: "Primary", used_percent: 100, remaining_percent: 0, resets_at: nil}
+      ]
+    }
+
+    refute LLMProxy.ProviderUsage.available_snapshot?(snapshot, DateTime.utc_now())
   end
 end

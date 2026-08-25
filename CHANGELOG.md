@@ -21,6 +21,10 @@
 
 ### Added
 
+- Token selection now skips accounts only while fresh provider-usage snapshots
+  prove exhaustion, waits for every exhausted window to reset, and persists
+  account- or model-scoped rate-limit cooldowns across restarts without storing
+  raw model IDs.
 - A supervised provider-usage tracker now reports each configured OpenAI Codex
   or GLM Coding Plan account separately. The optional Incant admin surface shows
   live upstream windows, availability, reset times, freshness, and safe errors,
@@ -47,6 +51,8 @@
 
 ### Changed
 
+- The bundled DuckDB storage dependency now requires QuackDB 0.5.20 so timestamped
+  Ecto migrations can roll back without overflowing migration versions.
 - Content capture is disabled by default for new API keys. Usage, cost, latency,
   and content-free trace metadata remain available, while message extraction,
   trace-body serialization, and cache access require explicit capture consent.

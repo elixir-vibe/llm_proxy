@@ -5,6 +5,7 @@ defmodule LLMProxy.Config do
 
   alias LLMProxy.Config.Catalog
   alias LLMProxy.Config.ProviderUsage, as: ProviderUsageConfig
+  alias LLMProxy.TokenPool.Cooldown
 
   def master_key, do: Application.get_env(:llm_proxy, :master_key)
 
@@ -195,8 +196,11 @@ defmodule LLMProxy.Config do
     |> Map.get(key, default)
   end
 
-  def token_cooldown_ms,
-    do: Application.get_env(:llm_proxy, :token_cooldown_ms, @default_token_cooldown_ms)
+  def token_cooldown_ms do
+    :llm_proxy
+    |> Application.get_env(:token_cooldown_ms, @default_token_cooldown_ms)
+    |> Cooldown.duration!()
+  end
 
   def token_selection_strategy do
     case Application.get_env(:llm_proxy, :token_selection_strategy, :affinity) do
