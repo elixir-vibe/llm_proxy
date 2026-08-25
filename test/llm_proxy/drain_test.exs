@@ -62,4 +62,24 @@ defmodule LLMProxy.DrainTest do
     assert :done = LLMProxy.Drain.track(:agent, %{}, fn -> :done end)
     assert %{active: %{total: 0}} = LLMProxy.Drain.status()
   end
+
+  test "owner exit releases work and wakes drain waiters" do
+    parent = self()
+
+    {owner, owner_monitor} =
+      spawn_monitor(fn ->
+        assert {:ok, _ref} = LLMProxy.Drain.enter(:stream, %{route: :disconnect})
+        send(parent, :owner_entered)
+        Process.sleep(:infinity)
+      end)
+
+    assert_receive :owner_entered, 1_000
+    assert %{active: %{total: 1, streams: 1}} = LLMProxy.Drain.start()
+
+    waiter = Task.async(fn -> LLMProxy.Drain.await_empty(1_000) end)
+    Process.exit(owner, :kill)
+    assert_receive {:DOWN, ^owner_monitor, :process, ^owner, :killed}, 1_000
+    assert :ok = Task.await(waiter)
+    assert %{active: %{total: 0, streams: 0}} = LLMProxy.Drain.status()
+  end
 end

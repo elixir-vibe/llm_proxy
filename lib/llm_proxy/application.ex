@@ -7,11 +7,13 @@ defmodule LLMProxy.Application do
 
   require Logger
 
+  alias LLMProxy.Provider.TokenCodec
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Storage.Repo
 
   @impl true
   def start(_type, _args) do
+    validate_provider_token_codec!()
     setup_opentelemetry()
 
     Registry.init()
@@ -27,10 +29,13 @@ defmodule LLMProxy.Application do
       storage_children() ++
         [
           LLMProxy.Drain,
+          LLMProxy.ConcurrencyLimiter,
           LLMProxy.Providers.CircuitBreaker,
           LLMProxy.Providers.Routing.RoundRobin,
           LLMProxy.Providers.Routing.Performance,
-          LLMProxy.TokenPool.Server
+          LLMProxy.TokenPool.Server,
+          {Task.Supervisor, name: LLMProxy.ProviderUsage.TaskSupervisor, max_children: 1},
+          LLMProxy.ProviderUsage.Server
         ] ++ rpc_children() ++ http_children()
 
     opts = [strategy: :one_for_one, name: LLMProxy.Supervisor]
@@ -126,7 +131,17 @@ defmodule LLMProxy.Application do
       |> Enum.reject(fn e -> e.tokens == [] end)
 
     if entries != [] do
-      LLMProxy.Storage.seed_tokens_from_env(entries)
+      case LLMProxy.Storage.seed_tokens_from_env(entries) do
+        :ok -> :ok
+        {:error, _reason} -> raise "provider token seeding failed"
+      end
+    end
+  end
+
+  defp validate_provider_token_codec! do
+    case TokenCodec.validate_configuration() do
+      :ok -> :ok
+      {:error, _reason} -> raise "invalid provider token codec configuration"
     end
   end
 

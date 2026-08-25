@@ -5,6 +5,9 @@ defmodule LLMProxy.Stream.Event do
 
   alias LLMProxy.Usage
 
+  @kinds [:start, :content, :reasoning, :tool_call, :usage, :finish, :error, :metadata]
+  @option_keys [:usage, :event, :kind]
+
   @type kind ::
           :start | :content | :reasoning | :tool_call | :usage | :finish | :error | :metadata
 
@@ -19,13 +22,35 @@ defmodule LLMProxy.Stream.Event do
 
   @spec new(map() | String.t(), keyword()) :: t()
   def new(data, opts \\ []) do
-    %__MODULE__{
-      data: data,
-      usage: Keyword.get(opts, :usage),
-      event: Keyword.get(opts, :event),
-      kind: Keyword.get(opts, :kind, :metadata)
-    }
+    if valid_data?(data) and valid_options?(opts) do
+      usage = Keyword.get(opts, :usage)
+      event = Keyword.get(opts, :event)
+      kind = Keyword.get(opts, :kind, :metadata)
+
+      if valid_usage?(usage) and (is_nil(event) or is_binary(event)) and kind in @kinds do
+        %__MODULE__{data: data, usage: usage, event: event, kind: kind}
+      else
+        raise ArgumentError, "invalid stream event options"
+      end
+    else
+      raise ArgumentError, "stream event requires map or string data and known unique options"
+    end
   end
+
+  defp valid_data?(data), do: is_map(data) or is_binary(data)
+
+  defp valid_options?(opts) do
+    if Keyword.keyword?(opts) do
+      keys = Keyword.keys(opts)
+      Enum.all?(keys, &(&1 in @option_keys)) and length(keys) == MapSet.size(MapSet.new(keys))
+    else
+      false
+    end
+  end
+
+  defp valid_usage?(nil), do: true
+  defp valid_usage?(%Usage{}), do: true
+  defp valid_usage?(_usage), do: false
 
   @spec output_delta?(t()) :: boolean()
   def output_delta?(%__MODULE__{kind: kind}) when kind in [:content, :reasoning, :tool_call],
@@ -34,8 +59,8 @@ defmodule LLMProxy.Stream.Event do
   def output_delta?(%__MODULE__{}), do: false
 
   @spec attach_usage(t(), Usage.t() | nil) :: t()
-  def attach_usage(event, nil), do: event
-  def attach_usage(%__MODULE__{} = event, usage), do: %{event | usage: usage}
+  def attach_usage(%__MODULE__{} = event, nil), do: event
+  def attach_usage(%__MODULE__{} = event, %Usage{} = usage), do: %{event | usage: usage}
 
   @spec from_openai_sse(%{optional(:data) => term()}) :: t() | nil
   def from_openai_sse(%{data: "[DONE]"}), do: nil

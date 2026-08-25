@@ -56,16 +56,33 @@ if Code.ensure_loaded?(Incant) do
       for atom <- ["compact", "density", "options", "select", "safe_rpc_reply"] do
         assert atom in atoms
       end
+
+      assert {:ok, %{"columns" => columns, "rows" => rows}} =
+               LLMProxy.Admin.run_widget("provider_usage", "usage_windows", %{}, %{})
+
+      assert "provider" in columns
+      assert "account" in columns
+      assert is_list(rows)
+
+      refute Enum.any?(rows, fn row ->
+               Enum.any?(
+                 ~w(token access_token refresh_token account_id cookie),
+                 &Map.has_key?(row, &1)
+               )
+             end)
     end
 
     test "runs LLMProxy model and status operations" do
-      assert {:ok, [%{id: "rpc-test-model", object: "model"}]} =
-               LLMProxy.call({LLMProxy, :models}, %{}, %{}, [])
+      assert {:ok, models} = LLMProxy.call({LLMProxy, :models}, %{}, %{}, [])
 
-      assert {:ok, %{service: :llm_proxy, version: version, models: 1}} =
+      assert %{id: "rpc-test-model", object: "model"} =
+               Enum.find(models, &(&1.id == "rpc-test-model"))
+
+      assert {:ok, %{service: :llm_proxy, version: version, models: model_count}} =
                LLMProxy.call({LLMProxy, :status}, %{}, %{}, [])
 
       assert is_binary(version)
+      assert model_count == length(models)
     end
 
     test "real RPC server exposes admin and operations on one socket" do

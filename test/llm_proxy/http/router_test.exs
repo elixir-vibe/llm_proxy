@@ -1,9 +1,11 @@
-defmodule LLMProxy.RouterDynamicTest do
+defmodule LLMProxy.HTTP.RouterTest do
   use ExUnit.Case
 
+  alias LLMProxy.Catalog
+  alias LLMProxy.Catalog.{Deployment, Model}
+  alias LLMProxy.HTTP.Router
   alias LLMProxy.HTTP.Routes.Dynamic
   alias LLMProxy.Providers.Registry
-  alias LLMProxy.Router
 
   defmodule RouterProvider do
     def name, do: "router-provider"
@@ -38,6 +40,15 @@ defmodule LLMProxy.RouterDynamicTest do
     assert body["ready"] == true
     assert body["draining"] == false
     assert body["active"] == %{"agents" => 0, "requests" => 0, "streams" => 0, "total" => 0}
+
+    assert %{
+             "active" => active,
+             "admitted" => admitted,
+             "rejected" => rejected,
+             "released" => released
+           } = body["concurrency"]
+
+    assert Enum.all?([active, admitted, rejected, released], &is_integer/1)
   end
 
   test "health remains available while user routes reject during drain" do
@@ -60,6 +71,31 @@ defmodule LLMProxy.RouterDynamicTest do
     assert Enum.any?(Jason.decode!(conn.resp_body)["data"], &(&1["id"] == "router-model"))
   end
 
+  test "lists only allowlisted catalog aliases" do
+    original = Application.get_env(:llm_proxy, :public_models)
+
+    Catalog.put_model(
+      Model.new!(
+        name: "router-alias",
+        deployments: [
+          Deployment.new!(provider: RouterProvider, upstream_model: "router-model")
+        ]
+      )
+    )
+
+    Application.put_env(:llm_proxy, :public_models, ["router-alias", "router-model"])
+
+    on_exit(fn ->
+      restore_public_models(original)
+      Catalog.init()
+    end)
+
+    conn = Plug.Test.conn(:get, "/v1/models") |> Router.call(Router.init([]))
+    ids = conn.resp_body |> Jason.decode!() |> Map.fetch!("data") |> Enum.map(& &1["id"])
+
+    assert ids == ["router-alias"]
+  end
+
   test "dispatches dynamic routes and returns 404 otherwise" do
     dynamic_conn = Plug.Test.conn(:get, "/dynamic/test") |> Router.call(Router.init([]))
 
@@ -78,4 +114,7 @@ defmodule LLMProxy.RouterDynamicTest do
     assert missing_conn.status == 404
     assert get_in(Jason.decode!(missing_conn.resp_body), ["error", "message"]) == "Not found"
   end
+
+  defp restore_public_models(nil), do: Application.delete_env(:llm_proxy, :public_models)
+  defp restore_public_models(models), do: Application.put_env(:llm_proxy, :public_models, models)
 end

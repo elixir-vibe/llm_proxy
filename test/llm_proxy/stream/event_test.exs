@@ -68,6 +68,14 @@ defmodule LLMProxy.Stream.EventTest do
     refute Event.output_delta?(start)
   end
 
+  test "rejects malformed event contracts" do
+    assert_raise ArgumentError, fn -> Event.new(%{}, kind: :unknown) end
+    assert_raise ArgumentError, fn -> Event.new(%{}, unknown: true) end
+    assert_raise ArgumentError, fn -> Event.new(%{}, kind: :content, kind: :finish) end
+    assert_raise ArgumentError, fn -> Event.new([], kind: :content) end
+    assert_raise ArgumentError, fn -> Event.new(%{}, usage: %{}) end
+  end
+
   test "builds OpenAI chat delta events with usage" do
     event =
       Event.openai_chat_delta("model", %{}, :incomplete, %{input_tokens: 2, output_tokens: 3})

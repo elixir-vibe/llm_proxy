@@ -76,6 +76,40 @@ LLM_PROXY_PROVIDER_KEYS='{"example-production":["secret-a","secret-b"]}'
 
 Persisted provider tokens remain the runtime source after seeding. A token record can override the provider base URL through its `proxy` field, but that should be reserved for intentional per-token gateways; normal endpoints belong in provider configuration.
 
+GLM Coding Plan providers can use ReqLLM's native Z.AI adapter and the same isolated pool for live account-window tracking:
+
+```toml
+[providers.glm-coding]
+adapter = "zai_coding_plan"
+base_url = "https://api.z.ai/api/coding/paas/v4"
+token_pool = "glm-production"
+```
+
+Each API key in `glm-production` is one account in the Provider Usage dashboard. Custom compatible configurations can opt in with `usage_adapter = "glm"`. See [Admin Integration](admin-integration.md#live-provider-usage) for qualified endpoints, authentication, refresh bounds, and unsupported states.
+
+Credential pools use stable user affinity by default. Library hosts can set
+`token_selection_strategy: :fill_first`; standalone releases use
+`provider_tokens.selection_strategy = "fill_first"` in TOML. Fill-first keeps
+the existing OAuth-first, API-key-fallback boundary and orders healthy tokens
+within each credential kind by descending non-negative `priority`, then ascending
+token ID. Disabled and cooling-down tokens are skipped. A recovered token
+returns to its configured place without changing the priority order. Incant's
+provider-token edit form exposes only `priority`; credential fields remain
+uneditable and private.
+
+For accounts with live provider-usage data, selection also skips fresh exhausted accounts until
+all exhausted windows with known reset times have reset. An exhausted window without a reset stays
+blocked until a fresh snapshot reports capacity. A stale or failed snapshot is not used as proof of
+capacity. Before the first snapshot exists, the token remains eligible so tracker startup does not
+stop all traffic.
+
+Rate-limit cooldowns are stored by provider token and scope. Model-scoped cooldowns persist a
+bounded SHA-256 model key rather than the raw model ID, so one model's failure does not block the
+same account for other models or disclose request metadata in cooldown storage. Account-scoped
+cooldowns remain available for errors that do not identify a model. Cooldowns survive service
+restarts, never shorten an existing deadline, and expired rows are pruned when a new cooldown is
+recorded.
+
 ## Public model aliases
 
 A readable library configuration uses model aliases and routes:
@@ -116,6 +150,15 @@ Routing happens within each `order` group. Lower order groups are attempted firs
 - `:round_robin` — rotate the first route across requests.
 - `:weighted_shuffle` — randomize by route `weight`.
 - `:lowest_cost` — order routes by LLMDB input and output pricing.
+- `:latency_aware` — explore cold routes, then prefer routes with lower median latency.
+
+Latency-aware routing never moves a deployment ahead of an earlier `order` group. Buffered calls
+rank by complete attempt duration. Streams rank only by time to first observable content,
+reasoning, or tool-call output, so downstream client pacing does not distort route selection.
+Samples and stale deployment keys expire after five minutes; a route remains cold until it has
+three usable samples. Routes within 10% of the best latency rotate rather than pinning all traffic
+to one deployment. This state is bounded, ephemeral, node-local, and separate from durable usage
+accounting and circuit breakers.
 
 A route can define:
 
@@ -138,13 +181,18 @@ LLMProxy resolves an ordered list of deployment attempts, then:
 
 1. skips deployments with open circuit breakers;
 2. picks an available credential from the route's token pool;
-3. executes with the route timeout;
-4. applies `Retry-After` cooldowns to rate-limited credentials;
-5. records retryable deployment failures;
-6. falls through to the next eligible route;
-7. records the provider and model that ultimately handled the request.
+3. checks the finite provider-dispatch budget;
+4. executes with the route timeout;
+5. classifies failure replay as safe, uncertain, or forbidden;
+6. applies `Retry-After` cooldowns to rate-limited credentials;
+7. falls through only when the replay policy permits it;
+8. records the provider and model that ultimately handled the request.
 
-Authentication failures and other non-retryable errors are returned directly. Public HTTP and SSE failures use the endpoint's native protocol envelope: OpenAI-compatible APIs contain one `error` object, while Anthropic Messages uses its `type: "error"` envelope. Structured provider message, type, code, status, and parameter fields are normalized and bounded without duplicate wrapper layers; headers, credentials, request bodies, tool arguments, internal Elixir terms, and synthetic inspected stream reasons are never forwarded. Timeouts and retryable upstream failures participate in fallback. Circuit breakers move through closed, open, and half-open states per deployment.
+Authentication failures and other forbidden replays are returned directly. Unavailable credentials, circuit skips, clear connection failures (including stream setup failures), and 429 refusals can safely move to another route. A timeout or 5xx response is uncertain because the upstream can have accepted billable work. The default `:safe_only` policy does not replay uncertain failures. Set `replay_policy: :allow_uncertain` only when duplicate cost and side effects are acceptable. Once stream setup succeeds and an enumerable is returned, a later lazy failure never starts another provider, so visible output is never duplicated.
+
+`max_retries + 1` is the strict dispatch limit for every request. Open-circuit and unsupported-protocol skips do not consume a dispatch. Routing telemetry includes the attempt number, limit, replay safety, decision, and reason. It never includes request content. Standalone routing policy belongs in the TOML configuration file rather than environment variables.
+
+Public HTTP and SSE failures use the endpoint's native protocol envelope: OpenAI-compatible APIs contain one `error` object, while Anthropic Messages uses its `type: "error"` envelope. Structured provider message, type, code, status, and parameter fields are normalized and bounded without duplicate wrapper layers; headers, credentials, request bodies, tool arguments, internal Elixir terms, and synthetic inspected stream reasons are never forwarded. Circuit breakers move through closed, open, and half-open states per deployment.
 
 ## Built-in providers
 

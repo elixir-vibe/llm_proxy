@@ -15,6 +15,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.Accounting.UsageTracking
   alias LLMProxy.Actor
   alias LLMProxy.Cache.Runtime, as: CacheRuntime
+  alias LLMProxy.ConcurrencyLimiter
   alias LLMProxy.GuardrailPipeline
   alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Protocol.Request
@@ -33,6 +34,7 @@ defmodule LLMProxy.Provider do
           | {:not_found, String.t()}
           | {:missing_api_key, term()}
           | {:invalid_api_key, String.t()}
+          | {:concurrency_limit, non_neg_integer()}
           | {:guardrail, term()}
           | {:provider, Result.t()}
 
@@ -48,19 +50,9 @@ defmodule LLMProxy.Provider do
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request) do
-      Logger.debug(
-        "Provider request from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
-      )
-
-      opts =
-        put_message_log_id(
-          opts,
-          UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
-            Request.user_text(request)
-          end)
-        )
-
-      call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
+      with_request_lease(api_key, fn ->
+        execute_call(provider, request, actor, api_key, upstream_model, attempts, route, opts)
+      end)
     else
       :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
       {:error, {:missing_api_key, _}} = error -> error
@@ -83,19 +75,9 @@ defmodule LLMProxy.Provider do
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request) do
-      Logger.debug(
-        "Provider stream from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
-      )
-
-      opts =
-        put_message_log_id(
-          opts,
-          UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
-            Request.user_text(request)
-          end)
-        )
-
-      stream_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
+      with_stream_lease(api_key, fn ->
+        execute_stream(provider, request, actor, api_key, upstream_model, attempts, route, opts)
+      end)
     else
       :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
       {:error, {:missing_api_key, _}} = error -> error
@@ -261,8 +243,93 @@ defmodule LLMProxy.Provider do
   defp check_quota(%Actor{kind: :master}, _api_key), do: :ok
   defp check_quota(_actor, api_key), do: LLMProxy.Storage.check_quota(api_key)
 
-  defp check_model_access(%{id: "master"}, _model), do: :ok
-  defp check_model_access(api_key, model), do: LLMProxy.Storage.check_model_access(api_key, model)
+  defp check_model_access(api_key, model) do
+    if Registry.public_model?(model), do: check_key_model_access(api_key, model), else: :error
+  end
+
+  defp check_key_model_access(%{id: "master"}, _model), do: :ok
+
+  defp check_key_model_access(api_key, model),
+    do: LLMProxy.Storage.check_model_access(api_key, model)
+
+  defp with_request_lease(api_key, fun) do
+    case ConcurrencyLimiter.run(api_key, fun) do
+      {:error, {:limit_exceeded, limit}} ->
+        {:error, {:concurrency_limit, limit}}
+
+      result ->
+        result
+    end
+  end
+
+  defp with_stream_lease(api_key, fun) do
+    case ConcurrencyLimiter.acquire(api_key) do
+      {:ok, lease} -> retain_stream_lease(fun, lease)
+      {:error, {:limit_exceeded, limit}} -> {:error, {:concurrency_limit, limit}}
+    end
+  end
+
+  defp retain_stream_lease(fun, lease) do
+    case fun.() do
+      {:ok, %Result{kind: :stream, stream: stream} = result} ->
+        {:ok, %{result | stream: ConcurrencyLimiter.wrap_stream(stream, lease)}}
+
+      result ->
+        ConcurrencyLimiter.release(lease)
+        result
+    end
+  catch
+    kind, reason ->
+      ConcurrencyLimiter.release(lease)
+      :erlang.raise(kind, reason, __STACKTRACE__)
+  end
+
+  defp with_native_lease(:stream_native, api_key, fun), do: with_stream_lease(api_key, fun)
+  defp with_native_lease(:call_native, api_key, fun), do: with_request_lease(api_key, fun)
+
+  defp execute_call(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
+    Logger.debug(
+      "Provider request from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
+    )
+
+    opts = log_user_message(opts, api_key, request, route)
+    call_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
+  end
+
+  defp execute_stream(provider, request, actor, api_key, upstream_model, attempts, route, opts) do
+    Logger.debug(
+      "Provider stream from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
+    )
+
+    opts = log_user_message(opts, api_key, request, route)
+    stream_provider(provider, request, actor, api_key, upstream_model, attempts, route, opts)
+  end
+
+  defp execute_native_call(
+         {provider, upstream_model, attempts},
+         request,
+         actor,
+         api_key,
+         route,
+         function,
+         opts
+       ) do
+    Logger.debug(
+      "Provider native #{function} from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
+    )
+
+    opts = log_user_message(opts, api_key, request, route)
+    call_native_provider(provider, upstream_model, attempts, request, api_key, function, opts)
+  end
+
+  defp log_user_message(opts, api_key, request, route) do
+    put_message_log_id(
+      opts,
+      UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
+        Request.user_text(request)
+      end)
+    )
+  end
 
   defp put_message_log_id(opts, {:ok, %{id: id}}), do: Keyword.put(opts, :message_log_id, id)
   defp put_message_log_id(opts, _result), do: opts
@@ -333,19 +400,17 @@ defmodule LLMProxy.Provider do
          :ok <- check_model_access(api_key, request.model),
          {:ok, [%Attempt{provider: provider, model: upstream_model} | _] = attempts} <-
            Registry.resolve_attempts(request) do
-      Logger.debug(
-        "Provider native #{function} from #{actor.name || actor.id} model=#{request.model} provider=#{provider.name()}"
-      )
-
-      opts =
-        put_message_log_id(
-          opts,
-          UsageTracking.log_user_message(api_key, request.model, to_string(route), fn ->
-            Request.user_text(request)
-          end)
+      with_native_lease(function, api_key, fn ->
+        execute_native_call(
+          {provider, upstream_model, attempts},
+          request,
+          actor,
+          api_key,
+          route,
+          function,
+          opts
         )
-
-      call_native_provider(provider, upstream_model, attempts, request, api_key, function, opts)
+      end)
     else
       :error -> {:error, {:not_found, "Model '#{request.model}' not found"}}
       {:error, {:missing_api_key, _}} = error -> error
@@ -443,9 +508,7 @@ defmodule LLMProxy.Provider do
 
           {:ok, %Event{} = event} ->
             usage = merge_stream_usage(usage, event)
-
-            ttft_ms = first_output_latency(ttft_ms, event, start)
-
+            ttft_ms = ttft_ms || System.monotonic_time(:millisecond) - start
             {[event], {usage, ttft_ms}}
 
           {:error, _reason} ->
@@ -460,12 +523,6 @@ defmodule LLMProxy.Provider do
       fn _acc -> :ok end
     )
   end
-
-  defp first_output_latency(nil, %Event{} = event, start) do
-    if Event.output_delta?(event), do: System.monotonic_time(:millisecond) - start
-  end
-
-  defp first_output_latency(ttft_ms, _event, _start), do: ttft_ms
 
   defp merge_stream_usage(usage, %Event{usage: event_usage}) when not is_nil(event_usage) do
     Usage.merge_max(usage, event_usage)
@@ -678,6 +735,14 @@ defmodule LLMProxy.Provider do
         ErrorResponse.safe_message(reason, "Request blocked by guardrail")
       )
 
+  defp req_llm_error({:concurrency_limit, _limit}, status),
+    do:
+      ErrorResponse.openai_error(
+        status,
+        "rate_limit_error",
+        ConcurrencyLimiter.error_message()
+      )
+
   defp req_llm_error(_reason, status),
     do: ErrorResponse.openai_error(status, "internal_error", "LLMProxy request failed")
 
@@ -687,6 +752,7 @@ defmodule LLMProxy.Provider do
   defp error_status({:missing_api_key, _}), do: 401
   defp error_status({:invalid_api_key, _}), do: 401
   defp error_status({:guardrail, _}), do: 403
+  defp error_status({:concurrency_limit, _limit}), do: 429
   defp error_status({:provider, %{status: status}}) when is_integer(status), do: status
   defp error_status(_reason), do: 500
 

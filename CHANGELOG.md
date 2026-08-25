@@ -2,6 +2,83 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+- Standalone non-secret runtime settings now come from TOML instead of
+  environment variables. `PORT`, `PUBLIC_URL`, `DATABASE_PATH`, `QUACKDB_URI`,
+  `QUACKDB_ENDPOINT`, `LLM_PROXY_RPC_SOCKET`, `LLM_PROXY_BODY_LIMIT_BYTES`,
+  `LLM_PROXY_PROVIDER_CONNECT_TIMEOUT_MS`, `LLM_MAX_RETRIES`,
+  `LLM_FALLBACKS`, and `OTEL_EXPORTER_OTLP_ENDPOINT` are no longer read.
+  Configure the corresponding `[server]`, `[storage]`, `[routing]`,
+  `[telemetry]`, provider, and model-route settings in the standalone TOML file.
+- Standalone `OPENAI_API_KEYS`, `ANTHROPIC_API_KEYS`, `OPENROUTER_API_KEYS`, and
+  `OPENAI_CODEX_TOKENS` bootstrapping has been removed. Seed API-key pools with
+  the secret `LLM_PROXY_PROVIDER_KEYS` JSON object. Provision Codex OAuth through
+  the admin login flow and preserve its stored token rows in backups.
+- Standalone TOML is now strict and rejects unknown sections, unknown keys, and
+  provider credentials. Library mode remains configured through ordinary Elixir
+  application configuration and may source secrets however the host chooses.
+
+### Added
+
+- Catalog models can use latency-aware routing within each configured order tier.
+  The supervised node-local tracker explores cold deployments, retains bounded
+  fresh samples, ranks buffered calls by median attempt duration, and ranks
+  streams only by median time to first observable output.
+- Token selection now skips accounts only while fresh provider-usage snapshots
+  prove exhaustion, waits for every exhausted window to reset, and persists
+  account- or model-scoped rate-limit cooldowns across restarts without storing
+  raw model IDs.
+- A supervised provider-usage tracker now reports each configured OpenAI Codex
+  or GLM Coding Plan account separately. The optional Incant admin surface shows
+  live upstream windows, availability, reset times, freshness, and safe errors,
+  with bounded automatic refresh and manual refresh actions. Provider payloads
+  use strict JSONCodec boundaries, response sizes are capped, and malformed or
+  out-of-scope refresh results fail atomically.
+- Provider-token pools support affinity or fill-first selection. Fill-first
+  orders healthy tokens within the existing OAuth-first/API-key-fallback
+  boundary by persisted non-negative priority and stable token ID.
+- An optional public-model allowlist keeps HTTP discovery, setup helpers,
+  SafeRPC status, and request admission aligned. Standalone deployments
+  configure visible aliases through `catalog.public_models` in strict TOML;
+  library hosts use normal application configuration.
+- API keys can be disabled and re-enabled without deleting their limits, usage,
+  or audit history. Disabled keys receive the normal invalid-key response.
+- Provider API keys and OAuth tokens can use a pluggable at-rest codec with a
+  versioned AES-256-GCM keyring, explicit migration, verification, rotation,
+  and controlled plaintext rollback tasks.
+- API keys can now set an in-memory concurrent-request limit with stream-safe,
+  process-monitored leases across in-process, ReqLLM, SafeRPC, and HTTP
+  generation or moderation calls.
+- API keys now expose an explicit `capture_content` policy for message, trace-body,
+  and deterministic response-cache storage.
+
+### Changed
+
+- The bundled DuckDB storage dependency now requires QuackDB 0.5.20 so timestamped
+  Ecto migrations can roll back without overflowing migration versions.
+- Content capture is disabled by default for new API keys. Usage, cost, latency,
+  and content-free trace metadata remain available, while message extraction,
+  trace-body serialization, and cache access require explicit capture consent.
+- Provider fallback now has a strict attempt budget and replays only proven-safe failures by default. Timeouts and 5xx responses require the explicit `:allow_uncertain` compatibility policy, and visible streams are never replayed.
+
+### Security
+
+- Provider-token encryption uses a keyring separate from the API master key,
+  creates redacted request-scoped credentials only after token selection, and
+  fails closed when an encrypted credential is selected without its keyring.
+- Sensitive Incant fields are redacted before local rendering or remote SafeRPC
+  transport.
+
+### Migration
+
+- Existing provider tokens receive priority `0`; indexed DuckDB tables rebuild
+  the provider/kind index while adding or removing the priority column.
+- Existing API keys remain enabled when lifecycle state is added.
+- Existing trace-enabled keys retain content capture. Other existing keys stop
+  automatic message and cache capture after migration. Operators must define
+  retention and remove content stored before this change according to policy.
+
 ## 0.1.1 - 2026-08-01
 
 ### Fixed

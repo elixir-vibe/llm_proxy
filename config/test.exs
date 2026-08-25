@@ -15,6 +15,7 @@ config :llm_proxy, LLMProxy.Storage.Repo.SQLite,
 
 config :llm_proxy,
   master_key: System.get_env("MASTER_KEY", "test-master-key"),
+  provider_usage_auto_refresh: false,
   providers: %{
     "anthropic" => %{api_keys: System.get_env("ANTHROPIC_API_KEYS", "")},
     "openai" => %{api_keys: System.get_env("OPENAI_API_KEYS", "")},

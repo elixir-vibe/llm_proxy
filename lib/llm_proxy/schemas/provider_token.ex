@@ -5,6 +5,8 @@ defmodule LLMProxy.Schemas.ProviderToken do
   use Ecto.Schema
   import Ecto.Changeset
 
+  @derive {Inspect, except: [:token, :refresh_token]}
+
   @type t :: %__MODULE__{
           id: integer() | nil,
           provider: String.t() | nil,
@@ -15,6 +17,7 @@ defmodule LLMProxy.Schemas.ProviderToken do
           refresh_token: String.t() | nil,
           expires_at: DateTime.t() | nil,
           account_id: String.t() | nil,
+          priority: non_neg_integer(),
           enabled: boolean(),
           added_at: DateTime.t() | nil
         }
@@ -28,6 +31,7 @@ defmodule LLMProxy.Schemas.ProviderToken do
     field(:refresh_token, :string)
     field(:expires_at, :utc_datetime)
     field(:account_id, :string)
+    field(:priority, :integer, default: 0)
     field(:enabled, :boolean, default: true)
     field(:added_at, :utc_datetime)
   end
@@ -43,11 +47,13 @@ defmodule LLMProxy.Schemas.ProviderToken do
       :refresh_token,
       :expires_at,
       :account_id,
+      :priority,
       :enabled,
       :added_at
     ])
-    |> validate_required([:provider, :kind, :token, :added_at])
+    |> validate_required([:provider, :kind, :token, :priority, :enabled, :added_at])
     |> validate_inclusion(:kind, ["api-key", "oauth"])
+    |> validate_number(:priority, greater_than_or_equal_to: 0)
     |> validate_change(:proxy, &validate_proxy/2)
   end
 

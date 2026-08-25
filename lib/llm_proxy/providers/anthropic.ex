@@ -57,17 +57,17 @@ defmodule LLMProxy.Providers.Anthropic do
   end
 
   defp call_from_pool(body, user_id, pool) do
-    with {:ok, token} <- pick_token(pool, user_id), do: do_call(body, token)
+    with {:ok, token} <- pick_token(pool, user_id, body["model"]), do: do_call(body, token)
   end
 
   defp stream_from_pool(body, user_id, pool) do
-    with {:ok, token} <- pick_token(pool, user_id) do
+    with {:ok, token} <- pick_token(pool, user_id, body["model"]) do
       body |> Map.put("stream", true) |> do_stream(token)
     end
   end
 
-  defp pick_token(pool, user_id) do
-    case TokenPool.pick_token(pool, user_id) do
+  defp pick_token(pool, user_id, model) do
+    case TokenPool.pick_token(pool, user_id, model) do
       {:ok, token} -> {:ok, token}
       {:error, reason} -> Result.unavailable_tokens(reason)
     end
@@ -83,7 +83,7 @@ defmodule LLMProxy.Providers.Anthropic do
         receive_timeout: LLMProxy.Config.provider_receive_timeout_ms()
       )
 
-    HTTPResult.post(req, body, token)
+    HTTPResult.post(req, body, token, body["model"])
   end
 
   defp do_stream(body, token) do
@@ -106,7 +106,7 @@ defmodule LLMProxy.Providers.Anthropic do
         {:ok, Result.stream(stream, token)}
 
       {:ok, response} ->
-        HTTPResult.handle_response(token, response)
+        HTTPResult.handle_response(token, response, body["model"])
 
       {:error, exception} ->
         HTTPResult.handle_exception(exception)
@@ -171,7 +171,11 @@ defmodule LLMProxy.Providers.Anthropic do
        }),
        do: :reasoning
 
-  defp anthropic_event_kind(%{"type" => "content_block_delta"}), do: :tool_call
+  defp anthropic_event_kind(%{
+         "type" => "content_block_delta",
+         "delta" => %{"type" => "input_json_delta"}
+       }),
+       do: :tool_call
 
   defp anthropic_event_kind(%{
          "type" => "content_block_start",

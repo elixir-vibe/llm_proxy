@@ -7,6 +7,8 @@ if Code.ensure_loaded?(Incant) do
     `Incant.Admin.describe/1` and later exposed over SafeRPC.
     """
 
+    alias LLMProxy.Admin.Transport
+
     use Incant.Admin,
       service: :llm_proxy,
       version: "1",
@@ -29,5 +31,18 @@ if Code.ensure_loaded?(Incant) do
     expose(LLMProxy.Schemas.MessageLog, as: :message, readonly: true)
 
     dashboard(LLMProxy.Admin.Dashboards.Operations)
+    dashboard(LLMProxy.Admin.Dashboards.ProviderUsage)
+
+    @impl Incant.Service
+    def index(surface_id, params, context) when is_binary(surface_id) do
+      super(surface_id, params, context)
+      |> Transport.redact_sensitive_result(surface_id, __MODULE__)
+    end
+
+    @impl Incant.Service
+    def read(surface_id, id, context) when is_binary(surface_id) do
+      super(surface_id, id, context)
+      |> Transport.redact_sensitive_result(surface_id, __MODULE__)
+    end
   end
 end

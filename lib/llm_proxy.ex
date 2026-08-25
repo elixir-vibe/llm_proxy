@@ -9,8 +9,8 @@ defmodule LLMProxy do
 
   use SafeRPC, service: :llm_proxy, version: "1"
 
-  alias LLMProxy.{Catalog, Provider, Response}
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.{Provider, Response}
 
   @doc """
   Calls the proxy in-process using ReqLLM messages or a plain prompt.
@@ -23,7 +23,7 @@ defmodule LLMProxy do
   @rpc true
   @doc "List available models."
   @spec models(map(), map(), term()) :: {:ok, [map()]}
-  def models(_payload, _meta, _state), do: {:ok, Catalog.all_models()}
+  def models(_payload, _meta, _state), do: {:ok, LLMProxy.Providers.Registry.public_models()}
 
   @rpc true
   @doc "Run a chat completion through LLMProxy."
@@ -40,7 +40,7 @@ defmodule LLMProxy do
      %{
        service: :llm_proxy,
        version: application_version(),
-       models: length(Catalog.all_models())
+       models: length(LLMProxy.Providers.Registry.public_models())
      }}
   end
 

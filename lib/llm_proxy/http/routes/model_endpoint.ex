@@ -12,7 +12,7 @@ defmodule LLMProxy.HTTP.Routes.ModelEndpoint do
   plug(:dispatch)
 
   get "/" do
-    HTTP.send_json(conn, 200, %{object: "list", data: LLMProxy.Providers.Registry.all_models()})
+    HTTP.send_json(conn, 200, %{object: "list", data: LLMProxy.Providers.Registry.public_models()})
   end
 
   match _ do

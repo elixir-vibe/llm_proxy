@@ -64,7 +64,7 @@ defmodule LLMProxy.Providers.Routing.PerformanceTest do
              Performance.order("public", [fallback, primary], request)
   end
 
-  test "records stream latency, TTFT, and throughput separately" do
+  test "records stream duration and TTFT without deriving client-paced throughput" do
     request = request(true)
     attempt = Attempt.new(deployment("streamed"))
     now = System.monotonic_time(:millisecond)
@@ -75,17 +75,53 @@ defmodule LLMProxy.Providers.Routing.PerformanceTest do
       outcome: :success,
       duration_ms: 1_500,
       ttft_ms: 300,
-      generation_ms: 1_200,
       output_tokens: 120,
       observed_at: now
     })
 
     assert %{
              success_count: 1,
+             ttft_count: 1,
              median_duration_ms: 1_500,
-             median_ttft_ms: 300,
-             median_tokens_per_second: 100.0
+             median_ttft_ms: 300
            } = Performance.stats(attempt, request)
+  end
+
+  test "rejects malformed sample and telemetry contracts" do
+    request = request(true)
+    attempt = Attempt.new(deployment("invalid"))
+
+    invalid = %Sample{
+      operation: request.protocol,
+      stream: true,
+      outcome: :success,
+      duration_ms: 10,
+      ttft_ms: 11,
+      observed_at: System.monotonic_time(:millisecond)
+    }
+
+    assert_raise ArgumentError, fn -> Performance.observe(attempt, invalid) end
+
+    assert_raise ArgumentError, fn ->
+      Performance.observe(attempt, %{invalid | ttft_ms: 1}, :unknown)
+    end
+  end
+
+  test "expires stale observation keys from state" do
+    request = request(false)
+    attempt = Attempt.new(deployment("expired"))
+    expired_at = System.monotonic_time(:millisecond) - :timer.minutes(6)
+
+    Performance.observe(attempt, %Sample{
+      operation: request.protocol,
+      stream: false,
+      outcome: :success,
+      duration_ms: 10,
+      observed_at: expired_at
+    })
+
+    assert %{success_count: 0, updated_at: nil} = Performance.stats(attempt, request)
+    assert %{observations: %{}} = :sys.get_state(Performance)
   end
 
   defp observe(deployment, request, durations) do
@@ -117,7 +153,6 @@ defmodule LLMProxy.Providers.Routing.PerformanceTest do
         outcome: :success,
         duration_ms: duration,
         ttft_ms: ttft,
-        generation_ms: duration - ttft,
         output_tokens: 10,
         observed_at: now
       })

@@ -3,6 +3,8 @@ defmodule LLMProxy.ConfigTest do
 
   alias LLMProxy.Catalog.{Deployment, Model}
   alias LLMProxy.Config
+  alias LLMProxy.Provider.TokenCodec
+  alias LLMProxy.Provider.TokenCodec.AESGCM
   alias LLMProxy.Providers.{Anthropic, OpenAI, OpenAICodex}
 
   setup do
@@ -11,6 +13,28 @@ defmodule LLMProxy.ConfigTest do
     original_models = Application.get_env(:llm_proxy, :models)
     original_body_limit = Application.get_env(:llm_proxy, :body_limit_bytes)
     original_connect_timeout = Application.get_env(:llm_proxy, :provider_connect_timeout_ms)
+    original_max_retries = Application.get_env(:llm_proxy, :max_retries)
+    original_replay_policy = Application.get_env(:llm_proxy, :replay_policy)
+    original_public_models = Application.get_env(:llm_proxy, :public_models)
+    original_token_selection = Application.get_env(:llm_proxy, :token_selection_strategy)
+    original_token_cooldown = Application.get_env(:llm_proxy, :token_cooldown_ms)
+    original_public_url = Application.get_env(:llm_proxy, :public_url)
+    original_provider_token_codec = Application.fetch_env(:llm_proxy, :provider_token_codec)
+    original_provider_token_keyring = Application.fetch_env(:llm_proxy, :provider_token_keyring)
+
+    original_provider_token_allow_plaintext =
+      Application.fetch_env(:llm_proxy, :provider_token_allow_plaintext)
+
+    original_usage_auto_refresh = Application.get_env(:llm_proxy, :provider_usage_auto_refresh)
+
+    original_usage_interval =
+      Application.get_env(:llm_proxy, :provider_usage_refresh_interval_ms)
+
+    original_usage_timeout =
+      Application.get_env(:llm_proxy, :provider_usage_request_timeout_ms)
+
+    original_usage_stale_after =
+      Application.get_env(:llm_proxy, :provider_usage_stale_after_ms)
 
     on_exit(fn ->
       restore_env(:providers, original_providers)
@@ -18,9 +42,90 @@ defmodule LLMProxy.ConfigTest do
       restore_env(:models, original_models)
       restore_env(:body_limit_bytes, original_body_limit)
       restore_env(:provider_connect_timeout_ms, original_connect_timeout)
+      restore_env(:max_retries, original_max_retries)
+      restore_env(:replay_policy, original_replay_policy)
+      restore_env(:public_models, original_public_models)
+      restore_env(:token_selection_strategy, original_token_selection)
+      restore_env(:token_cooldown_ms, original_token_cooldown)
+      restore_env(:public_url, original_public_url)
+      restore_fetched_env(:provider_token_codec, original_provider_token_codec)
+      restore_fetched_env(:provider_token_keyring, original_provider_token_keyring)
+
+      restore_fetched_env(
+        :provider_token_allow_plaintext,
+        original_provider_token_allow_plaintext
+      )
+
+      restore_env(:provider_usage_auto_refresh, original_usage_auto_refresh)
+      restore_env(:provider_usage_refresh_interval_ms, original_usage_interval)
+      restore_env(:provider_usage_request_timeout_ms, original_usage_timeout)
+      restore_env(:provider_usage_stale_after_ms, original_usage_stale_after)
     end)
 
     :ok
+  end
+
+  test "validates the public model allowlist" do
+    Application.put_env(:llm_proxy, :public_models, ["model-a", "model-a", "model-b"])
+    assert Config.public_models() == ["model-a", "model-b"]
+
+    for invalid <- [[""], [" "], [nil], "model-a"] do
+      Application.put_env(:llm_proxy, :public_models, invalid)
+      assert_raise ArgumentError, fn -> Config.public_models() end
+    end
+  end
+
+  test "validates token cooldown bounds" do
+    Application.put_env(:llm_proxy, :token_cooldown_ms, 1)
+    assert Config.token_cooldown_ms() == 1
+
+    for invalid <- [0, -1, :timer.hours(24) * 31 + 1, "1000"] do
+      Application.put_env(:llm_proxy, :token_cooldown_ms, invalid)
+      assert_raise ArgumentError, fn -> Config.token_cooldown_ms() end
+    end
+  end
+
+  test "validates the token selection strategy" do
+    Application.delete_env(:llm_proxy, :token_selection_strategy)
+    assert Config.token_selection_strategy() == :affinity
+
+    Application.put_env(:llm_proxy, :token_selection_strategy, :fill_first)
+    assert Config.token_selection_strategy() == :fill_first
+
+    Application.put_env(:llm_proxy, :token_selection_strategy, :random)
+
+    assert_raise ArgumentError, ~r/must be :affinity or :fill_first/, fn ->
+      Config.token_selection_strategy()
+    end
+  end
+
+  test "validates exact provider usage configuration in library mode" do
+    valid = %{
+      "glm" => %{
+        adapter: :zai_coding_plan,
+        usage_adapter: "glm",
+        usage_auth_scheme: "bearer",
+        usage_paths: ["/api/monitor/usage"]
+      }
+    }
+
+    Application.put_env(:llm_proxy, :providers, valid)
+    assert Config.configured_providers() == valid
+
+    for invalid <- [
+          %{"glm" => %{usage_adapter: :glm}},
+          %{"glm" => %{usage_auth_scheme: :bearer}},
+          %{"glm" => %{usage_paths: "/api/monitor/usage"}},
+          %{"glm" => %{usage_paths: []}},
+          %{"glm" => %{usage_paths: ["relative"]}},
+          %{"glm" => %{usage_paths: ["/api usage"]}},
+          %{"glm" => %{usage_paths: ["/api\tusage"]}},
+          %{"glm" => %{usage_paths: [<<"/api/", 0xFF>>]}},
+          %{"glm" => %{usage_paths: ["/same", "/same"]}}
+        ] do
+      Application.put_env(:llm_proxy, :providers, invalid)
+      assert_raise ArgumentError, fn -> Config.configured_providers() end
+    end
   end
 
   test "configures the authenticated JSON body limit in bytes" do
@@ -45,12 +150,98 @@ defmodule LLMProxy.ConfigTest do
     end
   end
 
+  test "derives a finite attempt budget from max retries" do
+    Application.put_env(:llm_proxy, :max_retries, 2)
+
+    assert Config.max_retries() == 2
+    assert Config.max_attempts() == 3
+
+    Application.put_env(:llm_proxy, :max_retries, -1)
+
+    assert_raise ArgumentError, ~r/:max_retries must be a non-negative integer/, fn ->
+      Config.max_attempts()
+    end
+  end
+
+  test "configures an explicit replay policy" do
+    Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
+    assert Config.replay_policy() == :allow_uncertain
+
+    Application.put_env(:llm_proxy, :replay_policy, :always)
+    assert_raise ArgumentError, ~r/:replay_policy must be/, fn -> Config.replay_policy() end
+  end
+
+  test "builds the standalone codec from one secret keyring and TOML rollout policy" do
+    key = Base.encode64(:binary.copy(<<1>>, 32))
+    Application.delete_env(:llm_proxy, :provider_token_codec)
+
+    Application.put_env(:llm_proxy, :provider_token_keyring, %{
+      "active_key_id" => "v1",
+      "keys" => %{"v1" => key}
+    })
+
+    Application.put_env(:llm_proxy, :provider_token_allow_plaintext, false)
+
+    assert {AESGCM, options} = Config.provider_token_codec()
+    assert options[:active_key_id] == "v1"
+    assert options[:keys] == %{"v1" => key}
+    refute options[:allow_plaintext]
+    assert :ok = TokenCodec.validate_configuration()
+  end
+
+  test "plaintext-disabled standalone config fails closed when its keyring is absent" do
+    Application.delete_env(:llm_proxy, :provider_token_codec)
+    Application.delete_env(:llm_proxy, :provider_token_keyring)
+    Application.put_env(:llm_proxy, :provider_token_allow_plaintext, false)
+
+    assert {:error, :invalid_codec_options} =
+             TokenCodec.validate_configuration()
+  end
+
+  test "bounds provider usage refresh work" do
+    Application.put_env(:llm_proxy, :provider_usage_auto_refresh, true)
+    Application.put_env(:llm_proxy, :provider_usage_refresh_interval_ms, 60_000)
+    Application.put_env(:llm_proxy, :provider_usage_request_timeout_ms, 1_000)
+    Application.put_env(:llm_proxy, :provider_usage_stale_after_ms, 120_000)
+
+    assert Config.provider_usage_auto_refresh?()
+    assert Config.provider_usage_refresh_interval_ms() == 60_000
+    assert Config.provider_usage_request_timeout_ms() == 1_000
+    assert Config.provider_usage_stale_after_ms() == 120_000
+
+    Application.put_env(:llm_proxy, :provider_usage_refresh_interval_ms, 59_999)
+
+    assert_raise ArgumentError, ~r/provider_usage_refresh_interval_ms/, fn ->
+      Config.provider_usage_refresh_interval_ms()
+    end
+
+    Application.put_env(:llm_proxy, :provider_usage_refresh_interval_ms, 60_000)
+    Application.put_env(:llm_proxy, :provider_usage_request_timeout_ms, 30_001)
+
+    assert_raise ArgumentError, ~r/provider_usage_request_timeout_ms/, fn ->
+      Config.provider_usage_request_timeout_ms()
+    end
+  end
+
   test "configures bounded concurrent ReqLLM streaming pools" do
     assert ReqLLM.Application.get_finch_config()[:pools][:default] == [
              protocols: [:http1],
              size: 4,
              count: 8
            ]
+  end
+
+  test "uses the standalone public URL as OpenRouter's default referer" do
+    Application.put_env(:llm_proxy, :public_url, "https://llm.example.com")
+    Application.put_env(:llm_proxy, :providers, %{})
+
+    assert Config.provider_value("openrouter", :http_referer) == "https://llm.example.com"
+
+    Application.put_env(:llm_proxy, :providers, %{
+      "openrouter" => %{http_referer: "https://override.example"}
+    })
+
+    assert Config.provider_value("openrouter", :http_referer) == "https://override.example"
   end
 
   test "normalizes readable provider config" do
@@ -149,4 +340,7 @@ defmodule LLMProxy.ConfigTest do
 
   defp restore_env(key, nil), do: Application.delete_env(:llm_proxy, key)
   defp restore_env(key, value), do: Application.put_env(:llm_proxy, key, value)
+
+  defp restore_fetched_env(key, {:ok, value}), do: Application.put_env(:llm_proxy, key, value)
+  defp restore_fetched_env(key, :error), do: Application.delete_env(:llm_proxy, key)
 end

@@ -18,13 +18,14 @@ defmodule LLMProxy.Providers.Routing.Performance do
   @minimum_samples 3
   @max_age_ms :timer.minutes(5)
   @near_best_ratio 0.10
+  @telemetry_events [:attempt, :stream_attempt, :native_attempt, :native_stream_attempt]
 
   @type stats :: %{
           success_count: non_neg_integer(),
+          ttft_count: non_neg_integer(),
           error_count: non_neg_integer(),
           median_duration_ms: number() | nil,
           median_ttft_ms: number() | nil,
-          median_tokens_per_second: number() | nil,
           updated_at: integer() | nil
         }
 
@@ -34,7 +35,12 @@ defmodule LLMProxy.Providers.Routing.Performance do
 
   @spec observe(Attempt.t(), Sample.t(), atom() | nil) :: :ok
   def observe(%Attempt{} = attempt, %Sample{} = sample, event \\ nil) do
+    sample = Sample.validate!(sample)
     event = event || if(sample.stream, do: :stream_attempt, else: :attempt)
+
+    if event not in @telemetry_events do
+      raise ArgumentError, "invalid routing performance telemetry event"
+    end
 
     Telemetry.emit(
       [:routing, event, :complete],
@@ -64,49 +70,52 @@ defmodule LLMProxy.Providers.Routing.Performance do
 
   @impl GenServer
   def handle_cast({:observe, key, sample}, state) do
-    entry = Map.get(state.observations, key, empty_entry())
+    observations = prune_observations(state.observations, now_ms())
+    entry = Map.get(observations, key, empty_entry())
 
     entry =
       case sample.outcome do
         :success ->
-          samples = [sample | entry.samples] |> Enum.take(@sample_size)
-          %{entry | samples: samples, updated_at: sample.observed_at}
+          %{entry | samples: Enum.take([sample | entry.samples], @sample_size)}
 
         :error ->
-          %{entry | error_count: entry.error_count + 1, updated_at: sample.observed_at}
+          %{entry | errors: Enum.take([sample.observed_at | entry.errors], @sample_size)}
       end
 
-    {:noreply, put_in(state, [:observations, key], entry)}
+    entry = %{entry | updated_at: sample.observed_at}
+    {:noreply, %{state | observations: Map.put(observations, key, entry)}}
   end
 
   @impl GenServer
   def handle_call({:order, model, deployments, request}, _from, state) do
-    {ordered, decisions} = order_groups(model, deployments, request, state)
-    {:reply, ordered, %{state | decisions: decisions}}
+    now = now_ms()
+    observations = prune_observations(state.observations, now)
+    ordered = order_groups(model, deployments, request, observations, state.decision_offset, now)
+
+    {:reply, ordered,
+     %{state | observations: observations, decision_offset: state.decision_offset + 1}}
   end
 
   def handle_call({:stats, key}, _from, state) do
-    entry = Map.get(state.observations, key, empty_entry())
-    {:reply, summarize(entry, now_ms()), state}
+    now = now_ms()
+    observations = prune_observations(state.observations, now)
+    entry = Map.get(observations, key, empty_entry())
+    {:reply, summarize(entry, now), %{state | observations: observations}}
   end
 
   def handle_call(:reset, _from, _state), do: {:reply, :ok, empty_state()}
 
-  defp order_groups(model, deployments, request, state) do
+  defp order_groups(_model, deployments, request, observations, offset, now) do
     deployments
     |> Enum.group_by(& &1.order)
     |> Enum.sort_by(&elem(&1, 0))
-    |> Enum.map_reduce(state.decisions, fn {order, group}, decisions ->
-      decision_key = {model, order, request.protocol, request.stream == true}
-      offset = Map.get(decisions, decision_key, 0)
-      ordered = order_group(group, request, state.observations, offset)
-      {ordered, Map.put(decisions, decision_key, offset + 1)}
+    |> Enum.flat_map(fn {_order, group} ->
+      order_group(group, request, observations, offset, now)
     end)
-    |> then(fn {groups, decisions} -> {List.flatten(groups), decisions} end)
   end
 
-  defp order_group(deployments, request, observations, offset) do
-    now = now_ms()
+  defp order_group(deployments, request, observations, offset, now) do
+    stream? = request.stream == true
 
     ranked =
       Enum.map(deployments, fn deployment ->
@@ -117,74 +126,60 @@ defmodule LLMProxy.Providers.Routing.Performance do
 
     {cold, warm} =
       Enum.split_with(ranked, fn {_deployment, stats} ->
-        stats.success_count < @minimum_samples or stale?(stats.updated_at, now)
+        sample_count(stats, stream?) < @minimum_samples
       end)
 
-    case cold do
-      [] ->
-        order_warm(warm, request.stream == true, offset)
-
-      _cold ->
-        rotate(Enum.map(cold, &elem(&1, 0)), offset) ++
-          order_warm(warm, request.stream == true, offset)
-    end
+    rotate(Enum.map(cold, &elem(&1, 0)), offset) ++ order_warm(warm, stream?, offset)
   end
+
+  defp sample_count(stats, true), do: stats.ttft_count
+  defp sample_count(stats, false), do: stats.success_count
 
   defp order_warm([], _stream, _offset), do: []
 
-  defp order_warm(ranked, stream, offset) do
-    sorted = Enum.sort_by(ranked, fn {_deployment, stats} -> routing_score(stats, stream) end)
-    best_latency = sorted |> hd() |> elem(1) |> routing_latency(stream)
+  defp order_warm(ranked, stream?, offset) do
+    sorted = Enum.sort_by(ranked, fn {_deployment, stats} -> routing_score(stats, stream?) end)
+    best_latency = sorted |> hd() |> elem(1) |> routing_latency(stream?)
     threshold = best_latency * (1 + @near_best_ratio)
 
     {near_best, rest} =
       Enum.split_while(sorted, fn {_deployment, stats} ->
-        routing_latency(stats, stream) <= threshold
+        routing_latency(stats, stream?) <= threshold
       end)
 
     rotate(Enum.map(near_best, &elem(&1, 0)), offset) ++ Enum.map(rest, &elem(&1, 0))
   end
 
-  defp routing_score(stats, true) do
-    {
-      routing_latency(stats, true),
-      stats.median_duration_ms || :infinity,
-      negate(stats.median_tokens_per_second)
-    }
-  end
-
-  defp routing_score(stats, false) do
-    {
-      routing_latency(stats, false),
-      negate(stats.median_tokens_per_second)
-    }
-  end
-
-  defp routing_latency(stats, true),
-    do: stats.median_ttft_ms || stats.median_duration_ms || :infinity
-
-  defp routing_latency(stats, false), do: stats.median_duration_ms || :infinity
+  defp routing_score(stats, true), do: stats.median_ttft_ms
+  defp routing_score(stats, false), do: stats.median_duration_ms
+  defp routing_latency(stats, true), do: stats.median_ttft_ms
+  defp routing_latency(stats, false), do: stats.median_duration_ms
 
   defp summarize(entry, now) do
     samples = Enum.reject(entry.samples, &(now - &1.observed_at > @max_age_ms))
+    errors = Enum.reject(entry.errors, &(now - &1 > @max_age_ms))
+    ttfts = samples |> Enum.map(& &1.ttft_ms) |> Enum.reject(&is_nil/1)
 
     %{
       success_count: length(samples),
-      error_count: entry.error_count,
+      ttft_count: length(ttfts),
+      error_count: length(errors),
       median_duration_ms: samples |> Enum.map(& &1.duration_ms) |> median(),
-      median_ttft_ms: samples |> Enum.map(& &1.ttft_ms) |> Enum.reject(&is_nil/1) |> median(),
-      median_tokens_per_second:
-        samples |> Enum.map(&Sample.tokens_per_second/1) |> Enum.reject(&is_nil/1) |> median(),
-      updated_at: if(samples == [], do: nil, else: entry.updated_at)
+      median_ttft_ms: median(ttfts),
+      updated_at: if(samples == [] and errors == [], do: nil, else: entry.updated_at)
     }
+  end
+
+  defp prune_observations(observations, now) do
+    Map.reject(observations, fn {_key, entry} ->
+      is_nil(entry.updated_at) or now - entry.updated_at > @max_age_ms
+    end)
   end
 
   defp measurements(sample) do
     %{duration_ms: sample.duration_ms}
     |> put_measurement(:output_tokens, sample.output_tokens)
     |> put_measurement(:ttft_ms, sample.ttft_ms)
-    |> put_measurement(:generation_ms, sample.generation_ms)
-    |> put_measurement(:tokens_per_second, Sample.tokens_per_second(sample))
   end
 
   defp put_measurement(measurements, _key, nil), do: measurements
@@ -195,9 +190,6 @@ defmodule LLMProxy.Providers.Routing.Performance do
 
   defp request_key(attempt, request),
     do: {Attempt.key(attempt), request.protocol, request.stream == true}
-
-  defp stale?(nil, _now), do: true
-  defp stale?(updated_at, now), do: now - updated_at > @max_age_ms
 
   defp median([]), do: nil
 
@@ -220,10 +212,7 @@ defmodule LLMProxy.Providers.Routing.Performance do
     right ++ left
   end
 
-  defp negate(nil), do: 0
-  defp negate(value), do: -value
-
-  defp empty_entry, do: %{samples: [], error_count: 0, updated_at: nil}
-  defp empty_state, do: %{observations: %{}, decisions: %{}}
+  defp empty_entry, do: %{samples: [], errors: [], updated_at: nil}
+  defp empty_state, do: %{observations: %{}, decision_offset: 0}
   defp now_ms, do: System.monotonic_time(:millisecond)
 end

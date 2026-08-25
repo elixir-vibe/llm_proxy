@@ -1,10 +1,11 @@
 defmodule LLMProxy.Config.Provider do
   @moduledoc """
-  Release config provider for optional standalone LLMProxy TOML config.
+  Release config provider for strict standalone LLMProxy TOML configuration.
 
-  This provider is intended for the standalone OTP release. It is no-op when the
-  configured TOML file is absent, so embedding applications are unaffected and
-  continue to use normal `config :llm_proxy` application configuration.
+  This provider is intended for the standalone OTP release and merges server,
+  storage, routing, telemetry, provider, and model data. It is no-op when the
+  configured TOML file is absent, so embedding applications remain configured
+  through ordinary Elixir application configuration.
   """
 
   @behaviour Config.Provider
@@ -27,7 +28,7 @@ defmodule LLMProxy.Config.Provider do
     path = opts |> Keyword.fetch!(:path) |> resolve_path()
 
     if File.regular?(path) do
-      Config.Reader.merge(config, llm_proxy: load_toml!(path))
+      Config.Reader.merge(config, load_toml!(path))
     else
       config
     end
@@ -44,8 +45,8 @@ defmodule LLMProxy.Config.Provider do
       {:ok, config} ->
         config
 
-      {:error, reason} ->
-        raise ArgumentError, "invalid LLMProxy TOML config #{path}: #{inspect(reason)}"
+      {:error, _reason} ->
+        raise ArgumentError, "invalid LLMProxy TOML config #{path}"
     end
   end
 end

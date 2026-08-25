@@ -19,33 +19,66 @@ The loopback bind is intentional. Put a reverse proxy, ingress, or service mesh 
 
 ## Secrets and runtime values
 
-Set secrets in the service environment:
+Set only secrets and the optional config-file location in the service
+environment:
 
 ```bash
 MASTER_KEY="replace-with-a-long-random-key"
-OPENAI_API_KEYS="sk-primary,sk-secondary"
-ANTHROPIC_API_KEYS="sk-ant-..."
-OPENROUTER_API_KEYS="sk-or-..."
-DATABASE_PATH="/var/lib/llm-proxy/llm_proxy.duckdb"
-PORT="4000"
-PUBLIC_URL="https://llm.example.com"
+LLM_PROXY_PROVIDER_KEYS='{"openai":["sk-primary"],"anthropic":["sk-ant-..."]}'
+LLM_PROXY_PROVIDER_TOKEN_KEYRING='{"active_key_id":"2026-08","keys":{"2026-08":"base64-encoded-32-byte-key"}}'
+LLM_PROXY_CONFIG_TOML="/etc/llm-proxy/config.toml"
 ```
 
-`MASTER_KEY` is the bootstrap and operator credential. Provider-key variables seed persisted token records at startup. Existing records remain the runtime source after seeding.
+`MASTER_KEY` is the bootstrap and operator credential. `LLM_PROXY_PROVIDER_KEYS`
+seeds API-key pools by pool name. Existing records remain the runtime source
+after seeding. Provision Codex OAuth through the admin login flow rather than an
+environment variable.
 
-For named configuration-driven providers, seed isolated token pools with JSON:
+The provider-token keyring is separate from `MASTER_KEY`. Store it in the
+service secret manager and back it up separately from the database. Loss of all
+keyring copies makes encrypted provider tokens unrecoverable. Keep prior key IDs
+in the JSON map until all rows are rotated and verified.
+
+The same JSON object can seed isolated pools for configuration-driven providers:
 
 ```bash
 LLM_PROXY_PROVIDER_KEYS='{"example-production":["secret-key"]}'
 ```
 
-Never put API keys, OAuth tokens, or proxy credentials in TOML.
+Never put API keys, OAuth tokens, encryption keys, or proxy credentials in TOML.
+The strict TOML loader rejects provider credential fields.
 
 ## Data configuration
 
 The release optionally reads `/etc/llm-proxy/config.toml`. Override that path with `LLM_PROXY_CONFIG_TOML`.
 
 ```toml
+[server]
+port = 4000
+public_url = "https://llm.example.com"
+body_limit_bytes = 32000000
+rpc_socket = "/run/llm-proxy/rpc.sock"
+
+[storage]
+database = "/var/lib/llm-proxy/llm_proxy.duckdb"
+quackdb_uri = "http://127.0.0.1:9494"
+quackdb_endpoint = "quack:localhost:9494"
+
+[routing]
+max_retries = 1
+replay_policy = "safe_only"
+provider_connect_timeout_ms = 10000
+
+[telemetry]
+otlp_endpoint = "http://127.0.0.1:4318"
+
+[provider_tokens]
+allow_plaintext = true
+selection_strategy = "affinity"
+
+[catalog]
+public_models = ["coding"]
+
 [providers.example-service]
 adapter = "openai"
 base_url = "https://api.example.com/v1"
@@ -63,21 +96,26 @@ failure_threshold = 3
 cooldown_ms = 30000
 ```
 
-The TOML loader accepts provider and model data only. Secrets remain in environment variables or persisted provider-token storage. If the file is absent, startup continues with environment and compiled configuration.
+The TOML loader accepts server, storage, routing, telemetry,
+provider-token rollout, catalog, provider, and model data. The optional
+`catalog.public_models` list exposes only named visible catalog aliases for
+model discovery and request admission; an empty list exposes none. It rejects
+unknown keys rather than silently ignoring misspelled settings. Secrets remain
+in environment variables or persisted provider-token storage. If the file is absent, startup
+continues with compiled defaults and secret environment configuration. Set
+`provider_tokens.allow_plaintext = false` only after encrypting and verifying all
+stored credentials; with that policy, a missing keyring fails startup.
+`provider_tokens.selection_strategy` accepts `affinity` or `fill_first` and is
+not read from the environment.
 
 See [Providers and Routing](../features/providers-and-routing.md) for the complete model shape.
 
 ## Storage
 
-Production uses `LLMProxy.Storage.Repo.QuackDB` and a managed QuackDB process backed by the file at `DATABASE_PATH`.
-
-Related settings:
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `DATABASE_PATH` | `./llm_proxy.duckdb` | DuckDB database file |
-| `QUACKDB_URI` | `http://127.0.0.1:9494` | Ecto adapter endpoint |
-| `QUACKDB_ENDPOINT` | `quack:localhost:9494` | Managed QuackDB listener |
+Production uses `LLMProxy.Storage.Repo.QuackDB` and a managed QuackDB process.
+Configure its database path, Ecto URI, and listener endpoint under `[storage]` in
+TOML. Defaults are `./llm_proxy.duckdb`, `http://127.0.0.1:9494`, and
+`quack:localhost:9494` respectively.
 
 Run migrations before starting a new release:
 
@@ -121,16 +159,19 @@ curl http://127.0.0.1:4000/v1/chat/completions \
   }'
 ```
 
-The default authenticated JSON body limit is 32 MB. Set `LLM_PROXY_BODY_LIMIT_BYTES` to a positive integer to change it. Authentication and quota checks run before the body is read and decoded.
+The default authenticated JSON body limit is 32 MB. Set
+`server.body_limit_bytes` to a positive integer to change it. Authentication and
+quota checks run before the body is read and decoded.
 
 Streaming endpoints emit SSE comment heartbeats while an upstream stream is silent. Heartbeats keep connections alive without changing OpenAI or Anthropic event payloads.
 
 ## SafeRPC and admin
 
-Set a Unix socket path to start the SafeRPC server:
+Set `server.rpc_socket` in TOML to start the SafeRPC server:
 
-```bash
-LLM_PROXY_RPC_SOCKET="/run/llm-proxy/rpc.sock"
+```toml
+[server]
+rpc_socket = "/run/llm-proxy/rpc.sock"
 ```
 
 Remote Elixir callers can execute `LLMProxy.chat` through SafeRPC. When Incant is installed, a separate Incant host can also discover and render LLMProxy's admin resources over this socket.
@@ -139,13 +180,15 @@ The public gateway does not mount an admin UI or Incant API. This keeps model tr
 
 ## Observability
 
-Set an OTLP endpoint to export traces:
+Set `telemetry.otlp_endpoint` in TOML to export traces:
 
-```bash
-OTEL_EXPORTER_OTLP_ENDPOINT="http://127.0.0.1:4318"
+```toml
+[telemetry]
+otlp_endpoint = "http://127.0.0.1:4318"
 ```
 
-Without that variable, OpenTelemetry instrumentation remains active but export is disabled.
+Without that setting, OpenTelemetry instrumentation remains active but export is
+disabled.
 
 Every generation receives a trace ID. HTTP responses return it as `x-request-id` and `x-llm-proxy-trace-id`; in-process responses expose `response.trace_id`.
 

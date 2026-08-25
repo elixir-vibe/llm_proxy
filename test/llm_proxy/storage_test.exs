@@ -1,8 +1,11 @@
 defmodule LLMProxy.StorageTest do
   use ExUnit.Case
 
+  alias LLMProxy.Schemas.ProviderTokenCooldown
   alias LLMProxy.Storage
   alias LLMProxy.Storage.Repo.SQLite
+  alias LLMProxy.TokenPool.Cooldown
+  alias LLMProxy.TokenPool.Server, as: TokenPool
 
   alias Ecto.Adapters.SQL.Sandbox
 
@@ -16,9 +19,21 @@ defmodule LLMProxy.StorageTest do
 
       assert key.name == "test-user"
       assert key.input_tokens == 0
+      assert key.capture_content == false
 
       found = Storage.find_key(raw_key)
       assert found.id == key.id
+    end
+
+    test "content capture is an explicit per-key setting" do
+      {:ok, key, raw_key} = Storage.create_key("content-user", %{capture_content: true})
+
+      assert key.capture_content == true
+      assert Storage.find_key(raw_key).capture_content == true
+
+      assert {:ok, updated_key} = Storage.set_content_capture(key.id, false)
+      assert updated_key.capture_content == false
+      assert Storage.find_key(raw_key).capture_content == false
     end
 
     test "find_key returns nil for unknown key" do
@@ -303,6 +318,7 @@ defmodule LLMProxy.StorageTest do
 
       assert token.provider == "anthropic"
       assert token.kind == "oauth"
+      assert token.priority == 0
       assert token.enabled == true
 
       tokens = Storage.get_tokens("anthropic", "oauth")
@@ -310,6 +326,21 @@ defmodule LLMProxy.StorageTest do
 
       {:ok, _} = Storage.remove_token(token.id)
       assert Storage.get_tokens("anthropic", "oauth") == []
+    end
+
+    test "removing a token removes its cooldown records" do
+      {:ok, token} = Storage.add_token("anthropic", "oauth", "tok-123")
+      TokenPool.mark_rate_limited(token, "claude", 60_000)
+
+      lookup = [
+        token_id: token.id,
+        scope: "model",
+        model_key: Cooldown.model_key!("claude")
+      ]
+
+      assert SQLite.get_by(ProviderTokenCooldown, lookup)
+      assert {:ok, _token} = Storage.remove_token(token.id)
+      refute SQLite.get_by(ProviderTokenCooldown, lookup)
     end
 
     test "disable token excludes from get_tokens" do
@@ -338,6 +369,16 @@ defmodule LLMProxy.StorageTest do
                Storage.add_token("openai", "api-key", "tok", %{proxy: "file:///etc/passwd"})
 
       assert changeset.errors[:proxy]
+
+      assert {:error, changeset} =
+               Storage.add_token("openai", "api-key", "tok", %{priority: -1})
+
+      assert changeset.errors[:priority]
+
+      assert {:error, changeset} =
+               Storage.add_token("openai", "api-key", "tok", %{priority: nil})
+
+      assert changeset.errors[:priority]
     end
   end
 

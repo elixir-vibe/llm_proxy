@@ -1,5 +1,5 @@
 defmodule LLMProxy.Providers.ExecutionTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.Attempt
@@ -19,6 +19,52 @@ defmodule LLMProxy.Providers.ExecutionTest do
     def name, do: "fail"
     def call(_body, _user_id), do: {:error, Result.error("server error", 500, nil)}
     def stream(_body, _user_id), do: {:error, Result.error("server error", 500, nil)}
+  end
+
+  defmodule ConnectFailProvider do
+    def name, do: "connect-fail"
+
+    def call(_body, _user_id),
+      do: {:error, Result.error("connection refused", 502, nil, replay_safety: :safe)}
+
+    def stream(_body, _user_id),
+      do: {:error, Result.error("connection refused", 502, nil, replay_safety: :safe)}
+  end
+
+  defmodule SlowProvider do
+    def name, do: "slow"
+
+    def call(_body, _user_id) do
+      Process.sleep(100)
+      {:ok, Result.response(%{"late" => true}, nil)}
+    end
+  end
+
+  defmodule SecondSafeFailProvider do
+    def name, do: "second-safe-fail"
+
+    def call(_body, user_id) do
+      send(user_id, :second_attempt)
+      {:error, Result.error("not dispatched", 503, nil, replay_safety: :safe)}
+    end
+  end
+
+  defmodule CountingSuccessProvider do
+    def name, do: "counting-success"
+
+    def call(_body, user_id) do
+      send(user_id, :third_attempt)
+      {:ok, Result.response(%{"ok" => true}, nil)}
+    end
+  end
+
+  defmodule PartialStreamProvider do
+    def name, do: "partial-stream"
+
+    def stream(_body, _user_id) do
+      tail = Stream.map([:failure], fn _ -> raise "stream failed after output" end)
+      {:ok, Result.stream(Stream.concat([Event.new(%{"partial" => true})], tail), nil)}
+    end
   end
 
   defmodule RaisingProvider do
@@ -93,6 +139,14 @@ defmodule LLMProxy.Providers.ExecutionTest do
     end
   end
 
+  defmodule InBandErrorStreamProvider do
+    def name, do: "in-band-error-stream"
+
+    def stream(_body, _user_id) do
+      {:ok, Result.stream([Event.new(%{"error" => "failed"}, kind: :error)], nil)}
+    end
+  end
+
   defmodule FallbackProvider do
     def name, do: "fallback"
     def models, do: ["fallback-model"]
@@ -121,6 +175,8 @@ defmodule LLMProxy.Providers.ExecutionTest do
 
     on_exit(fn ->
       Application.delete_env(:llm_proxy, :fallbacks)
+      Application.delete_env(:llm_proxy, :max_retries)
+      Application.delete_env(:llm_proxy, :replay_policy)
       CircuitBreaker.reset()
       Performance.reset()
     end)
@@ -165,8 +221,9 @@ defmodule LLMProxy.Providers.ExecutionTest do
   end
 
   describe "call/4 with fallbacks" do
-    test "tries configured fallback providers on retryable errors" do
+    test "compatibility policy permits fallback after uncertain server errors" do
       Application.put_env(:llm_proxy, :fallbacks, %{"m" => ["fallback-model"]})
+      Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
 
       assert {:ok,
               %{
@@ -175,6 +232,130 @@ defmodule LLMProxy.Providers.ExecutionTest do
                 model: "fallback-model"
               }} =
                Execution.call(FailProvider, request("m"), "user", "m")
+    end
+
+    test "does not replay uncertain server errors by default" do
+      Application.put_env(:llm_proxy, :fallbacks, %{"m" => ["fallback-model"]})
+
+      assert {:error, %Result{status: 500, provider: FailProvider}} =
+               Execution.call(FailProvider, request("m"), "user", "m")
+    end
+
+    test "replays clear connect failures" do
+      Application.put_env(:llm_proxy, :fallbacks, %{"m" => ["fallback-model"]})
+
+      assert {:ok, %Result{provider: FallbackProvider}} =
+               Execution.call(ConnectFailProvider, request("m"), "user", "m")
+    end
+
+    test "does not replay a timeout without explicit uncertain replay" do
+      attempts = [
+        %Attempt{provider: SlowProvider, model: "m", timeout_ms: 1},
+        {FallbackProvider, "fallback-model"}
+      ]
+
+      assert {:error, %Result{status: 504, provider: SlowProvider}} =
+               Execution.call_attempts(attempts, request("m"), "user")
+    end
+
+    test "enforces the provider dispatch budget" do
+      Application.put_env(:llm_proxy, :max_retries, 1)
+
+      attempts = [
+        %Attempt{
+          provider: ConnectFailProvider,
+          model: "m",
+          failure_threshold: 10
+        },
+        %Attempt{
+          provider: SecondSafeFailProvider,
+          model: "m",
+          failure_threshold: 10
+        },
+        {CountingSuccessProvider, "m"}
+      ]
+
+      assert {:error, %Result{provider: SecondSafeFailProvider}} =
+               Execution.call_attempts(attempts, request("m"), self())
+
+      assert_received :second_attempt
+      refute_received :third_attempt
+    end
+
+    test "open-circuit skips do not consume the dispatch budget" do
+      Application.put_env(:llm_proxy, :max_retries, 0)
+      handler_id = {__MODULE__, self(), :circuit_skip}
+      parent = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:llm_proxy, :routing, :attempt, :skip],
+        fn event, measurements, metadata, _config ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      skipped = %Attempt{
+        provider: ConnectFailProvider,
+        model: "m",
+        failure_threshold: 1,
+        cooldown_ms: 10_000
+      }
+
+      CircuitBreaker.failure(skipped)
+
+      assert {:ok, %Result{provider: CountingSuccessProvider}} =
+               Execution.call_attempts(
+                 [skipped, {CountingSuccessProvider, "m"}],
+                 request("m"),
+                 self()
+               )
+
+      assert_received :third_attempt
+
+      assert_receive {:telemetry, [:llm_proxy, :routing, :attempt, :skip], %{}, metadata}
+      assert metadata.attempt_number == 0
+      assert metadata.max_attempts == 1
+      assert metadata.replay_safety == :safe
+      assert metadata.replay_decision == :retry
+      assert metadata.replay_reason == :circuit_open
+    end
+
+    test "emits bounded content-free replay metadata" do
+      handler_id = {__MODULE__, self(), :replay_metadata}
+      parent = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:llm_proxy, :routing, :attempt, :exception],
+        fn event, measurements, metadata, _config ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, %Result{provider: FallbackProvider}} =
+               Execution.call_attempts(
+                 [
+                   {RateLimitedProvider, "seeded-secret-model"},
+                   {FallbackProvider, "fallback-model"}
+                 ],
+                 request("seeded-secret-request"),
+                 "user"
+               )
+
+      assert_receive {:telemetry, _, %{status: 429}, metadata}
+      assert metadata.attempt_number == 1
+      assert metadata.max_attempts == 2
+      assert metadata.replay_safety == :safe
+      assert metadata.replay_decision == :retry
+      assert metadata.replay_reason == :safe_failure
+      refute inspect(metadata) =~ "seeded-secret-request"
     end
 
     test "tries fallbacks on rate limits" do
@@ -206,6 +387,40 @@ defmodule LLMProxy.Providers.ExecutionTest do
   end
 
   describe "native attempts" do
+    test "reports unsupported protocol skips without consuming the budget" do
+      handler_id = {__MODULE__, self(), :unsupported_native_skip}
+      parent = self()
+
+      :telemetry.attach(
+        handler_id,
+        [:llm_proxy, :routing, :native_attempt, :skip],
+        fn event, measurements, metadata, _config ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn -> :telemetry.detach(handler_id) end)
+
+      assert {:ok, %Result{provider: NativeBodyProvider}} =
+               Execution.call_native_attempts(
+                 [
+                   {SuccessProvider, "unsupported-native"},
+                   {NativeBodyProvider, "upstream-native"}
+                 ],
+                 request("public-alias"),
+                 "user",
+                 "Native API"
+               )
+
+      assert_receive {:telemetry, [:llm_proxy, :routing, :native_attempt, :skip], %{}, metadata}
+      assert metadata.attempt_number == 0
+      assert metadata.max_attempts == 2
+      assert metadata.replay_safety == :safe
+      assert metadata.replay_decision == :retry
+      assert metadata.replay_reason == :unsupported_protocol
+    end
+
     test "send the upstream attempt model in native bodies" do
       assert {:ok, %Result{response: %{"ok" => true}, provider: NativeBodyProvider}} =
                Execution.call_native_attempts(
@@ -264,7 +479,7 @@ defmodule LLMProxy.Providers.ExecutionTest do
   end
 
   describe "stream performance observations" do
-    test "records complete stream latency, first output latency, and throughput" do
+    test "records stream duration, first output latency, and output tokens" do
       handler_id = {__MODULE__, self(), :stream_performance}
       parent = self()
 
@@ -292,15 +507,40 @@ defmodule LLMProxy.Providers.ExecutionTest do
 
       assert measurements.duration_ms >= measurements.ttft_ms
       assert measurements.ttft_ms > 0
-      assert measurements.generation_ms > 0
       assert measurements.output_tokens == 10
-      assert measurements.tokens_per_second > 0
+      refute Map.has_key?(measurements, :generation_ms)
+      refute Map.has_key?(measurements, :tokens_per_second)
+    end
+
+    test "records an in-band stream error as a failed observation" do
+      request = stream_request("failed")
+
+      assert {:ok, %Result{stream: stream}} =
+               Execution.stream(InBandErrorStreamProvider, request, "user", "failed")
+
+      assert [%Event{kind: :error}] = Enum.to_list(stream)
+
+      attempt = %Attempt{provider: InBandErrorStreamProvider, model: "failed"}
+      assert %{success_count: 0, error_count: 1} = Performance.stats(attempt, request)
     end
   end
 
   describe "stream/4 with fallbacks" do
-    test "tries configured fallback streams on retryable errors" do
+    test "replays clear stream setup connect failures" do
+      assert {:ok, %Result{provider: FallbackProvider}} =
+               Execution.stream_attempts(
+                 [
+                   {ConnectFailProvider, "m"},
+                   {FallbackProvider, "fallback-model"}
+                 ],
+                 stream_request("m"),
+                 "user"
+               )
+    end
+
+    test "compatibility policy permits fallback streams after uncertain errors" do
       Application.put_env(:llm_proxy, :fallbacks, %{"m" => ["fallback-model"]})
+      Application.put_env(:llm_proxy, :replay_policy, :allow_uncertain)
 
       assert {:ok,
               %{
@@ -311,6 +551,20 @@ defmodule LLMProxy.Providers.ExecutionTest do
                Execution.stream(FailProvider, request("m"), "user", "m")
 
       assert [%Event{data: %{"ok" => true}}] = Enum.to_list(stream)
+    end
+
+    test "never falls back after stream output becomes visible" do
+      assert {:ok, %Result{provider: PartialStreamProvider, stream: stream}} =
+               Execution.stream_attempts(
+                 [
+                   {PartialStreamProvider, "m"},
+                   {FallbackProvider, "fallback-model"}
+                 ],
+                 stream_request("m"),
+                 "user"
+               )
+
+      assert_raise RuntimeError, "stream failed after output", fn -> Enum.to_list(stream) end
     end
   end
 

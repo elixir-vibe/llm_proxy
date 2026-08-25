@@ -3,7 +3,9 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
 
   alias LLMProxy.HTTP.Routes.ResponseEndpoint
   alias LLMProxy.Providers.{Registry, Result}
+  alias LLMProxy.Schemas.ProviderTokenCooldown
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo
   alias LLMProxy.Stream.Event
   alias LLMProxy.TestSupport
 
@@ -77,7 +79,8 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
        )}
     end
 
-    def stream_error(reason, token), do: Result.error(Exception.message(reason), 400, token)
+    def stream_error(reason, token, _model),
+      do: Result.error(Exception.message(reason), 400, token)
   end
 
   setup do
@@ -201,6 +204,11 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
 
     assert conn.status == 429
     assert get_in(Jason.decode!(conn.resp_body), ["error", "message"]) == "slow down"
+
+    assert [%ProviderTokenCooldown{scope: "model", model_key: model_key}] =
+             Repo.all(ProviderTokenCooldown)
+
+    assert byte_size(model_key) == 64
   end
 
   test "returns provider errors" do

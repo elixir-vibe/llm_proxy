@@ -23,23 +23,27 @@ if Code.ensure_loaded?(Incant) do
 
       assert Enum.map(api_key.table.columns, & &1.id) == [
                "name",
+               "enabled",
                "total_spend_usd",
                "input_tokens",
                "output_tokens",
                "cache_read_tokens",
-               "trace_requests"
+               "trace_requests",
+               "capture_content"
              ]
 
       assert Enum.map(api_key.table.columns, & &1.opts[:priority]) == [
                :primary,
                :primary,
+               :primary,
                :secondary,
                :secondary,
                :tertiary,
+               :secondary,
                :secondary
              ]
 
-      assert Enum.map(api_key.table.actions, & &1.id) == ["delete"]
+      assert Enum.map(api_key.table.actions, & &1.id) == ["delete", "disable", "enable"]
       assert Enum.map(api_key.table.page_actions, & &1.id) == ["create"]
       refute Map.has_key?(api_key.opts, :schema)
 
@@ -60,11 +64,24 @@ if Code.ensure_loaded?(Incant) do
                "user_message"
              ]
 
-      refute Enum.find(message.table.columns, &(&1.id == "user_message")).opts[:sensitive]
+      assert Enum.find(message.table.columns, &(&1.id == "user_message")).opts[:sensitive]
+
+      secret = "seeded-admin-message-2d4a"
+      message_resource = Incant.metadata(LLMProxy.Admin.Resources.Message)
+
+      redacted =
+        Incant.Sensitive.redact_row(
+          %{id: 1, model: "test", user_message: secret},
+          message_resource
+        )
+
+      assert redacted.user_message == "[redacted]"
+      refute inspect(redacted) =~ secret
 
       assert Enum.map(provider_token.table.page_actions, & &1.id) == [
                "codex_oauth_start",
-               "codex_oauth_complete"
+               "codex_oauth_complete",
+               "refresh_all_usage"
              ]
 
       provider_filter = Enum.find(provider_token.table.filters, &(&1.id == "provider"))
@@ -81,14 +98,20 @@ if Code.ensure_loaded?(Incant) do
       provider_metadata = Incant.metadata(LLMProxy.Admin.Resources.ProviderToken)
       enable = Enum.find(provider_metadata.table.actions, &(&1.name == :enable))
       disable = Enum.find(provider_metadata.table.actions, &(&1.name == :disable))
+      refresh_usage = Enum.find(provider_metadata.table.actions, &(&1.name == :refresh_usage))
 
       assert enable.opts[:callback] == {LLMProxy.Admin.Resources.ProviderToken, :enable}
       assert enable.opts[:available_if] == [enabled: false]
       assert disable.opts[:callback] == {LLMProxy.Admin.Resources.ProviderToken, :disable}
       assert disable.opts[:available_if] == [enabled: true]
       assert disable.opts[:confirm] == "Disable this provider token?"
+      assert Enum.find(provider_metadata.table.columns, &(&1.name == :proxy)).opts[:sensitive]
+      assert refresh_usage.opts[:available_if] == [enabled: true]
 
-      assert [%{id: "operations", title: "Operations"} = dashboard] = contract.dashboards
+      assert [
+               %{id: "operations", title: "Operations"} = dashboard,
+               %{id: "provider_usage", title: "Provider Usage"} = provider_usage
+             ] = contract.dashboards
 
       assert Enum.map(dashboard.widgets, & &1.id) == [
                "api_keys",
@@ -144,6 +167,32 @@ if Code.ensure_loaded?(Incant) do
              ]
 
       assert Enum.all?(dashboard.widgets, fn widget -> not Map.has_key?(widget.opts, :query) end)
+
+      assert Enum.map(provider_usage.widgets, & &1.id) == [
+               "accounts",
+               "available",
+               "attention",
+               "usage_windows"
+             ]
+
+      usage_windows = Enum.find(provider_usage.widgets, &(&1.id == "usage_windows"))
+
+      assert Enum.map(usage_windows.opts.columns, & &1.name) == [
+               :provider,
+               :account,
+               :window,
+               :used_percent,
+               :remaining_percent,
+               :resets_at,
+               :availability,
+               :state,
+               :last_refresh,
+               :last_attempt,
+               :error
+             ]
+
+      assert usage_windows.opts.preview_rows == 50
+      assert Enum.all?(provider_usage.widgets, &(!Map.has_key?(&1.opts, :query)))
     end
   end
 end

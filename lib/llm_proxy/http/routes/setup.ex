@@ -38,7 +38,7 @@ defmodule LLMProxy.HTTP.Routes.Setup do
   end
 
   get "/models" do
-    HTTP.send_json(conn, 200, Registry.all_models())
+    HTTP.send_json(conn, 200, Registry.public_models())
   end
 
   get "/config" do
@@ -122,7 +122,7 @@ defmodule LLMProxy.HTTP.Routes.Setup do
   defp bearer_token([]), do: nil
 
   defp allowed_models(api_key) do
-    Registry.all_models()
+    Registry.public_models()
     |> filter_models(api_key.allowed_models)
     |> Enum.sort(&model_before?/2)
   end
