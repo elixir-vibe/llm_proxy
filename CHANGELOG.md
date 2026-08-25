@@ -51,6 +51,8 @@
 
 ### Changed
 
+- The bundled DuckDB storage dependency now requires QuackDB 0.5.20 so timestamped
+  Ecto migrations can roll back without overflowing migration versions.
 - Content capture is disabled by default for new API keys. Usage, cost, latency,
   and content-free trace metadata remain available, while message extraction,
   trace-body serialization, and cache access require explicit capture consent.
