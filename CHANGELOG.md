@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-### Breaking Changes
+## 0.2.0 - 2026-08-26
+
+### Breaking changes
 
 - Standalone non-secret runtime settings now come from TOML instead of
   environment variables. `PORT`, `PUBLIC_URL`, `DATABASE_PATH`, `QUACKDB_URI`,
@@ -18,6 +20,12 @@
 - Standalone TOML is now strict and rejects unknown sections, unknown keys, and
   provider credentials. Library mode remains configured through ordinary Elixir
   application configuration and may source secrets however the host chooses.
+- Storage upgrades add provider-token priority, API-key lifecycle state, and
+  content-capture policy. Existing provider tokens receive priority `0`, existing
+  API keys remain enabled, and trace-enabled keys retain content capture. Other
+  existing keys stop automatic message and cache capture after migration;
+  operators must apply the bundled migrations and enforce their retention policy
+  for content stored before this release.
 
 ### Added
 
@@ -60,7 +68,15 @@
 - Content capture is disabled by default for new API keys. Usage, cost, latency,
   and content-free trace metadata remain available, while message extraction,
   trace-body serialization, and cache access require explicit capture consent.
-- Provider fallback now has a strict attempt budget and replays only proven-safe failures by default. Timeouts and 5xx responses require the explicit `:allow_uncertain` compatibility policy, and visible streams are never replayed.
+- Provider fallback now has a strict attempt budget and replays only proven-safe
+  failures by default. Timeouts and 5xx responses require the explicit
+  `:allow_uncertain` compatibility policy, and visible streams are never
+  replayed.
+
+### Fixed
+
+- Active-work leases are released when their owning client process disconnects,
+  preventing stale activity counts from blocking drains.
 
 ### Security
 
@@ -69,15 +85,6 @@
   fails closed when an encrypted credential is selected without its keyring.
 - Sensitive Incant fields are redacted before local rendering or remote SafeRPC
   transport.
-
-### Migration
-
-- Existing provider tokens receive priority `0`; indexed DuckDB tables rebuild
-  the provider/kind index while adding or removing the priority column.
-- Existing API keys remain enabled when lifecycle state is added.
-- Existing trace-enabled keys retain content capture. Other existing keys stop
-  automatic message and cache capture after migration. Operators must define
-  retention and remove content stored before this change according to policy.
 
 ## 0.1.1 - 2026-08-01
 
