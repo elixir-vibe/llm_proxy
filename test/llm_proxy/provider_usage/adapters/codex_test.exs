@@ -9,6 +9,10 @@ defmodule LLMProxy.ProviderUsage.Adapters.CodexTest do
 
     body = %{
       "plan_type" => "pro",
+      "rate_limit_reset_credits" => %{
+        "available_count" => 2,
+        "applicable_available_count" => 1
+      },
       "rate_limit" => %{
         "allowed" => true,
         "limit_reached" => false,
@@ -28,6 +32,7 @@ defmodule LLMProxy.ProviderUsage.Adapters.CodexTest do
     assert {:ok, result} = body |> Jason.encode!() |> Codex.parse()
     assert result.plan == "pro"
     assert result.availability == :limited
+    assert result.reset_credits_available == 2
 
     assert [primary, secondary] = result.windows
     assert primary.label == "5 hour"
@@ -39,6 +44,43 @@ defmodule LLMProxy.ProviderUsage.Adapters.CodexTest do
     assert secondary.used_percent == 91.3
     assert secondary.remaining_percent == 8.7
     assert secondary.resets_at == DateTime.from_unix!(secondary_reset)
+  end
+
+  test "parses read-only Codex reset-credit visibility" do
+    body = %{
+      "available_count" => 2,
+      "credits" => [
+        %{
+          "status" => "available",
+          "granted_at" => "2026-08-21T23:59:26.045928Z",
+          "expires_at" => "2026-09-20T23:59:26.045928Z"
+        },
+        %{
+          "status" => "available",
+          "granted_at" => "2026-08-22T23:59:26Z",
+          "expires_at" => "2026-09-19T23:59:26Z"
+        },
+        %{
+          "status" => "used",
+          "granted_at" => "2026-08-01T00:00:00Z",
+          "expires_at" => "not-used-for-visibility"
+        }
+      ]
+    }
+
+    assert {:ok, details} = body |> Jason.encode!() |> Codex.parse_reset_credit_details()
+    assert details.available_count == 2
+    assert details.expires_at == ~U[2026-09-19 23:59:26Z]
+
+    assert {:error, {:invalid_response, _reason}} =
+             %{"available_count" => -1, "credits" => []}
+             |> Jason.encode!()
+             |> Codex.parse_reset_credit_details()
+
+    assert {:error, {:invalid_response, _reason}} =
+             %{"credits" => []}
+             |> Jason.encode!()
+             |> Codex.parse_reset_credit_details()
   end
 
   test "parses the explicit legacy app-server shape" do

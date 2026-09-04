@@ -9,6 +9,7 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
   alias LLMProxy.ProviderUsage.Adapters.Codex.Response
   alias LLMProxy.ProviderUsage.Adapters.Codex.Response.Current
   alias LLMProxy.ProviderUsage.Adapters.Codex.Response.Legacy
+  alias LLMProxy.ProviderUsage.Adapters.Codex.Response.ResetCredits
   alias LLMProxy.ProviderUsage.HTTP
   alias LLMProxy.ProviderUsage.Result
   alias LLMProxy.ProviderUsage.Source
@@ -19,8 +20,9 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
   def fetch(%Credential{} = credential, %Source{} = source) do
     with {:ok, credential} <- refresh_credential(credential),
          :ok <- validate_credential(credential),
-         {:ok, body} <- HTTP.get(source, hd(source.usage_paths), headers(credential)) do
-      parse(body)
+         {:ok, body} <- HTTP.get(source, hd(source.usage_paths), headers(credential)),
+         {:ok, result} <- parse(body) do
+      {:ok, maybe_attach_reset_credit_details(result, credential, source)}
     end
   end
 
@@ -28,9 +30,27 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
   @spec parse(String.t()) :: {:ok, Result.t()} | {:error, term()}
   def parse(body), do: Adapter.parse_json(body, Response, &parse_response/1)
 
+  @doc false
+  @spec parse_reset_credit_details(String.t()) ::
+          {:ok, %{available_count: non_neg_integer(), expires_at: DateTime.t() | nil}}
+          | {:error, term()}
+  def parse_reset_credit_details(body) when is_binary(body) do
+    with {:ok, %ResetCredits{} = response} <- ResetCredits.decode(body),
+         {:ok, available_count} <- required_reset_credit_count(response.available_count),
+         {:ok, expires_at} <- earliest_available_expiry(response.credits) do
+      {:ok, %{available_count: available_count, expires_at: expires_at}}
+    else
+      {:error, reason} -> {:error, {:invalid_response, reason}}
+    end
+  end
+
+  def parse_reset_credit_details(_body), do: {:error, :invalid_response}
+
   defp parse_response(%Current{rate_limit: limits} = response) do
     with :ok <- validate_current_state(response),
          {:ok, plan} <- Adapter.plan(response.plan_type),
+         {:ok, reset_credits_available} <-
+           reset_credit_count(response.rate_limit_reset_credits),
          {:ok, windows} <-
            windows(
              [
@@ -44,7 +64,8 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
        %Result{
          availability: current_availability(response, windows),
          windows: windows,
-         plan: plan
+         plan: plan,
+         reset_credits_available: reset_credits_available
        }}
     end
   end
@@ -122,6 +143,81 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex do
       headers
     end
   end
+
+  defp maybe_attach_reset_credit_details(
+         %Result{reset_credits_available: count} = result,
+         credential,
+         source
+       )
+       when is_integer(count) and count > 0 do
+    with {:ok, path} <- reset_credits_path(source),
+         {:ok, body} <- HTTP.get(source, path, reset_credit_headers(credential)),
+         {:ok, details} <- parse_reset_credit_details(body) do
+      %{
+        result
+        | reset_credits_available: details.available_count,
+          reset_credit_expires_at: details.expires_at
+      }
+    else
+      _error -> result
+    end
+  end
+
+  defp maybe_attach_reset_credit_details(result, _credential, _source), do: result
+
+  defp reset_credits_path(%Source{usage_paths: [usage_path | _rest]}) do
+    if String.ends_with?(usage_path, "/wham/usage") do
+      {:ok, String.replace_suffix(usage_path, "/wham/usage", "/wham/rate-limit-reset-credits")}
+    else
+      {:error, :unsupported}
+    end
+  end
+
+  defp reset_credits_path(_source), do: {:error, :unsupported}
+
+  defp reset_credit_headers(credential) do
+    headers(credential) ++
+      [
+        {"openai-beta", "codex-1"},
+        {"originator", "codex_cli_rs"}
+      ]
+  end
+
+  defp reset_credit_count(nil), do: {:ok, nil}
+
+  defp reset_credit_count(%ResetCredits{available_count: available_count}) do
+    reset_credit_count(available_count)
+  end
+
+  defp reset_credit_count(value) when is_integer(value) and value >= 0 and value <= 1_000,
+    do: {:ok, value}
+
+  defp reset_credit_count(_value), do: {:error, :invalid_reset_credit_count}
+
+  defp required_reset_credit_count(nil), do: {:error, :missing_reset_credit_count}
+  defp required_reset_credit_count(value), do: reset_credit_count(value)
+
+  defp earliest_available_expiry(credits) when is_list(credits) and length(credits) <= 1_000 do
+    with {:ok, expiries} <-
+           Adapter.collect(credits, fn
+             %{status: "available", expires_at: expires_at} -> iso_datetime(expires_at)
+             %{status: status} when is_binary(status) -> {:ok, nil}
+             _invalid -> {:error, :invalid_reset_credit}
+           end) do
+      {:ok, Enum.min_by(expiries, &DateTime.to_unix(&1, :microsecond), fn -> nil end)}
+    end
+  end
+
+  defp earliest_available_expiry(_credits), do: {:error, :invalid_reset_credits}
+
+  defp iso_datetime(value) when is_binary(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> {:ok, DateTime.truncate(datetime, :second)}
+      {:error, _reason} -> {:error, :invalid_reset_credit_expiry}
+    end
+  end
+
+  defp iso_datetime(_value), do: {:error, :invalid_reset_credit_expiry}
 
   defp windows(raw_windows, parser) do
     Adapter.collect(raw_windows, fn

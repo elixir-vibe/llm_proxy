@@ -30,6 +30,9 @@ defmodule LLMProxy.Config do
   @default_provider_usage_request_timeout_ms :timer.seconds(10)
   @minimum_provider_usage_request_timeout_ms :timer.seconds(1)
   @maximum_provider_usage_request_timeout_ms :timer.seconds(30)
+  @default_admin_provider_usage_poll_interval_ms :timer.minutes(1)
+  @minimum_admin_provider_usage_poll_interval_ms :timer.seconds(15)
+  @maximum_admin_provider_usage_poll_interval_ms :timer.hours(1)
   @default_providers %{
     "anthropic" => %{
       base_url: "https://api.anthropic.com/v1",
@@ -295,6 +298,19 @@ defmodule LLMProxy.Config do
       Application.get_env(:llm_proxy, :provider_usage_stale_after_ms, default),
       provider_usage_refresh_interval_ms(),
       :timer.hours(24)
+    )
+  end
+
+  def admin_provider_usage_poll_interval_ms do
+    bounded_integer!(
+      :admin_provider_usage_poll_interval_ms,
+      Application.get_env(
+        :llm_proxy,
+        :admin_provider_usage_poll_interval_ms,
+        @default_admin_provider_usage_poll_interval_ms
+      ),
+      @minimum_admin_provider_usage_poll_interval_ms,
+      @maximum_admin_provider_usage_poll_interval_ms
     )
   end
 

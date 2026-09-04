@@ -4,7 +4,8 @@ defmodule LLMProxy.ProviderUsageTest do
   import Plug.Conn
 
   alias LLMProxy.Provider.TokenCodec.AESGCM
-  alias LLMProxy.ProviderUsage.{Loader, Snapshot, Source, Window}
+  alias LLMProxy.ProviderUsage.Adapters.Codex
+  alias LLMProxy.ProviderUsage.{HTTP, Loader, Snapshot, Source, Window}
   alias LLMProxy.Storage
   alias LLMProxy.TestSupport
   alias Req.Test, as: ReqTest
@@ -57,6 +58,7 @@ defmodule LLMProxy.ProviderUsageTest do
           assert get_req_header(conn, "chatgpt-account-id") == ["account-private-id"]
 
           ReqTest.json(conn, %{
+            "rate_limit_reset_credits" => %{"available_count" => 1},
             "rate_limit" => %{
               "allowed" => true,
               "primary_window" => %{
@@ -65,6 +67,23 @@ defmodule LLMProxy.ProviderUsageTest do
                 "reset_at" => 1_800_000_000
               }
             }
+          })
+
+        "/backend-api/wham/rate-limit-reset-credits" ->
+          assert get_req_header(conn, "authorization") == ["Bearer codex-access-secret"]
+          assert get_req_header(conn, "chatgpt-account-id") == ["account-private-id"]
+          assert get_req_header(conn, "openai-beta") == ["codex-1"]
+          assert get_req_header(conn, "originator") == ["codex_cli_rs"]
+
+          ReqTest.json(conn, %{
+            "available_count" => 1,
+            "credits" => [
+              %{
+                "status" => "available",
+                "granted_at" => "2026-08-21T23:59:26.045928Z",
+                "expires_at" => "2026-09-20T23:59:26.045928Z"
+              }
+            ]
           })
 
         "/api/monitor/usage/quota/limit" ->
@@ -119,6 +138,8 @@ defmodule LLMProxy.ProviderUsageTest do
     assert codex_snapshot.account_label == "Account ##{codex.id}"
     assert codex_snapshot.state == :fresh
     assert codex_snapshot.availability == :available
+    assert codex_snapshot.reset_credits_available == 1
+    assert codex_snapshot.reset_credit_expires_at == ~U[2026-09-20 23:59:26Z]
     assert [%{used_percent: 25, remaining_percent: 75}] = codex_snapshot.windows
 
     assert glm_snapshot.account_label == "p***t · ##{glm.id}"
@@ -147,6 +168,37 @@ defmodule LLMProxy.ProviderUsageTest do
     assert snapshot.error == "Provider usage API is unavailable"
     refute inspect(snapshot) =~ "glm-api-secret"
     refute inspect(snapshot) =~ "account-private-id"
+  end
+
+  test "keeps Codex quota visible when reset-credit details are unavailable" do
+    ReqTest.stub(UsageStub, fn conn ->
+      case conn.request_path do
+        "/backend-api/wham/usage" ->
+          ReqTest.json(conn, %{
+            "rate_limit_reset_credits" => %{"available_count" => 1},
+            "rate_limit" => %{
+              "primary_window" => %{
+                "used_percent" => 25,
+                "limit_window_seconds" => 18_000
+              }
+            }
+          })
+
+        "/backend-api/wham/rate-limit-reset-credits" ->
+          send_resp(conn, 503, ~s({"error":"temporary"}))
+      end
+    end)
+
+    assert {:ok, token} =
+             Storage.add_token("openai-codex", "oauth", "codex-access-secret", %{
+               account_id: "account-private-id"
+             })
+
+    assert [snapshot] = Loader.refresh({:account, token.id})
+    assert snapshot.state == :fresh
+    assert snapshot.reset_credits_available == 1
+    assert snapshot.reset_credit_expires_at == nil
+    assert [%{used_percent: 25}] = snapshot.windows
   end
 
   test "uses the first-party Codex path style for default and custom bases" do
@@ -206,6 +258,22 @@ defmodule LLMProxy.ProviderUsageTest do
     assert [snapshot] = Loader.refresh({:account, token.id})
     assert snapshot.state == :error
     assert snapshot.error == "Provider returned invalid usage data"
+  end
+
+  test "builds the real Finch request with compatible timeout options" do
+    Application.delete_env(:llm_proxy, :req_plug)
+
+    source = %Source{
+      token_id: 1,
+      stored_token: nil,
+      adapter: Codex,
+      provider_label: "Provider",
+      account_label: "Account #1",
+      base_url: "https://127.0.0.1:1",
+      usage_paths: ["/usage"]
+    }
+
+    assert {:error, :unavailable} = HTTP.get(source, "/usage", [{"accept", "application/json"}])
   end
 
   test "uses fresh upstream availability and recovers at the reported reset" do
@@ -282,5 +350,127 @@ defmodule LLMProxy.ProviderUsageTest do
     }
 
     refute LLMProxy.ProviderUsage.available_snapshot?(snapshot, DateTime.utc_now())
+  end
+
+  test "formats and sorts dashboard rows by operational attention and remaining quota" do
+    now = ~U[2026-08-24 12:00:00Z]
+
+    available = %Snapshot{
+      token_id: 1,
+      provider_label: "OpenAI Codex",
+      account_label: "c***n · #1",
+      plan: "Plus",
+      reset_credits_available: 1,
+      reset_credit_expires_at: DateTime.add(now, 172_800, :second),
+      availability: :available,
+      state: :fresh,
+      refreshed_at: now,
+      windows: [
+        %Window{
+          label: "Weekly",
+          used_percent: 25,
+          remaining_percent: 75,
+          resets_at: DateTime.add(now, 93_600, :second)
+        }
+      ]
+    }
+
+    exhausted = %Snapshot{
+      token_id: 2,
+      provider_label: "GLM",
+      account_label: "p***t · #2",
+      availability: :unavailable,
+      state: :fresh,
+      windows: [
+        %Window{
+          label: "Tokens",
+          used_percent: 100,
+          remaining_percent: 0,
+          resets_at: DateTime.add(now, 1_800, :second)
+        }
+      ]
+    }
+
+    assert %{rows: [first, second], columns: columns} =
+             LLMProxy.ProviderUsage.rows([available, exhausted], now)
+
+    assert first.account == "p***t · #2"
+    assert first.remaining_ratio == 0.0
+    assert first.used_ratio == 1.0
+    assert first.resets_in == "30m"
+    assert second.plan == "Plus"
+    assert second.reset_credits_available == 1
+    assert second.reset_credit_expires_in == "2d 0h"
+    assert second.reset_credit_expires_at == DateTime.add(now, 172_800, :second)
+    assert second.remaining_ratio == 0.75
+    assert second.resets_in == "1d 2h"
+    assert :used_percent in columns
+    assert :remaining_percent in columns
+    assert :remaining_ratio in columns
+    assert :resets_in in columns
+    assert :reset_credits_available in columns
+    assert :reset_credit_expires_in in columns
+  end
+
+  test "counts only fresh exhausted accounts as quota exhausted" do
+    server_state = :sys.get_state(LLMProxy.ProviderUsage.Server)
+
+    on_exit(fn ->
+      :sys.replace_state(LLMProxy.ProviderUsage.Server, fn _state -> server_state end)
+    end)
+
+    snapshots = %{
+      1 => snapshot(1, :unavailable, :fresh),
+      2 => snapshot(2, :unavailable, :disabled),
+      3 => snapshot(3, :unavailable, :stale),
+      4 => snapshot(4, :available, :fresh)
+    }
+
+    :sys.replace_state(LLMProxy.ProviderUsage.Server, fn state ->
+      %{state | snapshots: snapshots}
+    end)
+
+    assert LLMProxy.ProviderUsage.exhausted_count() == 1
+  end
+
+  test "formats near and elapsed reset times clearly" do
+    now = ~U[2026-08-24 12:00:00Z]
+
+    snapshots = [
+      snapshot_with_reset(1, DateTime.add(now, 30, :second)),
+      snapshot_with_reset(2, now),
+      snapshot_with_reset(3, DateTime.add(now, -30, :second))
+    ]
+
+    assert %{rows: rows} = LLMProxy.ProviderUsage.rows(snapshots, now)
+    assert Enum.map(rows, & &1.resets_in) == ["<1m", "now", "now"]
+  end
+
+  defp snapshot(id, availability, state) do
+    %Snapshot{
+      token_id: id,
+      provider_label: "Provider",
+      account_label: "Account ##{id}",
+      availability: availability,
+      state: state
+    }
+  end
+
+  defp snapshot_with_reset(id, resets_at) do
+    %Snapshot{
+      token_id: id,
+      provider_label: "Provider",
+      account_label: "Account ##{id}",
+      availability: :available,
+      state: :fresh,
+      windows: [
+        %Window{
+          label: "Window #{id}",
+          used_percent: 0,
+          remaining_percent: 100,
+          resets_at: resets_at
+        }
+      ]
+    }
   end
 end

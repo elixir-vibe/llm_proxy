@@ -33,6 +33,34 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex.Response do
     @type t :: %__MODULE__{reached: boolean()}
   end
 
+  defmodule ResetCredit do
+    @moduledoc false
+
+    use JSONCodec, strict: true, fast_path: :json
+
+    defstruct [:status, :granted_at, :expires_at]
+
+    @type t :: %__MODULE__{
+            status: String.t(),
+            granted_at: String.t() | nil,
+            expires_at: String.t() | nil
+          }
+  end
+
+  defmodule ResetCredits do
+    @moduledoc false
+
+    use JSONCodec, strict: true, fast_path: :json
+
+    defstruct [:available_count, :applicable_available_count, credits: []]
+
+    @type t :: %__MODULE__{
+            available_count: non_neg_integer() | nil,
+            applicable_available_count: non_neg_integer() | nil,
+            credits: [ResetCredit.t()]
+          }
+  end
+
   defmodule CurrentWindow do
     @moduledoc false
 
@@ -79,6 +107,7 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex.Response do
       :plan_type,
       :rate_limit,
       :rate_limit_reached_type,
+      :rate_limit_reset_credits,
       :spend_control,
       :spend_control_reached
     ]
@@ -87,6 +116,7 @@ defmodule LLMProxy.ProviderUsage.Adapters.Codex.Response do
             plan_type: String.t() | nil,
             rate_limit: CurrentLimits.t(),
             rate_limit_reached_type: ReachedType.t() | nil,
+            rate_limit_reset_credits: ResetCredits.t() | nil,
             spend_control: SpendControl.t() | nil,
             spend_control_reached: boolean() | nil
           }
