@@ -57,6 +57,23 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
     assert opts[:receive_timeout] == :infinity
   end
 
+  test "buffered Codex options prepare an upstream request" do
+    opts = OpenAICodex.req_llm_opts(%{token: account_token("acct_123")}, false)
+
+    assert {:ok, %Req.Request{} = request} =
+             ReqLLM.Providers.OpenAICodex.prepare_request(
+               :chat,
+               "openai_codex:gpt-6-astra",
+               "Reply with OK.",
+               opts
+             )
+
+    assert request.options[:connect_options][:timeout] ==
+             LLMProxy.Config.provider_connect_timeout_ms()
+
+    assert request.options[:receive_timeout] == :infinity
+  end
+
   test "Chat input preserves tools for ReqLLM generation" do
     tool = %{
       "type" => "function",

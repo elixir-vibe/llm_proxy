@@ -148,11 +148,16 @@ defmodule LLMProxy.Providers.OpenAICodex do
       |> maybe_put(:chatgpt_account_id, ReqLLMOpenAICodex.account_id_from_token(token.token))
       |> maybe_put(:openai_stream_transport, if(stream?, do: :websocket, else: :sse))
 
-    [
-      provider_options: provider_options,
-      connect_timeout: LLMProxy.Config.provider_connect_timeout_ms(),
-      receive_timeout: :infinity
-    ]
+    timeout = LLMProxy.Config.provider_connect_timeout_ms()
+
+    transport_opts =
+      if stream? do
+        [connect_timeout: timeout]
+      else
+        [req_http_options: [connect_options: [timeout: timeout]]]
+      end
+
+    [provider_options: provider_options, receive_timeout: :infinity] ++ transport_opts
   end
 
   @doc false
