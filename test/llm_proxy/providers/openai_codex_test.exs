@@ -17,6 +17,13 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
              ReqLLM.model("openai_codex:gpt-5.3-codex-spark")
   end
 
+  test "Astra resolves with upstream model metadata" do
+    assert {:ok, model} = ReqLLM.model("openai_codex:gpt-6-astra")
+    assert model.provider == :openai_codex
+    assert model.provider_model_id == "gpt-6-astra"
+    assert model.capabilities.reasoning.enabled
+  end
+
   test "Codex routes through existing catalog deployments" do
     Catalog.load([])
 

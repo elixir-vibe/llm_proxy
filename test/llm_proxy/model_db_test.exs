@@ -16,6 +16,16 @@ defmodule LLMProxy.ModelDBTest do
            )
   end
 
+  test "Astra is discoverable with catalog pricing" do
+    assert "gpt-6-astra" in LLMProxy.ModelDB.provider_model_ids(:openai)
+
+    assert %LLMProxy.Pricing.Rates{input: input, output: output} =
+             LLMProxy.ModelDB.pricing("gpt-6-astra", :openai)
+
+    assert input > 0
+    assert output > 0
+  end
+
   test "gets pricing from LLMDB" do
     pricing = LLMProxy.ModelDB.pricing("gpt-4o", :openai)
 
