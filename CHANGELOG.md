@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-09-04
+
+### Added
+
+- GPT-6 Astra model metadata and pricing, with OpenAI Codex support through the updated provider catalog.
+
+### Fixed
+
+- Buffered OpenAI Codex requests now use HTTP-compatible connection and pool timeouts instead of failing with an upstream error before dispatch.
+
 ## 0.2.0 - 2026-08-26
 
 ### Breaking changes
