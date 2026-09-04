@@ -58,7 +58,9 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
   end
 
   test "buffered Codex options prepare an upstream request" do
-    opts = OpenAICodex.req_llm_opts(%{token: account_token("acct_123")}, false)
+    opts =
+      OpenAICodex.req_llm_opts(%{token: account_token("acct_123")}, false)
+      |> Keyword.put(:reasoning_effort, :low)
 
     assert {:ok, %Req.Request{} = request} =
              ReqLLM.Providers.OpenAICodex.prepare_request(
@@ -68,10 +70,30 @@ defmodule LLMProxy.Providers.OpenAICodexTest do
                opts
              )
 
-    assert request.options[:connect_options][:timeout] ==
+    assert request.options[:finch][:conn_opts][:transport_opts][:timeout] ==
+             LLMProxy.Config.provider_connect_timeout_ms()
+
+    assert request.options[:finch][:pool_timeout] ==
              LLMProxy.Config.provider_connect_timeout_ms()
 
     assert request.options[:receive_timeout] == :infinity
+    refute Keyword.has_key?(request.options[:finch], :name)
+    refute Map.has_key?(request.options, :connect_options)
+  end
+
+  test "buffered Codex generation reaches the HTTP transport" do
+    Req.Test.stub(__MODULE__, fn conn ->
+      send(self(), :codex_http_called)
+      Req.Test.json(conn, %{"error" => %{"message" => "test upstream failure"}})
+    end)
+
+    opts =
+      OpenAICodex.req_llm_opts(%{token: account_token("acct_123")}, false)
+      |> Keyword.put(:reasoning_effort, :low)
+      |> Keyword.update!(:req_http_options, &Keyword.put(&1, :plug, {Req.Test, __MODULE__}))
+
+    ReqLLM.generate_text("openai_codex:gpt-6-astra", "Reply with OK.", opts)
+    assert_received :codex_http_called
   end
 
   test "Chat input preserves tools for ReqLLM generation" do

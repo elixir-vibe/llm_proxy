@@ -154,7 +154,11 @@ defmodule LLMProxy.Providers.OpenAICodex do
       if stream? do
         [connect_timeout: timeout]
       else
-        [req_http_options: [connect_options: [timeout: timeout]]]
+        [
+          req_http_options: [
+            finch: [conn_opts: [transport_opts: [timeout: timeout]], pool_timeout: timeout]
+          ]
+        ]
       end
 
     [provider_options: provider_options, receive_timeout: :infinity] ++ transport_opts
