@@ -34,7 +34,9 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
        )}
     end
 
-    def call_native(_body, _user_id) do
+    def call_native(body, user_id) do
+      capture_attribution(body, user_id)
+
       {:ok,
        Result.response(
          %{
@@ -66,7 +68,9 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
       {:ok, Result.stream(stream, nil)}
     end
 
-    def stream_native(%{"stream" => true}, _user_id) do
+    def stream_native(%{"stream" => true} = body, user_id) do
+      capture_attribution(body, user_id)
+
       {:ok,
        Result.stream(
          [
@@ -81,6 +85,12 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
 
     def stream_error(reason, token, _model),
       do: Result.error(Exception.message(reason), 400, token)
+
+    defp capture_attribution(body, user_id) do
+      if parent = Application.get_env(:llm_proxy, :responses_attribution_parent) do
+        send(parent, {:responses_attribution, body["client_metadata"], user_id})
+      end
+    end
   end
 
   setup do
@@ -92,6 +102,54 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpointTest do
     end)
 
     :ok
+  end
+
+  test "preserves canonical body attribution through native buffered and streaming execution" do
+    {:ok, key, raw_key} = Storage.create_key("responses-attribution-user")
+    Application.put_env(:llm_proxy, :responses_attribution_parent, self())
+    on_exit(fn -> Application.delete_env(:llm_proxy, :responses_attribution_parent) end)
+
+    turn = %{
+      "session_id" => "session",
+      "thread_id" => "thread",
+      "turn_id" => "turn",
+      "window_id" => "window",
+      "request_kind" => "compaction",
+      "turn_started_at_unix_ms" => 123
+    }
+
+    for stream? <- [false, true] do
+      conn =
+        TestSupport.json_conn(:post, "/", %{
+          "model" => "fake-responses-model",
+          "input" => [%{"role" => "user", "content" => "hello"}],
+          "stream" => stream?,
+          "client_metadata" => %{"x-codex-turn-metadata" => Jason.encode!(turn)}
+        })
+        |> TestSupport.put_bearer(raw_key)
+        |> ResponseEndpoint.call(ResponseEndpoint.init([]))
+
+      assert conn.status == 200
+      assert_receive {:responses_attribution, client, key_id}
+      assert key_id == key.id
+      assert Jason.decode!(client["x-codex-turn-metadata"]) == turn
+    end
+  end
+
+  test "rejects invalid client metadata without exposing its contents" do
+    {:ok, _key, raw_key} = Storage.create_key("invalid-responses-attribution-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/", %{
+        "model" => "fake-responses-model",
+        "input" => [%{"role" => "user", "content" => "hello"}],
+        "client_metadata" => "secret-malformed-value"
+      })
+      |> TestSupport.put_bearer(raw_key)
+      |> ResponseEndpoint.call(ResponseEndpoint.init([]))
+
+    assert conn.status == 400
+    refute conn.resp_body =~ "secret-malformed-value"
   end
 
   test "returns native responses and tracks usage" do

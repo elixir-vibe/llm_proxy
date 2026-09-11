@@ -34,7 +34,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
     api_key = conn.assigns.api_key
     body = conn.body_params
 
-    case Request.parse(:openai_chat, body) do
+    case Request.parse(:openai_chat, body, conn.req_headers) do
       {:ok, request} ->
         meta = %{tags: request.tags, metadata: request.metadata}
 

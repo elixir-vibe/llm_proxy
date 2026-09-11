@@ -38,7 +38,9 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
        )}
     end
 
-    def call(%{"model" => "fake-chat-model", "messages" => _messages}, _user_id) do
+    def call(%{"model" => "fake-chat-model", "messages" => _messages} = body, user_id) do
+      capture_attribution(body, user_id)
+
       {:ok,
        Result.response(
          %{
@@ -77,7 +79,9 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
       {:ok, Result.stream(stream, nil)}
     end
 
-    def stream(_body, _user_id) do
+    def stream(body, user_id) do
+      capture_attribution(body, user_id)
+
       {:ok,
        Result.stream(
          [
@@ -113,6 +117,60 @@ defmodule LLMProxy.HTTP.Routes.ChatTest do
     end
 
     def to_openai_response(response, model), do: Map.put(response, "model", model)
+
+    defp capture_attribution(body, user_id) do
+      if parent = Application.get_env(:llm_proxy, :chat_attribution_parent) do
+        send(parent, {:chat_attribution, body["client_metadata"], user_id})
+      end
+    end
+  end
+
+  test "forwards canonical attribution headers through buffered and streaming execution" do
+    {:ok, key, raw_key} = Storage.create_key("attribution-user")
+    Application.put_env(:llm_proxy, :chat_attribution_parent, self())
+    on_exit(fn -> Application.delete_env(:llm_proxy, :chat_attribution_parent) end)
+
+    turn = %{
+      "session_id" => "session",
+      "thread_id" => "thread",
+      "turn_id" => "turn",
+      "window_id" => "window",
+      "request_kind" => "turn",
+      "turn_started_at_unix_ms" => 123
+    }
+
+    for stream? <- [false, true] do
+      conn =
+        TestSupport.json_conn(:post, "/completions", %{
+          "model" => "fake-chat-model",
+          "messages" => [%{"role" => "user", "content" => "hello"}],
+          "stream" => stream?
+        })
+        |> Plug.Conn.put_req_header("x-codex-turn-metadata", Jason.encode!(turn))
+        |> TestSupport.put_bearer(raw_key)
+        |> Chat.call(Chat.init([]))
+
+      assert conn.status == 200
+      assert_receive {:chat_attribution, client, key_id}
+      assert key_id == key.id
+      assert Jason.decode!(client["x-codex-turn-metadata"]) == turn
+    end
+  end
+
+  test "rejects malformed attribution before provider execution" do
+    {:ok, _key, raw_key} = Storage.create_key("invalid-attribution-user")
+
+    conn =
+      TestSupport.json_conn(:post, "/completions", %{
+        "model" => "fake-chat-model",
+        "messages" => [%{"role" => "user", "content" => "hello"}]
+      })
+      |> Plug.Conn.put_req_header("x-codex-turn-metadata", "[]")
+      |> TestSupport.put_bearer(raw_key)
+      |> Chat.call(Chat.init([]))
+
+    assert conn.status == 400
+    assert Jason.decode!(conn.resp_body)["error"]["code"] == "invalid_codex_attribution"
   end
 
   defmodule BlockingStreamProvider do

@@ -11,7 +11,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @behaviour LLMProxy.Providers.Behaviour
 
-  alias LLMProxy.Protocol.Request
+  alias LLMProxy.Protocol.{CodexAttribution, Request}
   alias LLMProxy.Providers.OpenAICodex.{Events, OAuth, ToolSchema}
   alias LLMProxy.Providers.ReqLLM.ErrorProjection
   alias LLMProxy.Providers.Result
@@ -111,7 +111,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @doc false
   def request_from_chat_body(body) when is_map(body) do
-    case Request.parse(:openai_chat, body) do
+    case Request.parse(:openai_chat, body, []) do
       {:ok, %Request{} = request} -> {:ok, request}
       {:error, %Request.Error{} = error} -> provider_error(error.message, 400)
     end
@@ -128,7 +128,7 @@ defmodule LLMProxy.Providers.OpenAICodex do
 
   @doc false
   def request_from_responses_body(body) when is_map(body) do
-    case Request.parse(:openai_responses, body) do
+    case Request.parse(:openai_responses, body, []) do
       {:ok, %Request{} = request} -> {:ok, request}
       {:error, %Request.Error{} = error} -> provider_error(error.message, 400)
     end
@@ -236,22 +236,8 @@ defmodule LLMProxy.Providers.OpenAICodex do
   end
 
   defp session_options(options, request, user_id) do
-    metadata = request.metadata || %{}
-    cache_key = request.body["prompt_cache_key"] || metadata["session_id"]
-    session_id = metadata["session_id"] || cache_key
-
-    options
-    |> maybe_put(:session_id, scoped_identity(user_id, session_id))
-    |> maybe_put(:prompt_cache_key, scoped_identity(user_id, cache_key))
-    |> maybe_put(:thread_id, scoped_identity(user_id, metadata["thread_id"]))
+    Keyword.merge(options, CodexAttribution.options(request.body, user_id))
   end
-
-  defp scoped_identity(user_id, identity) when is_binary(identity) and byte_size(identity) > 0 do
-    :crypto.hash(:sha256, :erlang.term_to_binary({:llm_proxy_codex, user_id, identity}))
-    |> Base.encode16(case: :lower)
-  end
-
-  defp scoped_identity(_user_id, _identity), do: nil
 
   defp maybe_put(list, _key, nil) when is_list(list), do: list
   defp maybe_put(list, key, value) when is_list(list), do: Keyword.put(list, key, value)

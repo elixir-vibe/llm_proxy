@@ -227,15 +227,42 @@ explicit cache-key overrides distinct from session identity. Requests without
 identity do not share an invented global session. Continuity improves routing
 compatibility but does not guarantee prompt-cache hits.
 
+For canonical Codex turn attribution, Pi-compatible clients can send
+`session-id`, `thread-id`, `x-client-request-id`, `x-codex-window-id`,
+`x-codex-turn-metadata`, optional `x-codex-installation-id`, and `originator`
+headers. Responses requests can instead (or additionally) supply the same
+identity in `client_metadata`. The turn metadata value is a JSON string with
+`session_id`, `thread_id`, `turn_id`, `window_id`, `request_kind`,
+`turn_started_at_unix_ms`, and optional `installation_id`.
+
+Header/body copies must agree. Duplicate attribution headers, malformed JSON,
+incomplete turn identity, and invalid field types return HTTP 400. Turn JSON is
+limited to 4 KiB and identity values to 256 bytes. Unknown fields and unrelated
+headers are not forwarded by the Codex adapter. The boundary uses typed
+JSONCodec payloads; IDs are scoped consistently to the authenticated API key in
+both headers and the canonical upstream `client_metadata`. Originator, request
+kind and start time are preserved. No turn identity is generated for legacy
+requests.
+
+The caller owns logical turns: retain the same ID and start time through tool
+continuations and retries, rotate for independent prompts, and identify
+compaction/internal requests separately. A cache key or HTTP trace ID is not a
+turn ID. In Pi versions containing the compatible-provider changes, use
+`compat.promptCacheKeyMode: "enabled"` for cache-key forwarding and
+`compat.codexAttribution: "official"` for attribution; these are separate
+settings. Correct wire attribution does not prove a subscription quota change.
+
 Codex WebSocket quota envelopes preserve their outer 429 status. A reported
 future `resets_at` drives model-token cooldown and retry delay; otherwise the
 configured cooldown applies. Credentials, arbitrary upstream headers and error
 payloads are not exposed to clients.
 
-The Codex compatibility repair temporarily pins ReqLLM to
-[`dannote/req_llm@69f488da`](https://github.com/dannote/req_llm/commit/69f488da53fdd81452092cbaa5c05cdd4799f24b).
-Return to a released upstream dependency once it includes the session-header
-and prompt-cache-key fixes and passes the same regression tests.
+The Codex adapter temporarily pins ReqLLM to
+[`dannote/req_llm@856d65ea`](https://github.com/dannote/req_llm/commit/856d65ea13728c1d2bd5046aac9143917e8cf7f8),
+which adds canonical turn attribution in
+[upstream PR #1003](https://github.com/agentjido/req_llm/pull/1003).
+Return to a Hex release once it includes the session-header, prompt-cache-key,
+and canonical turn-attribution fixes and passes the same regression tests.
 
 ## Custom protocols
 
