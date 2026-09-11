@@ -38,7 +38,7 @@ defmodule LLMProxy.HTTP.Routes.ResponseEndpoint do
     body = conn.body_params
     model = body["model"]
 
-    case Request.parse(:openai_responses, body) do
+    case Request.parse(:openai_responses, body, conn.req_headers) do
       {:ok, request} ->
         Logger.debug(
           "Responses request from #{api_key.name} model=#{model} stream=#{responses_stream?(request)}"

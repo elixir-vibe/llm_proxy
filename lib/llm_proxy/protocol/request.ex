@@ -3,6 +3,7 @@ defmodule LLMProxy.Protocol.Request do
   Boundary parser that normalizes OpenAI Chat, Anthropic Messages, and OpenAI Responses requests.
   """
 
+  alias LLMProxy.Protocol.CodexAttribution
   alias LLMProxy.Protocol.Request.Error
   alias ReqLLM.Context
   alias ReqLLM.Message
@@ -43,6 +44,13 @@ defmodule LLMProxy.Protocol.Request do
           stop: [String.t()] | String.t() | nil,
           messages: [Message.t()]
         }
+
+  @spec parse(protocol(), map(), [{String.t(), String.t()}]) :: {:ok, t()} | {:error, Error.t()}
+  def parse(protocol, body, headers) when protocol in [:openai_chat, :openai_responses] do
+    with {:ok, body} <- CodexAttribution.normalize(body, headers) do
+      parse(protocol, body)
+    end
+  end
 
   @spec parse(protocol(), map()) :: {:ok, t()} | {:error, Error.t()}
   def parse(:openai_chat = protocol, %{"messages" => messages} = body) when is_list(messages) do
