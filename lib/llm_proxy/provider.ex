@@ -19,6 +19,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.GuardrailPipeline
   alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.Provider.ReqLLMStream
   alias LLMProxy.Providers.{Attempt, Execution, Registry, Result}
   alias LLMProxy.Response
   alias LLMProxy.Stream.Event
@@ -154,6 +155,25 @@ defmodule LLMProxy.Provider do
   @impl ReqLLM.Provider
   def decode_response(request_response), do: request_response
 
+  @impl ReqLLM.Provider
+  def stream_transport(_model, _opts), do: :in_process
+
+  @impl ReqLLM.Provider
+  def attach_in_process_stream(model, context, opts) do
+    request_opts =
+      opts
+      |> Keyword.put(:model, model_id(model))
+      |> Keyword.put(:stream, true)
+
+    actor_or_key = Keyword.get(opts, :actor) || Keyword.get(opts, :api_key)
+
+    with {:ok, request} <- chat_request(context, request_opts),
+         {:ok, %Result{kind: :stream} = result} <-
+           stream(request, actor_or_key, Keyword.put(opts, :route, :req_llm)) do
+      {:ok, ReqLLMStream.new(result, model)}
+    end
+  end
+
   defp model_id(%{model: model}) when is_binary(model), do: model
   defp model_id(%{id: id}) when is_binary(id), do: id
   defp model_id(model) when is_binary(model), do: model
@@ -182,10 +202,15 @@ defmodule LLMProxy.Provider do
   end
 
   defp request_body(messages, opts) do
-    %{"model" => Keyword.fetch!(opts, :model), "messages" => messages}
+    model = Keyword.fetch!(opts, :model)
+
+    %ReqLLM.Context{messages: messages}
+    |> ReqLLMDefaults.encode_context_to_openai_format(model)
+    |> LLMProxy.Protocol.stringify_keys()
+    |> Map.put("model", model)
     |> put_if_present("stream", Keyword.get(opts, :stream))
     |> put_if_present("metadata", Keyword.get(opts, :metadata))
-    |> put_if_present("tools", Keyword.get(opts, :tools))
+    |> put_if_present("tools", openai_tools(Keyword.get(opts, :tools)))
     |> put_if_present("tool_choice", Keyword.get(opts, :tool_choice))
     |> put_if_present("max_tokens", Keyword.get(opts, :max_tokens))
     |> put_if_present("temperature", Keyword.get(opts, :temperature))
@@ -195,6 +220,15 @@ defmodule LLMProxy.Provider do
 
   defp put_if_present(map, _key, nil), do: map
   defp put_if_present(map, key, value), do: Map.put(map, key, value)
+
+  defp openai_tools(nil), do: nil
+
+  defp openai_tools(tools) when is_list(tools) do
+    Enum.map(tools, fn
+      %ReqLLM.Tool{} = tool -> ReqLLM.Tool.to_schema(tool, :openai)
+      tool -> tool
+    end)
+  end
 
   defp normalize_actor(%Actor{} = actor), do: {:ok, actor}
   defp normalize_actor(%{id: _id} = api_key), do: {:ok, Actor.from_api_key(api_key)}

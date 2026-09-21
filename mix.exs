@@ -148,7 +148,7 @@ defmodule LLMProxy.MixProject do
       {:ecto_sql, "~> 3.13"},
       {:ecto_sqlite3, "~> 0.17", optional: true},
       {:quackdb, "~> 0.5.20"},
-      {:req_llm, github: "dannote/req_llm", ref: "69f488da53fdd81452092cbaa5c05cdd4799f24b"},
+      {:req_llm, github: "agentjido/req_llm", ref: "08e4fa09cb3a43e249653e0fc452542fcbc23216"},
       {:req, "~> 0.7"},
       {:llm_db, "~> 2026.9", runtime: false},
       {:dotenvy, "~> 1.1"},
