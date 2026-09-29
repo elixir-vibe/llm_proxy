@@ -39,4 +39,18 @@ defmodule LLMProxy.TestSupport do
   def put_bearer(conn, token) do
     put_req_header(conn, "authorization", "Bearer #{token}")
   end
+
+  def assert_eventually(fun, attempts \\ 50) do
+    cond do
+      fun.() ->
+        :ok
+
+      attempts > 0 ->
+        Process.sleep(10)
+        assert_eventually(fun, attempts - 1)
+
+      true ->
+        ExUnit.Assertions.flunk("condition did not become true")
+    end
+  end
 end

@@ -318,7 +318,49 @@ defmodule LLMProxy.ProviderTest do
     assert_receive :provider_waiting
     assert ConcurrencyLimiter.status(key).active == 1
     assert :ok = ReqLLM.StreamResponse.close(response)
-    assert_eventually(fn -> ConcurrencyLimiter.status(key).active == 0 end)
+    TestSupport.assert_eventually(fn -> ConcurrencyLimiter.status(key).active == 0 end)
+  end
+
+  test "ReqLLM provider projects stream start failures as API errors" do
+    {:ok, key, raw_key} =
+      Storage.create_key("req-llm-stream-limit-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    assert {:ok, lease} = ConcurrencyLimiter.acquire(key)
+    on_exit(fn -> ConcurrencyLimiter.release(lease) end)
+
+    {result, _log} =
+      with_log(fn ->
+        ReqLLM.Generation.stream_text(req_llm_model("req-llm-provider-model"), "hello",
+          api_key: raw_key
+        )
+      end)
+
+    assert {:error, reason} = result
+
+    assert %ReqLLM.Error.API.Request{
+             status: 429,
+             response_body: %{"error" => %{"code" => "rate_limit_error", "message" => message}}
+           } = stream_start_error(reason)
+
+    assert message == ConcurrencyLimiter.error_message()
+  end
+
+  test "ReqLLM provider rejects SafeRPC options for streaming" do
+    {:ok, _key, raw_key} = Storage.create_key("req-llm-remote-stream-user")
+
+    {result, _log} =
+      with_log(fn ->
+        ReqLLM.Generation.stream_text(req_llm_model("req-llm-provider-model"), "hello",
+          api_key: raw_key,
+          safe_rpc: :remote_socket
+        )
+      end)
+
+    assert {:error, reason} = result
+    assert %ArgumentError{message: message} = stream_start_error(reason)
+    assert message =~ "SafeRPC"
   end
 
   test "ReqLLM provider encodes messages and tools as OpenAI wire data" do
@@ -413,19 +455,8 @@ defmodule LLMProxy.ProviderTest do
     %{id: id, provider: :llm_proxy, model: id}
   end
 
-  defp assert_eventually(fun, attempts \\ 50) do
-    cond do
-      fun.() ->
-        :ok
-
-      attempts > 0 ->
-        Process.sleep(10)
-        assert_eventually(fun, attempts - 1)
-
-      true ->
-        flunk("condition did not become true")
-    end
-  end
+  defp stream_start_error({:in_process_streaming_failed, {:provider_build_failed, error}}),
+    do: error
 
   defp restore_public_models(nil), do: Application.delete_env(:llm_proxy, :public_models)
 

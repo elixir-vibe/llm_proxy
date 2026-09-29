@@ -53,7 +53,9 @@ defmodule LLMProxy.Protocol do
   defp string_key(key) when is_atom(key), do: Atom.to_string(key)
   defp string_key(key), do: key
 
-  defp provider_protocol(provider) do
+  @doc "Wire protocol a provider speaks natively. Defaults to `:openai` when undeclared."
+  @spec provider_protocol(module() | nil) :: protocol()
+  def provider_protocol(provider) when is_atom(provider) do
     if function_exported?(provider, :native_protocol, 0),
       do: provider.native_protocol(),
       else: :openai

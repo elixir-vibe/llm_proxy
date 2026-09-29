@@ -1,6 +1,23 @@
 defmodule LLMProxy.Provider.ReqLLMStream do
   @moduledoc false
 
+  # Projects an LLMProxy stream result into canonical `ReqLLM.StreamChunk`
+  # values for ReqLLM's `:in_process` transport.
+  #
+  # `Stream.transform/5` runs its `last_fun` only when the inner enumerable is
+  # exhausted, never when the consumer halts early. LLMProxy depends on that:
+  # `LLMProxy.Provider` records stream usage in `last_fun`, and
+  # `LLMProxy.ConcurrencyLimiter.wrap_stream/2` releases the lease in
+  # `after_fun`. Two decisions below keep ReqLLM pulling until LLMProxy is done:
+  #
+  #   * Terminal markers are stripped from meta chunks. ReqLLM's in-process
+  #     client halts on the first chunk marked `terminal?: true`, which would
+  #     skip usage accounting. The stream ends when the LLMProxy stream ends.
+  #   * A provider error is emitted only after the LLMProxy stream is drained.
+  #     Events after the error are discarded, and ReqLLM receives the
+  #     `{:error, reason}` item as the final element.
+
+  alias LLMProxy.Protocol
   alias LLMProxy.Protocol.OpenAI
   alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.Event
@@ -13,7 +30,7 @@ defmodule LLMProxy.Provider.ReqLLMStream do
         %Result{kind: :stream, stream: stream, provider: provider, model: upstream_model},
         model
       ) do
-    protocol = provider_protocol(provider)
+    protocol = Protocol.provider_protocol(provider)
     rendered_model = upstream_model || model.id
 
     Stream.transform(
@@ -52,21 +69,16 @@ defmodule LLMProxy.Provider.ReqLLMStream do
   end
 
   defp event_items(%Event{} = event, protocol, upstream_model, model) do
-    chunks =
-      event.data
-      |> OpenAI.stream_event(protocol, upstream_model)
-      |> decode_openai_event(model)
-      |> append_usage(event.usage)
-      |> strip_terminal_markers()
-
-    chunks
+    event.data
+    |> OpenAI.stream_event(protocol, upstream_model)
+    |> decode_openai_event(model)
+    |> append_usage(event.usage)
+    |> strip_terminal_markers()
   end
 
   defp event_items(event, _protocol, _upstream_model, _model) do
     {:error, {:invalid_llm_proxy_stream_event, event}}
   end
-
-  defp decode_openai_event(nil, _model), do: []
 
   defp decode_openai_event(data, model) when is_map(data) do
     ReqLLMDefaults.default_decode_stream_event(%{data: data}, model)
@@ -77,7 +89,7 @@ defmodule LLMProxy.Provider.ReqLLMStream do
   defp append_usage(chunks, nil), do: chunks
 
   defp append_usage(chunks, %Usage{} = usage) do
-    chunks ++ [StreamChunk.meta(%{usage: req_llm_usage(usage)})]
+    chunks ++ [StreamChunk.meta(%{usage: Usage.to_req_llm(usage)})]
   end
 
   defp strip_terminal_markers(chunks) do
@@ -90,24 +102,6 @@ defmodule LLMProxy.Provider.ReqLLMStream do
     end)
   end
 
-  defp req_llm_usage(%Usage{} = usage) do
-    %{
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
-      cache_read_tokens: usage.cache_read_tokens,
-      cache_write_tokens: usage.cache_write_tokens,
-      total_tokens: usage.input_tokens + usage.output_tokens
-    }
-  end
-
   defp error_reason(%Event{data: %{"error" => reason}}), do: reason
   defp error_reason(%Event{data: reason}), do: reason
-
-  defp provider_protocol(provider) when is_atom(provider) do
-    if function_exported?(provider, :native_protocol, 0),
-      do: provider.native_protocol(),
-      else: :openai
-  end
-
-  defp provider_protocol(_provider), do: :openai
 end

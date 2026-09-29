@@ -94,6 +94,17 @@ defmodule LLMProxy.Usage do
     }
   end
 
+  @spec to_req_llm(t()) :: map()
+  def to_req_llm(%__MODULE__{} = usage) do
+    %{
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      cache_read_tokens: usage.cache_read_tokens,
+      cache_write_tokens: usage.cache_write_tokens,
+      total_tokens: usage.input_tokens + usage.output_tokens
+    }
+  end
+
   @spec merge_max(t(), t()) :: t()
   def merge_max(%__MODULE__{} = usage, %__MODULE__{} = event_usage) do
     %__MODULE__{
