@@ -115,9 +115,18 @@ model = %{
   )
 
 ReqLLM.Response.text(response)
+
+{:ok, stream_response} =
+  ReqLLM.Generation.stream_text(model, "Hello",
+    api_key: llm_proxy_key
+  )
+
+ReqLLM.StreamResponse.text(stream_response)
 ```
 
-This still executes in-process. It is useful when application code already speaks ReqLLM and should gain LLMProxy routing and accounting without an HTTP round trip.
+Both calls execute in-process. Streaming uses ReqLLM's `:in_process` transport, so routing, guardrails, accounting, telemetry, and concurrency leases apply without a Finch request. This is useful when application code already speaks ReqLLM and should gain LLMProxy controls without an HTTP round trip.
+
+Buffered calls can also target a remote LLMProxy host by passing `:safe_rpc`. Streaming does not support SafeRPC and returns an error when that option is present.
 
 ## Phoenix routes
 

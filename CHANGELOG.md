@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+
+- The ReqLLM `:llm_proxy` provider streams in-process through ReqLLM's `:in_process` transport. Routing, guardrails, accounting, telemetry, fallback handling, and concurrency leases stay on the stream path, and cancelling a ReqLLM stream releases its lease.
+
+### Changed
+
+- ReqLLM is a Hex dependency (`~> 1.26`) instead of a pinned Git commit.
+
+### Fixed
+
+- ReqLLM messages and tools are encoded as OpenAI wire data before routing, so normalized `ReqLLM.Context` requests parse like HTTP requests.
+- Streaming failures from the ReqLLM provider surface as `ReqLLM.Error.API.Request` values with the same status and OpenAI error body as buffered calls.
+
 ## 0.2.1 - 2026-09-04
 
 ### Added
