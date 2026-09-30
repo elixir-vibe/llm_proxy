@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- The ReqLLM `:llm_proxy` provider streams in-process. `ReqLLM.stream_text/3` and related calls run through LLMProxy routing, guardrails, accounting, telemetry, fallback handling, and concurrency leases without an HTTP request, and cancelling the stream releases its lease.
+
+### Fixed
+
+- ReqLLM messages and tools are encoded as OpenAI wire data before routing, so normalized `ReqLLM.Context` requests parse like HTTP requests instead of failing on message structs.
+- OpenAI Codex Chat and Responses requests forward stable `prompt_cache_key` and session/thread identities scoped to the authenticated API key.
+- OpenAI Codex quota errors keep their upstream status when the error is nested in a WebSocket frame, and status-less quota codes with a future `resets_at` now set the model-token cooldown and retry delay.
+- OpenAI cached input tokens are normalized once before accounting; raw ReqLLM usage maps are no longer counted twice.
+- Provider-usage refresh no longer fails before dispatch because of an incompatible Finch and connect-options combination in the HTTP builder.
+
 ## 0.2.1 - 2026-09-04
 
 ### Added

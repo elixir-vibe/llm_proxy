@@ -10,6 +10,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   alias LLMProxy.HTTP
   alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
+  alias LLMProxy.Protocol
   alias LLMProxy.Protocol.{OpenAI, Request}
   alias LLMProxy.Provider
   alias LLMProxy.Providers.Result
@@ -118,7 +119,7 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   end
 
   defp finish_stream(conn, %Result{kind: :stream} = result, trace_id) do
-    from_protocol = provider_protocol(result.provider)
+    from_protocol = Protocol.provider_protocol(result.provider)
     telemetry = Telemetry.stream_context(result.provider.name(), result.model, trace_id)
 
     result.stream
@@ -189,12 +190,6 @@ defmodule LLMProxy.HTTP.Routes.Chat do
       {:ok, conn} -> conn
       {:error, _reason} -> conn
     end
-  end
-
-  defp provider_protocol(provider) do
-    if function_exported?(provider, :native_protocol, 0),
-      do: provider.native_protocol(),
-      else: :openai
   end
 
   defp handle_drain_race({:error, :draining}, conn), do: drain_rejected(conn)

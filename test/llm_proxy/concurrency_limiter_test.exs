@@ -3,6 +3,7 @@ defmodule LLMProxy.ConcurrencyLimiterTest do
 
   alias LLMProxy.ConcurrencyLimiter
   alias LLMProxy.Limit
+  alias LLMProxy.TestSupport
 
   test "normalizes concurrent limits without a usage window" do
     assert %Limit{metric: :concurrent_requests, window: nil, max: 3} =
@@ -66,7 +67,7 @@ defmodule LLMProxy.ConcurrencyLimiterTest do
 
     Process.exit(pid, :kill)
     assert_receive {:DOWN, ^monitor, :process, ^pid, :killed}, 1_000
-    assert_eventually(fn -> ConcurrencyLimiter.status(key).active == 0 end)
+    TestSupport.assert_eventually(fn -> ConcurrencyLimiter.status(key).active == 0 end)
   end
 
   test "releases stream leases after completion, early halt, and exception" do
@@ -127,7 +128,7 @@ defmodule LLMProxy.ConcurrencyLimiterTest do
 
       Process.exit(pid, :kill)
       assert_receive {:DOWN, ^monitor, :process, ^pid, :killed}, 1_000
-      assert_eventually(fn -> ConcurrencyLimiter.status(key).active == 0 end)
+      TestSupport.assert_eventually(fn -> ConcurrencyLimiter.status(key).active == 0 end)
     end
   end
 
@@ -136,19 +137,5 @@ defmodule LLMProxy.ConcurrencyLimiterTest do
       id: "concurrency-test-#{System.unique_integer([:positive])}",
       budget_limits: [Limit.concurrent_requests(limit)]
     }
-  end
-
-  defp assert_eventually(fun, attempts \\ 50) do
-    cond do
-      fun.() ->
-        :ok
-
-      attempts > 0 ->
-        Process.sleep(10)
-        assert_eventually(fun, attempts - 1)
-
-      true ->
-        flunk("condition did not become true")
-    end
   end
 end

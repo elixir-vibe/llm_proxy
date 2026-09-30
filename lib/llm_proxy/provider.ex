@@ -19,6 +19,7 @@ defmodule LLMProxy.Provider do
   alias LLMProxy.GuardrailPipeline
   alias LLMProxy.HTTP.ErrorResponse
   alias LLMProxy.Protocol.Request
+  alias LLMProxy.Provider.ReqLLMStream
   alias LLMProxy.Providers.{Attempt, Execution, Registry, Result}
   alias LLMProxy.Response
   alias LLMProxy.Stream.Event
@@ -154,6 +155,58 @@ defmodule LLMProxy.Provider do
   @impl ReqLLM.Provider
   def decode_response(request_response), do: request_response
 
+  @impl ReqLLM.Provider
+  def stream_transport(_model, _opts), do: :in_process
+
+  @impl ReqLLM.Provider
+  def attach_in_process_stream(model, context, opts) do
+    request_opts =
+      opts
+      |> Keyword.put(:model, model_id(model))
+      |> Keyword.put(:stream, true)
+
+    actor_or_key = req_llm_actor(opts) || req_llm_api_key(opts)
+
+    with :ok <- check_in_process_transport(opts),
+         {:ok, request} <- chat_request(context, request_opts),
+         {:ok, %Result{kind: :stream} = result} <-
+           stream(request, actor_or_key, Keyword.put(opts, :route, :req_llm)) do
+      {:ok, ReqLLMStream.new(result, model)}
+    else
+      {:error, reason} -> {:error, req_llm_stream_error(reason)}
+    end
+  end
+
+  # The buffered ReqLLM path can forward a request over SafeRPC. The in-process
+  # stream transport runs locally only, so reject the remote options instead of
+  # silently streaming from the wrong node.
+  defp check_in_process_transport(opts) do
+    if req_llm_remote_target(opts) do
+      {:error,
+       ArgumentError.exception(
+         "LLMProxy ReqLLM provider streams in-process only and does not support SafeRPC"
+       )}
+    else
+      :ok
+    end
+  end
+
+  # Mirror the buffered path: LLMProxy errors reach ReqLLM callers as API
+  # request errors carrying the same OpenAI error body and status.
+  defp req_llm_stream_error(%Request.Error{} = error), do: req_llm_stream_error({:request, error})
+  defp req_llm_stream_error(%{__exception__: true} = error), do: error
+
+  defp req_llm_stream_error(reason) do
+    status = error_status(reason)
+    error = req_llm_error(reason, status)
+
+    ReqLLM.Error.API.Request.exception(
+      reason: error["message"],
+      status: status,
+      response_body: %{"error" => error}
+    )
+  end
+
   defp model_id(%{model: model}) when is_binary(model), do: model
   defp model_id(%{id: id}) when is_binary(id), do: id
   defp model_id(model) when is_binary(model), do: model
@@ -182,10 +235,15 @@ defmodule LLMProxy.Provider do
   end
 
   defp request_body(messages, opts) do
-    %{"model" => Keyword.fetch!(opts, :model), "messages" => messages}
+    model = Keyword.fetch!(opts, :model)
+
+    %ReqLLM.Context{messages: messages}
+    |> ReqLLMDefaults.encode_context_to_openai_format(model)
+    |> LLMProxy.Protocol.stringify_keys()
+    |> Map.put("model", model)
     |> put_if_present("stream", Keyword.get(opts, :stream))
     |> put_if_present("metadata", Keyword.get(opts, :metadata))
-    |> put_if_present("tools", Keyword.get(opts, :tools))
+    |> put_if_present("tools", openai_tools(Keyword.get(opts, :tools)))
     |> put_if_present("tool_choice", Keyword.get(opts, :tool_choice))
     |> put_if_present("max_tokens", Keyword.get(opts, :max_tokens))
     |> put_if_present("temperature", Keyword.get(opts, :temperature))
@@ -195,6 +253,15 @@ defmodule LLMProxy.Provider do
 
   defp put_if_present(map, _key, nil), do: map
   defp put_if_present(map, key, value), do: Map.put(map, key, value)
+
+  defp openai_tools(nil), do: nil
+
+  defp openai_tools(tools) when is_list(tools) do
+    Enum.map(tools, fn
+      %ReqLLM.Tool{} = tool -> ReqLLM.Tool.to_schema(tool, :openai)
+      tool -> tool
+    end)
+  end
 
   defp normalize_actor(%Actor{} = actor), do: {:ok, actor}
   defp normalize_actor(%{id: _id} = api_key), do: {:ok, Actor.from_api_key(api_key)}
@@ -639,11 +706,11 @@ defmodule LLMProxy.Provider do
   defp run_req_llm(req_request) do
     request = Req.Request.get_private(req_request, :llm_proxy_request)
     opts = Req.Request.get_private(req_request, :llm_proxy_opts, [])
-    actor = Keyword.get(opts, :llm_proxy_actor) || Keyword.get(opts, :actor)
-    api_key = Keyword.get(opts, :llm_proxy_api_key) || Keyword.get(opts, :api_key)
+    actor = req_llm_actor(opts)
+    api_key = req_llm_api_key(opts)
 
     result =
-      case Keyword.get(opts, :safe_rpc) || Keyword.get(opts, :llm_proxy_socket) do
+      case req_llm_remote_target(opts) do
         nil ->
           call(request, actor || api_key, route: :req_llm)
 
@@ -671,6 +738,14 @@ defmodule LLMProxy.Provider do
     end
   end
 
+  defp req_llm_actor(opts), do: Keyword.get(opts, :llm_proxy_actor) || Keyword.get(opts, :actor)
+
+  defp req_llm_api_key(opts),
+    do: Keyword.get(opts, :llm_proxy_api_key) || Keyword.get(opts, :api_key)
+
+  defp req_llm_remote_target(opts),
+    do: Keyword.get(opts, :safe_rpc) || Keyword.get(opts, :llm_proxy_socket)
+
   defp req_llm_response(%Response{message: %ReqLLM.Response{} = message}), do: message
 
   defp req_llm_response(
@@ -690,22 +765,12 @@ defmodule LLMProxy.Provider do
     %{
       req_llm_response
       | context: %ReqLLM.Context{messages: request.messages},
-        usage: req_llm_usage(usage),
+        usage: Usage.to_req_llm(usage),
         provider_meta:
           Map.merge(req_llm_response.provider_meta, %{
             provider: provider_name || provider.name(),
             trace_id: trace_id
           })
-    }
-  end
-
-  defp req_llm_usage(%Usage{} = usage) do
-    %{
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
-      cache_read_tokens: usage.cache_read_tokens,
-      cache_write_tokens: usage.cache_write_tokens,
-      total_tokens: usage.input_tokens + usage.output_tokens
     }
   end
 

@@ -12,10 +12,21 @@ defmodule LLMProxy.ProviderTest do
   alias LLMProxy.TestSupport
 
   defmodule Provider do
-    def name, do: "req-llm-provider-test"
-    def models, do: ["req-llm-provider-model"]
+    alias LLMProxy.Protocol.Request
 
-    def call(%{"model" => "req-llm-provider-model", "messages" => _messages}, _user_id) do
+    def name, do: "req-llm-provider-test"
+
+    def models,
+      do: [
+        "req-llm-provider-model",
+        "req-llm-provider-error-model",
+        "req-llm-provider-blocked-model",
+        "req-llm-provider-rich-model"
+      ]
+
+    def call(%{"model" => "req-llm-provider-model", "messages" => _messages} = body, _user_id) do
+      {:ok, %Request{messages: [_message]}} = Request.parse(:openai_chat, body)
+
       {:ok,
        Result.response(
          %{
@@ -32,17 +43,9 @@ defmodule LLMProxy.ProviderTest do
        )}
     end
 
-    def stream(%{"model" => "req-llm-provider-model", "stream" => true}, _user_id) do
-      stream = [
-        Event.new(%{"choices" => [%{"delta" => %{"content" => "hello"}}]},
-          usage: LLMProxy.Usage.new(4, 0)
-        ),
-        Event.new(%{"choices" => [%{"delta" => %{"content" => " stream"}}]},
-          usage: LLMProxy.Usage.new(4, 3)
-        )
-      ]
-
-      {:ok, Result.stream(stream, nil)}
+    def stream(%{"model" => model, "stream" => true} = body, _user_id) do
+      {:ok, %Request{}} = Request.parse(:openai_chat, body)
+      {:ok, Result.stream(stream_for(model), nil)}
     end
 
     def extract_usage(response) do
@@ -51,6 +54,65 @@ defmodule LLMProxy.ProviderTest do
     end
 
     def to_openai_response(response, model), do: Map.put(response, "model", model)
+
+    defp stream_for("req-llm-provider-model") do
+      [
+        Event.openai_chat_content_delta("req-llm-provider-model", "hello"),
+        Event.openai_chat_content_delta("req-llm-provider-model", " stream"),
+        Event.openai_chat_terminal(
+          "req-llm-provider-model",
+          :stop,
+          LLMProxy.Usage.new(4, 3)
+        )
+      ]
+    end
+
+    defp stream_for("req-llm-provider-error-model") do
+      [
+        Event.openai_chat_content_delta("req-llm-provider-error-model", "partial"),
+        Event.new(%{"error" => %{"message" => "stream failed", "status" => 502}},
+          kind: :error
+        )
+      ]
+    end
+
+    defp stream_for("req-llm-provider-blocked-model") do
+      test_pid = :persistent_term.get({__MODULE__, :test_pid})
+
+      Stream.repeatedly(fn ->
+        send(test_pid, :provider_waiting)
+
+        receive do
+          {:provider_chunk, text} ->
+            Event.openai_chat_content_delta("req-llm-provider-blocked-model", text)
+        end
+      end)
+    end
+
+    defp stream_for("req-llm-provider-rich-model") do
+      [
+        Event.new(
+          %{
+            "choices" => [
+              %{"index" => 0, "delta" => %{"reasoning_content" => "thinking"}}
+            ]
+          },
+          kind: :reasoning
+        ),
+        Event.openai_chat_tool_call_delta(
+          0,
+          "call_1",
+          "lookup",
+          %{"query" => "value"},
+          "req-llm-provider-rich-model"
+        ),
+        Event.openai_chat_terminal(
+          "req-llm-provider-rich-model",
+          :tool_calls,
+          LLMProxy.Usage.new(5, 2)
+        )
+      ]
+    end
   end
 
   setup do
@@ -148,7 +210,7 @@ defmodule LLMProxy.ProviderTest do
     assert {:ok, %Result{stream: stream}} =
              LLMProxy.Provider.stream(request, key, route: :chat, trace_id: "trace-stream")
 
-    assert [%Event{}, %Event{}] = Enum.to_list(stream)
+    assert [%Event{}, %Event{}, %Event{}] = Enum.to_list(stream)
 
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 4
@@ -171,6 +233,162 @@ defmodule LLMProxy.ProviderTest do
     [updated_key] = Storage.list_keys()
     assert updated_key.input_tokens == 4
     assert updated_key.output_tokens == 3
+  end
+
+  test "ReqLLM provider streams through LLMProxy without HTTP" do
+    {:ok, _key, raw_key} = Storage.create_key("req-llm-stream-user")
+
+    assert {:ok, response} =
+             ReqLLM.Generation.stream_text(req_llm_model("req-llm-provider-model"), "hello",
+               api_key: raw_key
+             )
+
+    assert ReqLLM.StreamResponse.text(response) == "hello stream"
+    assert ReqLLM.StreamResponse.finish_reason(response) == :stop
+
+    usage = ReqLLM.StreamResponse.usage(response)
+    assert usage.input_tokens == 4
+    assert usage.output_tokens == 3
+
+    [updated_key] = Storage.list_keys()
+    assert updated_key.input_tokens == 4
+    assert updated_key.output_tokens == 3
+  end
+
+  test "ReqLLM provider projects LLMProxy stream errors" do
+    {:ok, _key, raw_key} = Storage.create_key("req-llm-error-user")
+
+    assert {:ok, response} =
+             ReqLLM.Generation.stream_text(req_llm_model("req-llm-provider-error-model"), "hello",
+               api_key: raw_key
+             )
+
+    error =
+      assert_raise ReqLLM.Error.API.Stream, fn ->
+        Enum.to_list(response.stream)
+      end
+
+    assert error.cause == %{"message" => "stream failed", "status" => 502}
+  end
+
+  test "ReqLLM provider projects reasoning and tool calls" do
+    {:ok, _key, raw_key} = Storage.create_key("req-llm-rich-stream-user")
+
+    assert {:ok, response} =
+             ReqLLM.Generation.stream_text(req_llm_model("req-llm-provider-rich-model"), "hello",
+               api_key: raw_key
+             )
+
+    chunks = Enum.to_list(response.stream)
+
+    assert Enum.any?(chunks, &match?(%ReqLLM.StreamChunk{type: :thinking, text: "thinking"}, &1))
+
+    assert Enum.any?(chunks, fn
+             %ReqLLM.StreamChunk{
+               type: :tool_call,
+               name: "lookup",
+               arguments: %{"query" => "value"}
+             } ->
+               true
+
+             _chunk ->
+               false
+           end)
+
+    assert ReqLLM.StreamResponse.finish_reason(response) == :tool_calls
+    assert ReqLLM.StreamResponse.usage(response).output_tokens == 2
+  end
+
+  test "ReqLLM stream cancellation releases the LLMProxy concurrency lease" do
+    {:ok, key, raw_key} =
+      Storage.create_key("req-llm-cancel-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    :persistent_term.put({Provider, :test_pid}, self())
+    on_exit(fn -> :persistent_term.erase({Provider, :test_pid}) end)
+
+    assert {:ok, response} =
+             ReqLLM.Generation.stream_text(
+               req_llm_model("req-llm-provider-blocked-model"),
+               "hello",
+               api_key: raw_key
+             )
+
+    assert_receive :provider_waiting
+    assert ConcurrencyLimiter.status(key).active == 1
+    assert :ok = ReqLLM.StreamResponse.close(response)
+    TestSupport.assert_eventually(fn -> ConcurrencyLimiter.status(key).active == 0 end)
+  end
+
+  test "ReqLLM provider projects stream start failures as API errors" do
+    {:ok, key, raw_key} =
+      Storage.create_key("req-llm-stream-limit-user", %{
+        budget_limits: [Limit.concurrent_requests(1)]
+      })
+
+    assert {:ok, lease} = ConcurrencyLimiter.acquire(key)
+    on_exit(fn -> ConcurrencyLimiter.release(lease) end)
+
+    {result, _log} =
+      with_log(fn ->
+        ReqLLM.Generation.stream_text(req_llm_model("req-llm-provider-model"), "hello",
+          api_key: raw_key
+        )
+      end)
+
+    assert {:error, reason} = result
+
+    assert %ReqLLM.Error.API.Request{
+             status: 429,
+             response_body: %{"error" => %{"code" => "rate_limit_error", "message" => message}}
+           } = stream_start_error(reason)
+
+    assert message == ConcurrencyLimiter.error_message()
+  end
+
+  test "ReqLLM provider rejects SafeRPC options for streaming" do
+    {:ok, _key, raw_key} = Storage.create_key("req-llm-remote-stream-user")
+
+    {result, _log} =
+      with_log(fn ->
+        ReqLLM.Generation.stream_text(req_llm_model("req-llm-provider-model"), "hello",
+          api_key: raw_key,
+          safe_rpc: :remote_socket
+        )
+      end)
+
+    assert {:error, reason} = result
+    assert %ArgumentError{message: message} = stream_start_error(reason)
+    assert message =~ "SafeRPC"
+  end
+
+  test "ReqLLM provider encodes messages and tools as OpenAI wire data" do
+    tool =
+      ReqLLM.Tool.new!(
+        name: "lookup",
+        description: "Look up a value",
+        parameter_schema: [query: [type: :string, required: true]],
+        callback: fn _arguments -> {:ok, "found"} end
+      )
+
+    assert {:ok, %Request{body: body}} =
+             LLMProxy.Provider.chat_request("hello",
+               model: "req-llm-provider-model",
+               tools: [tool]
+             )
+
+    assert %{
+             "messages" => [%{"role" => "user", "content" => "hello"}],
+             "tools" => [
+               %{
+                 "type" => "function",
+                 "function" => %{"name" => "lookup", "parameters" => %{"type" => "object"}}
+               }
+             ]
+           } = body
+
+    assert {:ok, %Request{messages: [_message]}} = Request.parse(:openai_chat, body)
   end
 
   test "local and ReqLLM calls share the concurrent-request limit" do
@@ -232,6 +450,13 @@ defmodule LLMProxy.ProviderTest do
       ]
     )
   end
+
+  defp req_llm_model(id) do
+    %{id: id, provider: :llm_proxy, model: id}
+  end
+
+  defp stream_start_error({:in_process_streaming_failed, {:provider_build_failed, error}}),
+    do: error
 
   defp restore_public_models(nil), do: Application.delete_env(:llm_proxy, :public_models)
 
