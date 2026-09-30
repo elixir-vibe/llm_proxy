@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-09-30
+
 ### Added
 
 - The ReqLLM `:llm_proxy` provider streams in-process. `ReqLLM.stream_text/3` and related calls run through LLMProxy routing, guardrails, accounting, telemetry, fallback handling, and concurrency leases without an HTTP request, and cancelling the stream releases its lease.
