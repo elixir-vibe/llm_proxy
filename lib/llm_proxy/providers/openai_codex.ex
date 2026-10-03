@@ -83,22 +83,21 @@ defmodule LLMProxy.Providers.OpenAICodex do
   end
 
   @impl true
-  def stream_error(reason, token, model) do
-    error = ErrorProjection.project(reason)
+  def stream_error(reason, token, _model) do
+    result = ErrorProjection.result(reason, token)
 
-    retry_after_ms =
-      if error.status == 429 do
-        ErrorProjection.quota_reset_delay(reason) || LLMProxy.Config.token_cooldown_ms()
-      end
-
-    if retry_after_ms && token do
-      TokenPool.mark_rate_limited(token, model, retry_after_ms)
+    if ErrorProjection.codex_quota_exhausted?(reason) do
+      %{
+        result
+        | status: 429,
+          rate_limit_kind: :quota,
+          rate_limit_scope: :account,
+          replay_safety: :safe,
+          retry_after_ms: ErrorProjection.quota_reset_delay(reason) || result.retry_after_ms
+      }
+    else
+      result
     end
-
-    Result.error(error.message, error.status, token,
-      retry_after_ms: retry_after_ms,
-      provider_body: %{"error" => ErrorProjection.client_error(reason)}
-    )
   end
 
   @impl true

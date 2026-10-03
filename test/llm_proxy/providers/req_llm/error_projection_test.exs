@@ -138,7 +138,7 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjectionTest do
 
     wrapped = APIStreamError.exception(reason: "stream failed", cause: event)
     assert ErrorProjection.quota_reset_delay(wrapped, 1_800_000_000_000) == 10_000
-    assert ErrorProjection.quota_reset_delay(wrapped, 1_800_000_020_000) == nil
+    assert ErrorProjection.quota_reset_delay(wrapped, 1_800_000_020_000) == 0
     assert ErrorProjection.quota_reset_delay(:unknown, 1_800_000_000_000) == nil
   end
 

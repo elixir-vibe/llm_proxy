@@ -4,7 +4,6 @@ defmodule LLMProxy.Providers.HTTPResultTest do
   alias LLMProxy.Providers.{HTTPResult, Result}
   alias LLMProxy.Schemas.ProviderTokenCooldown
   alias LLMProxy.Storage.Repo.SQLite
-  alias LLMProxy.TokenPool.Cooldown
 
   describe "retry_after_ms/1" do
     test "parses retry-after seconds" do
@@ -12,8 +11,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
     end
 
     test "ignores unsupported retry-after values" do
-      assert HTTPResult.retry_after_ms(%{"retry-after" => ["Wed, 21 Oct 2015 07:28:00 GMT"]}) ==
-               nil
+      assert HTTPResult.retry_after_ms(%{"retry-after" => ["not an HTTP date"]}) == nil
 
       assert HTTPResult.retry_after_ms(%{}) == nil
       assert HTTPResult.retry_after_ms(%{"retry-after" => ["999999999999999999"]}) == nil
@@ -28,14 +26,14 @@ defmodule LLMProxy.Providers.HTTPResultTest do
       :ok
     end
 
-    test "marks rate-limited tokens" do
+    test "preserves the rate-limited token for execution policy" do
       {:ok, token} = LLMProxy.Storage.add_token("openai", "api-key", "token")
 
       assert {:error, %Result{status: 429, token: ^token}} =
                HTTPResult.handle_response(token, 429, %{"error" => "slow down"})
     end
 
-    test "limits a token only for the reported model" do
+    test "does not mutate cooldowns while converting an HTTP error" do
       {:ok, token} = LLMProxy.Storage.add_token("openai", "api-key", "token")
 
       assert {:error, %Result{status: 429, token: ^token}} =
@@ -45,16 +43,7 @@ defmodule LLMProxy.Providers.HTTPResultTest do
                  "model-a"
                )
 
-      assert SQLite.get_by(ProviderTokenCooldown,
-               token_id: token.id,
-               scope: "model",
-               model_key: Cooldown.model_key!("model-a")
-             )
-
-      refute SQLite.get_by(ProviderTokenCooldown,
-               token_id: token.id,
-               scope: "account"
-             )
+      assert SQLite.all(ProviderTokenCooldown) == []
     end
 
     test "keeps nil-token rate limits as provider errors" do

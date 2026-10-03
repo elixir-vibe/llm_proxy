@@ -5,6 +5,13 @@ defmodule LLMProxy.HTTP.ErrorResponseTest do
 
   alias LLMProxy.HTTP.ErrorResponse
 
+  test "rounds retry delays up to HTTP seconds without inventing a missing delay" do
+    for {delay, expected} <- [{0, ["0"]}, {1, ["1"]}, {1_001, ["2"]}, {nil, []}] do
+      response = conn(:post, "/v1/chat/completions") |> ErrorResponse.put_retry_after(delay)
+      assert Plug.Conn.get_resp_header(response, "retry-after") == expected
+    end
+  end
+
   test "renders one normalized OpenAI error object and drops internal fields" do
     conn =
       conn(:post, "/v1/responses")

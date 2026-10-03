@@ -75,6 +75,31 @@ defmodule LLMProxy.ConfigTest do
     end
   end
 
+  test "legacy cooldown only supplies the quota fallback and emits a deprecation warning" do
+    Application.put_env(:llm_proxy, :providers, %{})
+    Application.put_env(:llm_proxy, :token_cooldown_ms, 9_000)
+    assert Config.rate_limit_cooldown_ms("openrouter") == 30_000
+
+    assert ExUnit.CaptureLog.capture_log(fn ->
+             assert Config.quota_cooldown_ms("openai-codex") == 9_000
+           end) =~ "deprecated"
+  end
+
+  test "provider cooldown options normalize string keys and validate bounds" do
+    Application.put_env(:llm_proxy, :providers, %{
+      "custom" => %{"rate_limit_cooldown_ms" => 1_000, "quota_cooldown_ms" => 2_000}
+    })
+
+    assert Config.rate_limit_cooldown_ms("custom") == 1_000
+    assert Config.quota_cooldown_ms("custom") == 2_000
+
+    for field <- [:rate_limit_cooldown_ms, :quota_cooldown_ms],
+        invalid <- [0, -1, :timer.hours(24) * 31 + 1, "1000"] do
+      Application.put_env(:llm_proxy, :providers, %{"custom" => %{field => invalid}})
+      assert_raise ArgumentError, fn -> apply(Config, field, ["custom"]) end
+    end
+  end
+
   test "validates token cooldown bounds" do
     Application.put_env(:llm_proxy, :token_cooldown_ms, 1)
     assert Config.token_cooldown_ms() == 1

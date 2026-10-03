@@ -140,7 +140,7 @@ defmodule LLMProxy.TokenPool.ServerTest do
          }
        }}
 
-    result = OpenAICodex.stream_error(event, token, "gpt-6-astra")
+    result = Result.stream_failure(OpenAICodex, "gpt-6-astra", token, event)
     assert result.status == 429
     assert result.retry_after_ms in 58_000..60_000
     assert [%ProviderTokenCooldown{available_at: available_at}] = Repo.all(ProviderTokenCooldown)

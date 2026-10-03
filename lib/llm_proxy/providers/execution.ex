@@ -14,6 +14,7 @@ defmodule LLMProxy.Providers.Execution do
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Providers.Attempt
   alias LLMProxy.Providers.CircuitBreaker
+  alias LLMProxy.Providers.RateLimit
   alias LLMProxy.Providers.Registry
   alias LLMProxy.Providers.ReplayPolicy
   alias LLMProxy.Providers.Result
@@ -522,10 +523,16 @@ defmodule LLMProxy.Providers.Execution do
   end
 
   defp apply_attempt(%Attempt{provider: provider} = attempt, function, args) do
-    if function_exported?(provider, function, length(args) + 1) do
-      apply(provider, function, args ++ [attempt])
-    else
-      apply(provider, function, args)
+    result =
+      if function_exported?(provider, function, length(args) + 1) do
+        apply(provider, function, args ++ [attempt])
+      else
+        apply(provider, function, args)
+      end
+
+    case Result.with_attempt(result, attempt) do
+      {:error, result} -> {:error, RateLimit.record(result)}
+      result -> result
     end
   end
 

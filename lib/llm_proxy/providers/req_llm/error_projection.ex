@@ -2,6 +2,8 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
   @moduledoc false
 
   alias LLMProxy.Protocol.Request.Error, as: RequestError
+  alias LLMProxy.Providers.{RateLimit, Result}
+  alias LLMProxy.TokenPool.Cooldown
 
   @fallback_message "Upstream provider request failed"
   @max_message_length 2_000
@@ -32,6 +34,47 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
           code: String.t(),
           status: pos_integer()
         }
+
+  @spec result(term(), map() | nil) :: Result.t()
+  def result(reason, token) do
+    error = project(reason)
+
+    Result.error(error.message, error.status, token,
+      retry_after_ms: retry_after_ms(reason),
+      rate_limit_kind: rate_limit_kind(reason),
+      replay_safety: replay_safety(reason),
+      provider_body: %{"error" => client_error(reason)}
+    )
+  end
+
+  def rate_limit_kind(reason) do
+    if project(reason).code == "insufficient_quota", do: :none, else: :throttle
+  end
+
+  def retry_after_ms(reason, now_ms \\ System.system_time(:millisecond)) do
+    reason
+    |> error_chain()
+    |> Enum.find_value(fn error ->
+      headers = field(error, :headers) || field(error, :response_headers) || %{}
+      RateLimit.retry_after_ms(headers, now_ms)
+    end)
+  end
+
+  @doc "Recognizes Codex subscription exhaustion from a structured provider code, not HTTP 429 alone."
+  def codex_quota_exhausted?(reason) do
+    reason
+    |> error_chain()
+    |> Enum.any?(fn error ->
+      body =
+        case error do
+          {:websocket_error_event, event} -> provider_event_body(event)
+          error -> error |> field(:response_body) |> provider_event_body()
+        end
+
+      field(error, :provider_code) == "usage_limit_reached" or
+        field(body, :code) == "usage_limit_reached" or field(body, :type) == "usage_limit_reached"
+    end)
+  end
 
   @spec project(term()) :: t()
   def project(%QuackDB.Error{}) do
@@ -89,8 +132,15 @@ defmodule LLMProxy.Providers.ReqLLM.ErrorProjection do
 
   defp reset_delay(body, now_ms) do
     case body |> provider_event_body() |> field(:resets_at) do
-      seconds when is_integer(seconds) and seconds * 1_000 > now_ms -> seconds * 1_000 - now_ms
-      _ -> nil
+      seconds when is_integer(seconds) and seconds >= 0 ->
+        delay = max(seconds * 1000 - now_ms, 0)
+
+        if delay == 0 or Cooldown.valid_duration?(delay) do
+          delay
+        end
+
+      _ ->
+        nil
     end
   end
 

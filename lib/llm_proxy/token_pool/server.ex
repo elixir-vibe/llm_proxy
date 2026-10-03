@@ -38,7 +38,10 @@ defmodule LLMProxy.TokenPool.Server do
     GenServer.call(__MODULE__, {:pick_token_by_kind, provider, kind, user_id, model})
   end
 
-  def mark_rate_limited(token, cooldown_ms \\ LLMProxy.Config.token_cooldown_ms())
+  def mark_rate_limited(token, cooldown_ms \\ nil)
+
+  def mark_rate_limited(%{provider: provider} = token, nil),
+    do: mark_rate_limited(token, LLMProxy.Config.rate_limit_cooldown_ms(provider))
 
   def mark_rate_limited(%ProviderToken{id: id}, cooldown_ms),
     do: persist_account_cooldown(id, cooldown_ms)

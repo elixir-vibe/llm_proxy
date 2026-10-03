@@ -4,6 +4,29 @@ defmodule LLMProxy.Config.TOMLTest do
   alias LLMProxy.Config.TOML
   alias LLMProxy.Storage.Repo.QuackDB
 
+  test "decodes provider-specific cooldown fallbacks and rejects invalid durations" do
+    assert {:ok, config} =
+             TOML.decode("""
+             [providers.openrouter]
+             rate_limit_cooldown_ms = 30000
+             [providers.openai-codex]
+             rate_limit_cooldown_ms = 15000
+             quota_cooldown_ms = 14400000
+             """)
+
+    assert config[:llm_proxy][:providers]["openrouter"].rate_limit_cooldown_ms == 30_000
+    assert config[:llm_proxy][:providers]["openai-codex"].quota_cooldown_ms == 14_400_000
+
+    for key <- ["rate_limit_cooldown_ms", "quota_cooldown_ms"],
+        value <- ["0", "-1", "2678400001", "true", "\"30000\""] do
+      assert_raise ArgumentError, fn -> TOML.decode("[providers.custom]\n#{key} = #{value}") end
+    end
+
+    assert_raise ArgumentError, fn ->
+      TOML.decode("[providers.custom]\nrate_limit_cooldown = 30")
+    end
+  end
+
   test "decodes the complete standalone configuration into application config" do
     input = """
     [server]

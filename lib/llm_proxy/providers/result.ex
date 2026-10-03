@@ -7,6 +7,8 @@ defmodule LLMProxy.Providers.Result do
   `:kind` instead of inferring meaning from nullable fields.
   """
 
+  alias LLMProxy.Providers.RateLimit
+
   @type kind :: :response | :stream | :error
   @type token :: map() | nil
   @type replay_safety :: :safe | :uncertain | :forbidden
@@ -24,7 +26,9 @@ defmodule LLMProxy.Providers.Result do
     :provider_body,
     :provider,
     :provider_name,
-    :model
+    :model,
+    rate_limit_kind: :throttle,
+    rate_limit_scope: :model
   ]
 
   @type t :: %__MODULE__{
@@ -39,7 +43,9 @@ defmodule LLMProxy.Providers.Result do
           provider_body: term() | nil,
           provider: module() | nil,
           provider_name: String.t() | nil,
-          model: String.t() | nil
+          model: String.t() | nil,
+          rate_limit_kind: :throttle | :quota | :none,
+          rate_limit_scope: :model | :account
         }
 
   @spec response(map(), token()) :: t()
@@ -75,14 +81,18 @@ defmodule LLMProxy.Providers.Result do
       error: error,
       status: status,
       token: token,
+      model: opts[:model],
       retry_after_ms: opts[:retry_after_ms],
+      rate_limit_kind: Keyword.get(opts, :rate_limit_kind, :throttle),
+      rate_limit_scope: Keyword.get(opts, :rate_limit_scope, :model),
       replay_safety: opts[:replay_safety] || default_replay_safety(status),
       provider_body: opts[:provider_body]
     }
   end
 
   @spec stream_failure(module(), String.t(), token(), term()) :: t()
-  def stream_failure(provider, model, token, reason)
+  @spec stream_failure(module(), String.t(), token(), term(), String.t() | nil) :: t()
+  def stream_failure(provider, model, token, reason, configured_provider \\ nil)
       when is_atom(provider) and is_binary(model) do
     result =
       cond do
@@ -96,7 +106,13 @@ defmodule LLMProxy.Providers.Result do
           error("Upstream provider stream failed", 502, token)
       end
 
-    %{result | provider: provider, provider_name: provider_name(provider), model: model}
+    %{
+      result
+      | provider: provider,
+        provider_name: configured_provider || provider_name(provider),
+        model: model
+    }
+    |> RateLimit.record()
   end
 
   @spec client_error(t()) :: map()

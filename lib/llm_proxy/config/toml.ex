@@ -10,6 +10,7 @@ defmodule LLMProxy.Config.TOML do
   alias LLMProxy.Catalog.Model
   alias LLMProxy.Config.ProviderUsage, as: ProviderUsageConfig
   alias LLMProxy.Storage.Repo.QuackDB
+  alias LLMProxy.TokenPool.Cooldown
 
   @type decoded :: keyword()
   @type reason :: Toml.reason()
@@ -34,7 +35,9 @@ defmodule LLMProxy.Config.TOML do
     "usage_auth_scheme" => :usage_auth_scheme,
     "usage_paths" => :usage_paths,
     "title" => :title,
-    "token_pool" => :token_pool
+    "token_pool" => :token_pool,
+    "rate_limit_cooldown_ms" => :rate_limit_cooldown_ms,
+    "quota_cooldown_ms" => :quota_cooldown_ms
   }
   @conversion_default_keys %{"max_tokens" => :max_tokens}
   @model_keys %{
@@ -297,6 +300,9 @@ defmodule LLMProxy.Config.TOML do
       {normalized_key, normalize_value(normalized_key, value)}
     end)
   end
+
+  defp normalize_value(key, value) when key in [:rate_limit_cooldown_ms, :quota_cooldown_ms],
+    do: Cooldown.duration!(value)
 
   defp normalize_value(:conversion_defaults, %{} = value),
     do: normalize_map(value, @conversion_default_keys, "provider conversion_defaults")
