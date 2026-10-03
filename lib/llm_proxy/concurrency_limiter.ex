@@ -15,7 +15,11 @@ defmodule LLMProxy.ConcurrencyLimiter do
   alias LLMProxy.ConcurrencyLimiter.{Lease, Server}
 
   defmodule Lease do
-    @moduledoc false
+    @moduledoc """
+    Concurrency lease returned by `LLMProxy.ConcurrencyLimiter`.
+
+    Obtain and release leases through the limiter rather than constructing them directly.
+    """
 
     @enforce_keys [:ref, :key_id, :limit]
     defstruct [:ref, :key_id, :limit]

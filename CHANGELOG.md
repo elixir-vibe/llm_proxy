@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-03
+
+### Breaking changes
+
+- Custom adapters must apply cooldown policy through `Provider`/`Execution` or `Providers.RateLimit.record/1` with the provider and model context. HTTP and adapter error-conversion helpers no longer persist cooldowns themselves.
+- `TokenPool.Server.mark_rate_limited/1` now uses the provider's short throttling fallback instead of four hours. Subscription integrations must explicitly classify quota exhaustion rather than rely on that default.
+
+### Added
+
+- Provider-specific `rate_limit_cooldown_ms` and `quota_cooldown_ms` fallback settings in application configuration and standalone TOML.
+
+### Changed
+
+- Explicit Codex subscription quota exhaustion uses an account-wide cooldown until the reported reset, or the quota fallback when no usable reset is available. Ordinary throttling remains model-scoped when the model is known. Existing persisted cooldowns are not reset during upgrades.
+
+### Deprecated
+
+- The global `token_cooldown_ms` setting is deprecated in favor of provider-specific settings. An explicit legacy value warns when used and supplies only the quota fallback when no provider override is configured.
+
+### Fixed
+
+- Ordinary API throttling, including a bare Codex 429, defaults to a 30-second cooldown instead of a four-hour subscription cooldown.
+- Buffered ReqLLM errors retain `Retry-After` headers. Valid upstream retry/reset hints take precedence over fallback durations, HTTP-date retry hints are supported, and zero or elapsed hints create no new cooldown.
+- Cooldowns respect the configured provider when routes share a credential pool, and HTTP error rendering no longer applies a second cooldown. Pre-stream HTTP errors include the selected `Retry-After` delay.
+- Authentication, billing, and insufficient-credit errors do not acquire an invented temporary cooldown.
+
 ## 0.2.2 - 2026-09-30
 
 ### Added

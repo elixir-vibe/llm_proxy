@@ -41,6 +41,7 @@ defmodule LLMProxy.Providers.HTTPResult do
     {:error, Result.error(error, status, token, opts)}
   end
 
+  @doc "Parses a bounded Retry-After delay from HTTP headers, in milliseconds."
   defdelegate retry_after_ms(headers), to: RateLimit
 
   def provider_details(%{"error" => error}), do: error
