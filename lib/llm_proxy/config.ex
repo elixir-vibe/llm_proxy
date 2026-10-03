@@ -3,6 +3,8 @@ defmodule LLMProxy.Config do
   Runtime accessors and normalization helpers for LLMProxy application configuration.
   """
 
+  require Logger
+
   alias LLMProxy.Config.Catalog
   alias LLMProxy.Config.ProviderUsage, as: ProviderUsageConfig
   alias LLMProxy.TokenPool.Cooldown
@@ -196,10 +198,30 @@ defmodule LLMProxy.Config do
     |> Map.get(key, default)
   end
 
+  @doc "Legacy subscription-quota fallback; never use for ordinary API throttling."
   def token_cooldown_ms do
-    :llm_proxy
-    |> Application.get_env(:token_cooldown_ms, @default_token_cooldown_ms)
-    |> Cooldown.duration!()
+    case Application.fetch_env(:llm_proxy, :token_cooldown_ms) do
+      {:ok, duration} ->
+        Logger.warning(
+          ":token_cooldown_ms is deprecated; configure providers.<name>.quota_cooldown_ms instead"
+        )
+
+        Cooldown.duration!(duration)
+
+      :error ->
+        @default_token_cooldown_ms
+    end
+  end
+
+  def rate_limit_cooldown_ms(provider) do
+    provider |> provider_value(:rate_limit_cooldown_ms, 30_000) |> Cooldown.duration!()
+  end
+
+  def quota_cooldown_ms(provider) do
+    case provider_value(provider, :quota_cooldown_ms) do
+      nil -> token_cooldown_ms()
+      duration -> Cooldown.duration!(duration)
+    end
   end
 
   def token_selection_strategy do
@@ -322,6 +344,11 @@ defmodule LLMProxy.Config do
   defp normalize_provider({provider, config}) do
     case normalize_value(config) do
       %{} = normalized ->
+        for key <- [:rate_limit_cooldown_ms, :quota_cooldown_ms],
+            {:ok, value} <- [Map.fetch(normalized, key)] do
+          Cooldown.duration!(value)
+        end
+
         {provider_name(provider), validate_provider_usage!(provider, normalized)}
 
       value ->
@@ -413,6 +440,8 @@ defmodule LLMProxy.Config do
     "title" => :title,
     "to" => :to,
     "token_pool" => :token_pool,
+    "rate_limit_cooldown_ms" => :rate_limit_cooldown_ms,
+    "quota_cooldown_ms" => :quota_cooldown_ms,
     "usage_adapter" => :usage_adapter,
     "usage_auth_scheme" => :usage_auth_scheme,
     "usage_paths" => :usage_paths,

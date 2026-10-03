@@ -13,6 +13,13 @@ defmodule LLMProxy.HTTP.ErrorResponse do
 
   @type error_map :: %{String.t() => term()}
 
+  @doc "Adds a normalized provider retry delay before response headers are sent."
+  def put_retry_after(conn, delay_ms) when is_integer(delay_ms) and delay_ms >= 0 do
+    Plug.Conn.put_resp_header(conn, "retry-after", Integer.to_string(div(delay_ms + 999, 1_000)))
+  end
+
+  def put_retry_after(conn, _delay_ms), do: conn
+
   @spec send(Plug.Conn.t(), pos_integer(), String.t(), term()) :: Plug.Conn.t()
   def send(conn, status, code, message) do
     case protocol(conn) do

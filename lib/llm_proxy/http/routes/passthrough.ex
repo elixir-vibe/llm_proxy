@@ -135,7 +135,7 @@ defmodule LLMProxy.HTTP.Routes.Passthrough do
     Logger.error("#{provider.name()} error (#{status}): #{safe_error}")
 
     handler.send_error.(
-      conn,
+      ErrorResponse.put_retry_after(conn, result.retry_after_ms),
       status,
       handler.provider_error_type.(status),
       Result.client_error(result)

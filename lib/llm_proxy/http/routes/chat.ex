@@ -98,7 +98,9 @@ defmodule LLMProxy.HTTP.Routes.Chat do
       status
     )
 
-    ErrorResponse.send_openai(conn, status, Result.client_error(result))
+    conn
+    |> ErrorResponse.put_retry_after(result.retry_after_ms)
+    |> ErrorResponse.send_openai(status, Result.client_error(result))
   end
 
   defp handle_provider_error(conn, {:permission, reason}) do
@@ -162,7 +164,15 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   end
 
   defp finish_stream_result({:preflight_failure, conn, reason}, result) do
-    error = Result.stream_failure(result.provider, result.model, result.token, reason)
+    error =
+      Result.stream_failure(
+        result.provider,
+        result.model,
+        result.token,
+        reason,
+        result.provider_name
+      )
+
     handle_provider_error(conn, {:provider, error})
   end
 
@@ -175,7 +185,14 @@ defmodule LLMProxy.HTTP.Routes.Chat do
   defp finish_stream_result({:started, conn}, _result), do: write_done(conn)
 
   defp write_stream_failure(conn, result, reason) do
-    error = Result.stream_failure(result.provider, result.model, result.token, reason)
+    error =
+      Result.stream_failure(
+        result.provider,
+        result.model,
+        result.token,
+        reason,
+        result.provider_name
+      )
 
     client_error = ErrorResponse.openai_error(error.status, Result.client_error(error))
 

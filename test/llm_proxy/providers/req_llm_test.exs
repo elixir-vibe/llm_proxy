@@ -6,13 +6,20 @@ defmodule LLMProxy.Providers.ReqLLMTest do
   alias LLMProxy.Provider.Credential
   alias LLMProxy.Providers.{Attempt, Execution, ReqLLM, Result}
   alias LLMProxy.Providers.ReqLLM.Projection
+  alias LLMProxy.Schemas.ProviderTokenCooldown
   alias LLMProxy.Storage
+  alias LLMProxy.Storage.Repo
   alias LLMProxy.Stream.Event
   alias LLMProxy.TestSupport
   alias LLMProxy.TokenPool.Server, as: TokenPool
   alias Req.Test, as: ReqTest
 
   defmodule HTTPStub do
+    def attach(request) do
+      Req.Request.append_request_steps(request,
+        disable_test_retries: &Req.Request.merge_options(&1, max_retries: 0)
+      )
+    end
   end
 
   setup do
@@ -27,7 +34,7 @@ defmodule LLMProxy.Providers.ReqLLMTest do
       "configured-test" => %{
         adapter: "openai",
         base_url: "https://configured.example/v1",
-        req_http_options: [plug: {ReqTest, HTTPStub}]
+        req_http_options: [plug: {ReqTest, HTTPStub}, plugins: [HTTPStub]]
       }
     })
 
@@ -40,6 +47,79 @@ defmodule LLMProxy.Providers.ReqLLMTest do
     end)
 
     :ok
+  end
+
+  describe "buffered configured calls" do
+    test "preserves upstream retry hints and records one configured-provider cooldown" do
+      Application.put_env(:llm_proxy, :providers, %{
+        "configured-test" => %{
+          adapter: "openai",
+          base_url: "https://configured.example/v1",
+          rate_limit_cooldown_ms: 2_000,
+          req_http_options: [plug: {ReqTest, HTTPStub}, plugins: [HTTPStub]]
+        }
+      })
+
+      ReqTest.stub(HTTPStub, fn conn ->
+        conn
+        |> Plug.Conn.put_resp_header("retry-after", "7")
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(
+          429,
+          Jason.encode!(%{
+            "error" => %{"message" => "throttled", "type" => "rate_limit_exceeded"}
+          })
+        )
+      end)
+
+      {:ok, _token} = Storage.add_token("isolated-pool", "api-key", "configured-token")
+
+      attempt = %Attempt{
+        provider: ReqLLM,
+        provider_name: "configured-test",
+        model: "formatter",
+        token_pool: "isolated-pool"
+      }
+
+      request = %Request{
+        protocol: :openai_chat,
+        model: "public-alias",
+        body: %{"messages" => [%{"role" => "user", "content" => "test"}]},
+        messages: []
+      }
+
+      assert {:error,
+              %Result{status: 429, retry_after_ms: 7_000, provider_name: "configured-test"}} =
+               Execution.call_attempts([attempt], request, "user")
+
+      assert [%{scope: "model"}] =
+               Repo.all(ProviderTokenCooldown)
+
+      assert {:error, :all_rate_limited} =
+               TokenPool.pick_token("isolated-pool", "user", "formatter")
+
+      assert {:ok, _} = TokenPool.pick_token("isolated-pool", "user", "assessment")
+    end
+  end
+
+  test "midstream errors retain configured provider policy rather than the pool default" do
+    Application.put_env(:llm_proxy, :providers, %{
+      "configured-test" => %{rate_limit_cooldown_ms: 2_000}
+    })
+
+    {:ok, token} = Storage.add_token("isolated-pool", "api-key", "configured-token")
+
+    result =
+      Result.stream_failure(
+        ReqLLM,
+        "formatter",
+        token,
+        %{status: 429, response_body: %{"error" => %{"message" => "throttled"}}},
+        "configured-test"
+      )
+
+    assert result.retry_after_ms == 2_000
+    assert [%{scope: "model"}] = Repo.all(ProviderTokenCooldown)
   end
 
   test "executes a configured provider through ReqLLM and its isolated token pool" do

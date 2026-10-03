@@ -61,7 +61,7 @@ defmodule LLMProxy.Providers.ReqLLM do
          {:ok, response} <- ReqLLM.Generation.generate_text(model, context, opts) do
       {:ok, Result.response(Projection.response(response, attempt.model), token)}
     else
-      {:error, reason} -> {:error, req_llm_error(reason, token, attempt.model)}
+      {:error, reason} -> {:error, ErrorProjection.result(reason, token)}
     end
   end
 
@@ -75,12 +75,12 @@ defmodule LLMProxy.Providers.ReqLLM do
 
       {:ok, Result.stream(stream, token)}
     else
-      {:error, reason} -> {:error, req_llm_error(reason, token, attempt.model)}
+      {:error, reason} -> {:error, ErrorProjection.result(reason, token)}
     end
   end
 
   @impl true
-  def stream_error(reason, token, model), do: req_llm_error(reason, token, model)
+  def stream_error(reason, token, _model), do: ErrorProjection.result(reason, token)
 
   @impl true
   def extract_usage(response) when is_map(response) do
@@ -152,11 +152,22 @@ defmodule LLMProxy.Providers.ReqLLM do
   end
 
   defp configured_req_options(provider_name) do
-    case LLMProxy.Config.provider_value(provider_name, :req_http_options) do
-      options when is_list(options) -> [req_http_options: options]
-      options when is_map(options) -> [req_http_options: Map.to_list(options)]
-      _other -> []
-    end
+    options =
+      case LLMProxy.Config.provider_value(provider_name, :req_http_options) do
+        options when is_list(options) -> options
+        options when is_map(options) -> Map.to_list(options)
+        _other -> []
+      end
+
+    [
+      req_http_options:
+        Keyword.update(
+          options,
+          :plugins,
+          [LLMProxy.Providers.ReqLLM.RetryHeaders],
+          &(&1 ++ [LLMProxy.Providers.ReqLLM.RetryHeaders])
+        )
+    ]
   end
 
   defp body_options(body) do
@@ -212,20 +223,5 @@ defmodule LLMProxy.Providers.ReqLLM do
       {:ok, normalized} -> Keyword.put(options, :reasoning_effort, normalized)
       :error -> options
     end
-  end
-
-  defp req_llm_error(reason, token, model) do
-    error = ErrorProjection.project(reason)
-
-    if error.status == 429 do
-      if is_binary(model),
-        do: TokenPool.mark_rate_limited(token, model, LLMProxy.Config.token_cooldown_ms()),
-        else: TokenPool.mark_rate_limited(token)
-    end
-
-    Result.error(error.message, error.status, token,
-      replay_safety: ErrorProjection.replay_safety(reason),
-      provider_body: %{"error" => ErrorProjection.client_error(reason)}
-    )
   end
 end

@@ -85,14 +85,56 @@ config :llm_proxy, provider_receive_timeout_ms: :timer.minutes(10)
 
 Provider transport timeout and standalone Cowboy idle ceiling. Default: 10 minutes.
 
-### Token Cooldown
+### Provider Cooldowns
 
 ```elixir
-config :llm_proxy, token_cooldown_ms: :timer.hours(4)
+config :llm_proxy, providers: %{
+  "openrouter" => %{rate_limit_cooldown_ms: 30_000},
+  "openai-codex" => %{
+    rate_limit_cooldown_ms: 30_000,
+    quota_cooldown_ms: :timer.hours(4)
+  }
+}
 ```
 
-Default credential cooldown after rate limiting. Must be a positive integer no greater than 31
-days. Default: 4 hours.
+Equivalent standalone TOML:
+
+```toml
+[providers.openrouter]
+rate_limit_cooldown_ms = 30000
+
+[providers.openai-codex]
+rate_limit_cooldown_ms = 30000
+quota_cooldown_ms = 14400000
+```
+
+Both values are fallback durations, in milliseconds: positive integers no greater than 31 days.
+`rate_limit_cooldown_ms` defaults to 30 seconds for ordinary throttling. `quota_cooldown_ms`
+defaults to four hours and applies only when an adapter explicitly identifies subscription quota
+exhaustion. The Codex adapter recognizes the structured `usage_limit_reached` error; a bare 429
+is not sufficient. Neither OAuth authentication nor HTTP status alone implies exhausted quota.
+
+Valid upstream `Retry-After` values (seconds or HTTP dates) take precedence over fallback durations;
+Codex quota-reset timestamps take precedence for subscription exhaustion. A zero or elapsed retry
+hint creates no new cooldown. Invalid or out-of-range hints fall back to configured durations.
+Ordinary throttling is model-scoped when a model is known; Codex subscription exhaustion is
+account-scoped. Configuration uses the named provider instance, even when routes share a token pool.
+These settings do not change route circuit-breaker `cooldown_ms`, replay safety, or attempt budgets.
+
+The old `config :llm_proxy, token_cooldown_ms: ...` is deprecated. An explicit value logs a warning
+when used and supplies only the quota fallback if the provider has no `quota_cooldown_ms` override.
+It no longer controls ordinary API throttling. Calling `TokenPool.Server.mark_rate_limited/1`
+without a duration now uses the provider's short rate-limit fallback; subscription adapters should
+classify quota errors explicitly rather than relying on that helper's former four-hour default.
+
+Cooldown writes belong to provider execution and stream-failure handling, not HTTP rendering.
+`Result.retry_after_ms` carries the selected delay and pre-stream HTTP errors include `Retry-After`.
+Adapter error-conversion functions return metadata without persisting a cooldown; callers that use
+adapters directly should use `Provider`/`Execution` or the shared `RateLimit.record/1` boundary.
+No streams are replayed after output has started.
+
+Existing cooldown rows are preserved across upgrades. Audit any old, long API cooldowns separately;
+do not bulk-delete subscription quota blocks. This change does not add live provider-health probes.
 
 ### Provider Token Selection
 

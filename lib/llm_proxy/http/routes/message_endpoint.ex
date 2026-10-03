@@ -14,7 +14,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
   alias LLMProxy.Plugs.{Auth, JSONBodyParser, QuotaCheck}
   alias LLMProxy.Protocol.Request
   alias LLMProxy.Provider
-  alias LLMProxy.Providers.{RateLimit, Result}
+  alias LLMProxy.Providers.Result
   alias LLMProxy.Stream.{Event, Heartbeat, SSEWriter}
   alias LLMProxy.Telemetry
   alias LLMProxy.Trace
@@ -96,7 +96,7 @@ defmodule LLMProxy.HTTP.Routes.MessageEndpoint do
     Passthrough.send_error(
       conn,
       reason,
-      Passthrough.error_handler(&send_error/4, &error_type/1, &RateLimit.record/1)
+      Passthrough.error_handler(&send_error/4, &error_type/1)
     )
   end
 
