@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-10-23
+
+### Security
+
+- Update ReqLLM to 1.29.0, which verifies TLS certificates and hostnames for secure WebSocket connections. Earlier ReqLLM versions did not verify certificates for OpenAI Codex WebSocket sessions, which the proxy uses for streaming Codex requests ([GHSA-6vww-5m28-f26v](https://github.com/agentjido/req_llm/security/advisories/GHSA-6vww-5m28-f26v)).
+
 ## 0.3.0 - 2026-10-03
 
 ### Breaking changes
